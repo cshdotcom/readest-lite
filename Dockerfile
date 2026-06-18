@@ -20,10 +20,15 @@ COPY patches/ ./patches/
 
 # Clone 必需的 git submodule（原项目用 .gitmodules，但 Docker 构建上下文里这些目录为空，
 # 这里直接 git clone --depth 1 取 main 分支）。
-# 仅 clone web 构建需要的两个：foliate-js（workspace 包 + pdfjs vendors）+ simplecc-wasm（dist/web/*）。
-# tauri/tauri-plugins/qcms/js-mdict 在 web 构建中不需要。
+# web 构建需要：
+#   - foliate-js（workspace 包 + pdfjs vendors）
+#   - simplecc-wasm（dist/web/* 用于 setup-vendors）
+#   - js-mdict（tsconfig.json path mapping 引用 ../../packages/js-mdict/src/index.ts）
+# tauri/tauri-plugins/qcms 在 web 构建中不需要（tauri-plugin-turso 在 nativeDatabaseService.ts
+# 已 stub 掉，且 tsconfig path mapping 会被 next.config.mjs 的 webpack alias 跳过）。
 RUN git clone --depth 1 https://github.com/readest/foliate-js.git packages/foliate-js \
-    && git clone --depth 1 https://github.com/readest/simplecc-wasm.git packages/simplecc-wasm
+    && git clone --depth 1 https://github.com/readest/simplecc-wasm.git packages/simplecc-wasm \
+    && git clone --depth 1 https://github.com/readest/js-mdict.git packages/js-mdict
 
 # 安装依赖（包含 Prisma CLI 与 argon2/jwt 等新增依赖）
 # 注 1：原 lockfile 未包含新增的 @prisma/client/argon2/jsonwebtoken 等，所以用
@@ -88,6 +93,7 @@ COPY --from=dependencies /app/apps/readest-app/public/vendor /app/apps/readest-a
 COPY --from=dependencies /app/packages/foliate-js /app/packages/foliate-js
 COPY --from=dependencies /app/packages/foliate-js/node_modules /app/packages/foliate-js/node_modules
 COPY --from=dependencies /app/packages/simplecc-wasm /app/packages/simplecc-wasm
+COPY --from=dependencies /app/packages/js-mdict /app/packages/js-mdict
 
 # 拷贝项目源码
 COPY . .
