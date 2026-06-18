@@ -44,6 +44,11 @@ RUN test -f packages/foliate-js/vendor/pdfjs/annotation_layer_builder.css \
 # 拷贝 vendor 资源到 public/vendor
 RUN pnpm --filter @readest/readest-app setup-vendors
 
+# 在 dependencies 阶段就生成 Prisma Client（此时网络可用，prisma CLI 可正常自检）。
+# 后续 build 阶段直接复用生成好的 client，不再调 prisma generate。
+COPY prisma ./prisma
+RUN cd apps/readest-app && pnpm exec prisma generate --schema=../../prisma/schema.prisma
+
 # ── Stage 2: build ─────────────────────────────────────────────────────────
 FROM docker.io/library/node:24-slim AS build
 ENV PNPM_HOME="/pnpm"
@@ -81,8 +86,8 @@ COPY . .
 
 WORKDIR /app/apps/readest-app
 
-# 生成 Prisma Client
-RUN pnpm exec prisma generate --schema=../../prisma/schema.prisma
+# Prisma Client 已在 dependencies 阶段生成（位于 apps/readest-app/node_modules/.prisma/client）
+# 此阶段无需再跑 prisma generate（会因网络受限失败）
 
 # Opt-in standalone build
 ENV BUILD_STANDALONE=true
