@@ -11,9 +11,11 @@
 ### 1.2 获取代码
 
 ```bash
-# 假设改造后的代码已放在 readest-lite/ 目录
+git clone https://github.com/cshdotcom/readest-lite.git
 cd readest-lite
 ```
+
+> **注意**：本仓库不再依赖 Git submodule。原 readest 项目的 `packages/foliate-js`、`packages/simplecc-wasm` 等是 submodule，但本仓库的 `Dockerfile` 已改为在构建时直接 `git clone --depth 1` 这两个 web 构建必需的子模块，所以 `git clone` 时**不需要** `--recursive` 参数。
 
 ### 1.3 配置环境变量
 
@@ -336,7 +338,62 @@ docker exec readest-lite du -sh /data/db/
 docker exec readest-lite du -sh /data/books/
 ```
 
-## 8. 安全建议
+## 8. GitHub Actions 部署
+
+### 8.1 自动构建（已配置）
+
+仓库已自带两个 workflow：
+
+- `.github/workflows/ci.yml` — 每次 push 到 main/master 时构建 Docker 镜像 + 跑容器启动 smoke test
+- `.github/workflows/docker-image.yml` — push 到 main/master 或打 `v*` tag 时构建并推送镜像到 GHCR
+
+**CI 不需要任何 secret 配置**：`GITHUB_TOKEN` 是 Actions 自动提供的，用于推送 GHCR。
+
+### 8.2 触发镜像构建
+
+```bash
+# 推送到 main 分支自动构建（tag: ghcr.io/<owner>/readest-lite:main）
+git push origin main
+
+# 打 tag 触发版本镜像
+git tag v0.1.0
+git push origin v0.1.0
+# 产出：
+#   ghcr.io/<owner>/readest-lite:0.1.0
+#   ghcr.io/<owner>/readest-lite:0.1
+#   ghcr.io/<owner>/readest-lite:sha-<commit>
+```
+
+### 8.3 从 GHCR 拉取运行
+
+构建成功后：
+
+```bash
+docker pull ghcr.io/cshdotcom/readest-lite:main
+
+docker run -d \
+  --name readest-lite \
+  -p 8225:8225 \
+  -e ADMIN_EMAIL=admin@example.com \
+  -e ADMIN_PASSWORD=YourPassword123! \
+  -e JWT_SECRET=$(openssl rand -hex 32) \
+  -v readest_data:/data \
+  ghcr.io/cshdotcom/readest-lite:main
+```
+
+### 8.4 本地 Docker 构建（无 GitHub Actions）
+
+```bash
+git clone https://github.com/cshdotcom/readest-lite.git
+cd readest-lite
+cp .env.example .env
+# 编辑 .env 设置 ADMIN_EMAIL/ADMIN_PASSWORD/JWT_SECRET
+docker compose up -d --build
+```
+
+Dockerfile 会自动 `git clone --depth 1` 需要的 foliate-js 与 simplecc-wasm 子模块，**不依赖**外部 `git submodule update --init`。
+
+## 9. 安全建议
 
 1. **修改默认 JWT_SECRET**：使用 `openssl rand -hex 32` 生成
 2. **使用强管理员密码**：至少 16 字符，包含大小写字母、数字、符号
@@ -344,7 +401,7 @@ docker exec readest-lite du -sh /data/books/
 4. **限制访问**：单账号模式没有 RLS，任何人拿到 token 都能访问所有数据；务必保护好管理员凭证
 5. **定期备份**：至少每天备份一次 /data 卷
 
-## 9. 与原版差异说明
+## 10. 与原版差异说明
 
 | 功能 | 原版 | Lite 版 |
 |---|---|---|
