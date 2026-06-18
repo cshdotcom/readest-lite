@@ -5,7 +5,15 @@
 //
 // 这些方法实际打到本地 /auth/v1/* 兼容端点上（见 app/api/auth/[...path]/route.ts）。
 // 这样前端 AuthContext / helpers/auth.ts 完全不需要改动。
-import { verifyAccessToken, type AuthUser } from './localAuth';
+//
+// 关键：不能静态 import localAuth（含 argon2/prisma）— 会被打到客户端 bundle。
+// AuthContext 在客户端运行，import supabase.ts，再 import localAuth 会拉入
+// argon2 -> node-gyp-build -> 'fs'，浏览器 build 失败。
+// 改为 dynamic import，getUser 时按需加载。
+import type { AuthUser } from './localAuth';
+
+// 仅类型 re-export，运行时不加载
+export type { AuthUser };
 
 const SUPABASE_URL =
   process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
@@ -29,6 +37,8 @@ class LocalAuthClient {
     if (!accessToken) {
       return { data: { user: null }, error: { message: 'no token' } };
     }
+    // dynamic import 避免客户端 build 时拉入 argon2/prisma
+    const { verifyAccessToken } = await import('./localAuth');
     const user = verifyAccessToken(accessToken);
     if (!user) {
       return { data: { user: null }, error: { message: 'invalid token' } };
@@ -70,6 +80,8 @@ class LocalAuthClient {
     access_token: string;
     refresh_token: string;
   }) {
+    // dynamic import 避免客户端 build 时拉入 argon2/prisma
+    const { verifyAccessToken } = await import('./localAuth');
     const user = verifyAccessToken(access_token);
     if (!user) {
       return { data: { session: null }, error: { message: 'invalid token' } };
