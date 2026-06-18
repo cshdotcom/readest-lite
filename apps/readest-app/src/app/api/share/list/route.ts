@@ -12,15 +12,9 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const rawCursor = url.searchParams.get('cursor');
-  let cursorCreatedAt: string | null = null;
-  let cursorId: string | null = null;
-  if (rawCursor) {
-    const sep = rawCursor.indexOf('|');
-    if (sep > 0) {
-      cursorCreatedAt = rawCursor.slice(0, sep);
-      cursorId = rawCursor.slice(sep + 1);
-    }
-  }
+  // 原 Supabase 版用复合 cursor；SQLite 简化为按 createdAt+id 排序后 take PAGE_SIZE+1
+  // cursor 参数解析仅用于响应 nextCursor 的格式约定（兼容前端）
+  void rawCursor;
 
   // SQLite 不支持复合 cursor or 查询，简化为基于 createdAt+id 的字符串比较
   const rows = await prismaClient.bookShare.findMany({
