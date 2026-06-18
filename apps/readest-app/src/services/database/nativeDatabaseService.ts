@@ -1,49 +1,27 @@
-import { Database, LoadOptions, QueryResult } from 'tauri-plugin-turso';
-import { DatabaseService, DatabaseExecResult, DatabaseRow, DatabaseOpts } from '@/types/database';
+// Readest Lite — NativeDatabaseService stub.
+// 原文件依赖 tauri-plugin-turso（src-tauri 子模块），web 构建不需要。
+// 此 stub 仅在 web 平台保留类型占位，运行时不会被调用（environment.ts 仅在
+// isTauriAppPlatform() 为 true 时才动态 import NativeAppService）。
+import { DatabaseService } from '@/types/database';
 
 export class NativeDatabaseService implements DatabaseService {
-  private db: Database;
-
-  private constructor(db: Database) {
-    this.db = db;
+  private constructor() {
+    throw new Error('NativeDatabaseService is not available in web build');
   }
 
-  static async open(path: string, opts?: DatabaseOpts): Promise<NativeDatabaseService> {
-    // Translate the cross-platform DatabaseOpts (from @readest/turso-database-common,
-    // used by WASM bindings) to tauri-plugin-turso's LoadOptions. The two interfaces
-    // have diverged: `experimental` is the same field name with compatible types
-    // (literal union vs `string[]`); `encryption` shapes differ entirely (native
-    // 'aes256cbc' + byte-array key vs WASM 'aes256gcm'/etc + hex key) and is not
-    // wired in MVP — revisit alongside any Reedy.db encryption work. Skip the
-    // translation when no relevant opts are set so existing callers preserve their
-    // plain path-string call shape.
-    const loadArg: string | LoadOptions = opts?.experimental?.length
-      ? { path, experimental: opts.experimental as string[] }
-      : path;
-    const db = await Database.load(loadArg);
-    return new NativeDatabaseService(db);
+  static async open(_path: string, _opts?: unknown): Promise<NativeDatabaseService> {
+    throw new Error('NativeDatabaseService is not available in web build');
   }
 
-  async execute(sql: string, params: unknown[] = []): Promise<DatabaseExecResult> {
-    const result: QueryResult = await this.db.execute(sql, params);
-    return {
-      rowsAffected: result.rowsAffected,
-      lastInsertId: result.lastInsertId,
-    };
+  async exec(_sql: string, _params?: unknown[]): Promise<unknown> {
+    throw new Error('NativeDatabaseService is not available in web build');
   }
 
-  async select<T extends DatabaseRow = DatabaseRow>(
-    sql: string,
-    params: unknown[] = [],
-  ): Promise<T[]> {
-    return await this.db.select<T[]>(sql, params);
-  }
-
-  async batch(statements: string[]): Promise<void> {
-    await this.db.batch(statements);
+  async query(_sql: string, _params?: unknown[]): Promise<unknown[]> {
+    throw new Error('NativeDatabaseService is not available in web build');
   }
 
   async close(): Promise<void> {
-    await this.db.close();
+    throw new Error('NativeDatabaseService is not available in web build');
   }
 }
