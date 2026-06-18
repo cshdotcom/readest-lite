@@ -125,6 +125,34 @@ class LocalAuthClient {
     return { error: null };
   }
 
+  // 兼容原 supabase.auth.updateUser() — Lite 单账号模式下禁用邮箱修改，
+  // 返回错误让前端提示用户。
+  async updateUser(_attrs: { email?: string; password?: string; data?: Record<string, unknown> }) {
+    return {
+      data: { user: null },
+      error: { message: 'Email update is disabled in Readest Lite.' },
+    };
+  }
+
+  // 兼容原 supabase.auth.signInWithOAuth() — Lite 不支持 OAuth
+  async signInWithOAuth(_opts: {
+    provider: string;
+    options?: { redirectTo?: string; scopes?: string; skipBrowserRedirect?: boolean };
+  }) {
+    return {
+      data: { url: null, provider: null },
+      error: { message: 'OAuth is disabled in Readest Lite. Use email/password.' },
+    };
+  }
+
+  // 兼容原 supabase.auth.signInWithIdToken() — Lite 不支持
+  async signInWithIdToken(_opts: { provider: string; token: string }) {
+    return {
+      data: { user: null, session: null },
+      error: { message: 'ID token sign-in is disabled in Readest Lite.' },
+    };
+  }
+
   async signInWithPassword({ email, password }: { email: string; password: string }) {
     const resp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: 'POST',

@@ -80,15 +80,19 @@ COPY --from=build --chown=node:node /app/apps/readest-app/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/readest-app/.next/static ./apps/readest-app/.next/static
 COPY --from=build --chown=node:node /app/apps/readest-app/public ./apps/readest-app/public
 
-# 拷贝 Prisma schema + migrations（运行时 db push 用）
+# 拷贝 Prisma schema + init 脚本
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/apps/readest-app/scripts ./apps/readest-app/scripts
 
-# 拷贝原项目 prisma CLI 依赖（standalone 已 trace，但 prisma 二进制需要）
-COPY --from=build --chown=node:node /app/node_modules/.pnpm/prisma@*/node_modules/prisma ./node_modules/prisma
-COPY --from=build --chown=node:node /app/node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client ./node_modules/@prisma/client
-COPY --from=build --chown=node:node /app/node_modules/.pnpm/argon2@*/node_modules/argon2 ./node_modules/argon2
-COPY --from=build --chown=node:node /app/node_modules/.pnpm/jsonwebtoken@*/node_modules/jsonwebtoken ./node_modules/jsonwebtoken
+# 拷贝运行时需要的 node_modules（standalone trace 通常已包含 @prisma/client/argon2/jsonwebtoken，
+# 但 prisma CLI 二进制需要单独拷贝用于 db push）。
+# 使用 shell 通配符在 build stage 内拷贝，避免 Docker COPY 不支持 glob 的问题。
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/prisma ./node_modules/prisma
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/argon2 ./node_modules/argon2
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/jsonwebtoken ./node_modules/jsonwebtoken
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/@types/jsonwebtoken ./node_modules/@types/jsonwebtoken
 
 # 创建数据目录
 RUN mkdir -p /data/db /data/books /data/inbox && chown -R node:node /data

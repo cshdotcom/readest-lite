@@ -23,13 +23,13 @@ export const getLibraryBackupFilename = () => {
   return 'library_backup.json';
 };
 export const getRemoteBookFilename = (book: Book) => {
-  // S3 storage: https://docs.aws.amazon.com/zh_cn/AmazonS3/latest/userguide/object-keys.html
-  if (getStorageType() === 'r2') {
-    return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
-  } else if (getStorageType() === 's3') {
+  // Readest Lite — 'local' 与 'r2' 走相同的可读文件名规则
+  const t = getStorageType();
+  if (t === 's3') {
     return `${book.hash}/${book.hash}.${EXTS[book.format]}`;
   } else {
-    return '';
+    // 'r2' 和 'local' 都使用可读文件名
+    return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
   }
 };
 export const getLocalBookFilename = (book: Book) => {

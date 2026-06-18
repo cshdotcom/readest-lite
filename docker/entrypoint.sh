@@ -10,12 +10,14 @@ mkdir -p /data/db /data/books /data/inbox
 
 # prisma db push 同步 schema（无 migration 历史，直接 push）
 cd /app/apps/readest-app
-node ../../node_modules/prisma/build/index.js db push --schema=../../prisma/schema.prisma --accept-data-loss=false
+node /app/node_modules/prisma/build/index.js db push --schema=/app/prisma/schema.prisma --accept-data-loss=false
 
 # 初始化管理员账号
 echo "[entrypoint] ensuring admin user..."
-node --experimental-strip-types ../../apps/readest-app/scripts/init-admin.ts
+cd /app/apps/readest-app
+node --experimental-strip-types /app/apps/readest-app/scripts/init-admin.ts
 
 # 启动 Next.js standalone server
 echo "[entrypoint] starting Next.js on port ${PORT:-8225}..."
+cd /app
 exec node apps/readest-app/server.js
