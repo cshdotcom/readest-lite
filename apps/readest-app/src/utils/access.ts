@@ -4,8 +4,9 @@
 // EMAIL_IN_PLANS / isEmailInPlan / STORAGE_QUOTA_GRACE_BYTES /
 // getStoragePlanData / getTranslationQuota / getTranslationPlanData /
 // getDailyTranslationPlanData / getAccessToken / getUserID / validateUserAndToken
-import { verifyAccessToken, type AuthUser } from './localAuth';
-import { prismaClient } from './db';
+//
+// 关键：validateUserAndToken 用 dynamic import 加载 localAuth（含 argon2/prisma），
+// 避免客户端 build 时把 argon2 / @prisma/client 打到 bundle（会因 'fs' 找不到失败）。
 import type { UserPlan } from '@/types/quota';
 
 // 兼容前端类型；plan 在新系统里恒为 'pro'。
@@ -17,15 +18,9 @@ export const EMAIL_IN_PLANS: readonly UserPlan[] = ['plus', 'pro', 'purchase'];
 export const isEmailInPlan = (_plan: UserPlan): boolean => true;
 
 // 配额：原 Pro 体系下 quota=20GB。改造后无限存储。
-// 但前端 useQuotaStats 仍会读取 usage/quota 计算 usagePercentage，
-// 我们返回一个非常大的 quota 让百分比永远 ~0%，UI 看上去正常。
 export const STORAGE_QUOTA_GRACE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB（已无意义）
 
-export const getStoragePlanData = (token: string) => {
-  // 不再读 JWT 中的 storage_usage_bytes；动态查询本地 files 表总和。
-  // 为了避免每个调用都查库，这里读 JWT 内的 storage_usage_bytes（已置 0），
-  // 真正的配额 enforcement 在 storage/upload 路由里通过 prismaClient 查询。
-  void token;
+export const getStoragePlanData = (_token: string) => {
   return {
     plan: 'pro' as UserPlan,
     usage: 0,
@@ -71,15 +66,30 @@ export const getUserID = async (): Promise<string | null> => {
 // ───────────────────────────────────────────────────────────────────────────
 // 服务端校验（替代原 supabase.auth.getUser）
 // 路由侧调用：const { user, token } = await validateUserAndToken(req.headers.get('authorization'))
+//
+// 关键：用 dynamic import 加载 localAuth，避免客户端 build 时把 argon2/@prisma/client
+// 打到 bundle（会因 'fs' 找不到失败）。客户端代码不会调用 validateUserAndToken，
+// 但 webpack 仍会跟随静态 import 解析整个依赖图，所以必须用 dynamic import。
 // ───────────────────────────────────────────────────────────────────────────
+export interface AuthUser {
+  id: string;
+  email: string;
+  aud: string;
+  role: string;
+  app_metadata: Record<string, unknown>;
+  user_metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export const validateUserAndToken = async (
   authHeader: string | null | undefined,
 ): Promise<{ user?: AuthUser; token?: string }> => {
   if (!authHeader) return {};
   const token = authHeader.replace(/^Bearer\s+/i, '');
+  const { verifyAccessToken } = await import('./localAuth');
   const user = verifyAccessToken(token);
   if (!user) return {};
-  // 单账号模式：仅允许本地存在的用户
+  const { prismaClient } = await import('./db');
   const dbUser = await prismaClient.user.findUnique({ where: { id: user.id } });
   if (!dbUser) return {};
   return { user, token };
@@ -87,6 +97,7 @@ export const validateUserAndToken = async (
 
 // 服务端实际查 files 表算真实 usage（供 storage/upload 与 share/import 使用）
 export const getActualStorageUsage = async (userId: string): Promise<number> => {
+  const { prismaClient } = await import('./db');
   const agg = await prismaClient.file.aggregate({
     where: { userId, deletedAt: null },
     _sum: { fileSize: true },
