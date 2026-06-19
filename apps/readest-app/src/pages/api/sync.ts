@@ -36,12 +36,6 @@ const transformsToDB = {
   book_configs: transformBookConfigToDB,
 };
 
-const DBSyncTypeMap = {
-  books: 'books',
-  book_notes: 'notes',
-  book_configs: 'configs',
-} as const;
-
 type TableName = keyof typeof transformsToDB;
 
 // ───────────────────────────────────────────────────────────────────────────
