@@ -14,13 +14,13 @@ export const useQuotaStats = (briefName = false) => {
   useEffect(() => {
     if (!user || !token) return;
 
-    // Pro 体系删除 — 永远显示无限配额
+    // Pro 体系删除 — 配额 100TB
     const storageQuota: QuotaType = {
       name: briefName ? _('Storage') : _('Cloud Sync Storage'),
-      tooltip: _('Unlimited storage'),
+      tooltip: _('100TB storage'),
       used: 0,
-      total: 1,
-      unit: _('Unlimited'),
+      total: 100,
+      unit: 'TB',
     };
     const now = new Date();
     const translationResetAt = Date.UTC(
@@ -30,10 +30,10 @@ export const useQuotaStats = (briefName = false) => {
     );
     const translationQuota: QuotaType = {
       name: briefName ? _('Translation') : _('Translation Characters'),
-      tooltip: _('Unlimited daily translation'),
+      tooltip: _('100TB daily translation'),
       used: 0,
-      total: 1,
-      unit: _('Unlimited'),
+      total: 100,
+      unit: 'TB',
       resetAt: translationResetAt,
     };
     setUserProfilePlan('pro');

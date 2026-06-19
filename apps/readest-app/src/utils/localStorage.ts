@@ -57,12 +57,13 @@ const sign = (payload: string): string => {
 
 // Readest Lite — 签名 URL 的 base：
 // - 如果设了 PUBLIC_BASE_URL（如 https://read.example.com），用它（反向代理场景）
-// - 否则用相对路径 /api/storage/_put（浏览器自动用当前 origin）
-// 这样无论从 localhost / IP / 域名访问都能正常上传下载
+// - 否则用请求的 host 拼接绝对 URL（NextResponse.redirect 需要绝对 URL）
 const getStorageBase = (): string => {
   const publicBase = process.env['PUBLIC_BASE_URL'];
   if (publicBase) return publicBase.replace(/\/$/, '');
-  return ''; // 相对路径
+  // 服务端：用容器内地址
+  const port = process.env['PORT'] || '8225';
+  return `http://127.0.0.1:${port}`;
 };
 
 const buildPutUrl = (fileKey: string, expires: number, contentType?: string): string => {

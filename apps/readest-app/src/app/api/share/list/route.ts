@@ -44,6 +44,6 @@ export async function GET(request: Request) {
       createdAt: row.createdAt.toISOString(),
     })),
     nextCursor,
-    shareUrlBase: SHARE_BASE_URL,
+    shareUrlBase: `${process.env['PUBLIC_BASE_URL'] || ''}/s`,
   });
 }

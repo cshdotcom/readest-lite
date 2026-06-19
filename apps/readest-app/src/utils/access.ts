@@ -17,31 +17,32 @@ export const getUserProfilePlan = (_token: string): UserPlan => 'pro';
 export const EMAIL_IN_PLANS: readonly UserPlan[] = ['plus', 'pro', 'purchase'];
 export const isEmailInPlan = (_plan: UserPlan): boolean => true;
 
-// 配额：原 Pro 体系下 quota=20GB。改造后无限存储。
-export const STORAGE_QUOTA_GRACE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB（已无意义）
+// 配额：100TB（足够大但不溢出 UI 显示）
+const QUOTA_100TB = 100 * 1024 * 1024 * 1024 * 1024;
+export const STORAGE_QUOTA_GRACE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB grace
 
 export const getStoragePlanData = (_token: string) => {
   return {
     plan: 'pro' as UserPlan,
     usage: 0,
-    quota: Number.MAX_SAFE_INTEGER, // 无限
+    quota: QUOTA_100TB,
   };
 };
 
-export const getTranslationQuota = (_plan: UserPlan): number => Number.MAX_SAFE_INTEGER;
+export const getTranslationQuota = (_plan: UserPlan): number => QUOTA_100TB;
 
 export const getTranslationPlanData = (_token: string) => {
   return {
     plan: 'pro' as UserPlan,
     usage: 0,
-    quota: Number.MAX_SAFE_INTEGER,
+    quota: QUOTA_100TB,
   };
 };
 
 export const getDailyTranslationPlanData = (_token: string) => {
   return {
     plan: 'pro' as UserPlan,
-    quota: Number.MAX_SAFE_INTEGER,
+    quota: QUOTA_100TB,
   };
 };
 

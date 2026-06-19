@@ -37,6 +37,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { user, token } = await validateUserAndToken(req.headers['authorization']);
   if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
 
+  // DeepL 默认关闭，需设 DEEPL_ENABLED=true + API key
+  const deeplEnabled = process.env['DEEPL_ENABLED'] === 'true';
+  if (!deeplEnabled) {
+    return res.status(503).json({ error: 'Translation is disabled. Set DEEPL_ENABLED=true and DEEPL_*_API_KEYS to enable.' });
+  }
+
   const { text, source_lang, target_lang } = req.body || {};
   if (!Array.isArray(text)) return res.status(400).json({ error: 'text must be array' });
 

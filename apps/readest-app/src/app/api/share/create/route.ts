@@ -95,5 +95,5 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ token: raw, url: `${SHARE_BASE_URL}/${raw}`, expiresAt: expiresAt.toISOString() });
+  return NextResponse.json({ token: raw, url: `${process.env['PUBLIC_BASE_URL'] || ''}/s/${raw}`, expiresAt: expiresAt.toISOString() });
 }

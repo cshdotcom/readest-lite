@@ -30,7 +30,8 @@ services:
       - INBOX_DIR=/data/inbox
       # 可选：JWT 密钥。不设则用 ADMIN_EMAIL+ADMIN_PASSWORD 派生（生产环境建议显式设置）
       # - JWT_SECRET=
-      # 可选：DeepL 翻译 API（不设则翻译功能不可用）
+      # 可选：DeepL 翻译（默认关闭，设 DEEPL_ENABLED=true + API key 启用）
+      # - DEEPL_ENABLED=true
       # - DEEPL_FREE_API_KEYS=
       # - DEEPL_PRO_API_KEYS=
       # 可选：AI 聊天网关（不设则 AI 功能不可用）

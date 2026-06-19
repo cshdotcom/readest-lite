@@ -38,9 +38,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     if (!fileName || !fileSize) return res.status(400).json({ error: 'Missing file info' });
 
-    // Pro 体系已删除 → 无限配额，跳过 enforcement
+    // Pro 体系已删除 → 100TB 配额
     const usage = 0;
-    const quota = Number.MAX_SAFE_INTEGER;
+    const quota = 100 * 1024 * 1024 * 1024 * 1024; // 100TB
 
     const fileKey = `${user.id}/${fileName}`;
     const existing = await prismaClient.file.findUnique({ where: { fileKey } });

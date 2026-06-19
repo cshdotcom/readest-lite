@@ -777,9 +777,13 @@ export const BOOK_IDS_SEPARATOR = '+';
 
 export const DOWNLOAD_READEST_URL = 'https://readest.com?utm_source=readest_web';
 
-export const READEST_WEB_BASE_URL = 'https://web.readest.com';
-export const READEST_NODE_BASE_URL = 'https://node.readest.com';
+// Readest Lite — 使用 PUBLIC_BASE_URL 环境变量（运行时从 runtime-config 注入）
+// 如果未设，用空字符串让前端用相对路径 /s
+export const READEST_WEB_BASE_URL = '';
+export const READEST_NODE_BASE_URL = '';
 
+// SHARE_BASE_URL 在服务端用 PUBLIC_BASE_URL，在客户端用空（相对路径 /s）
+// 服务端 share/create 和 share/list 路由直接读 process.env.PUBLIC_BASE_URL
 export const SHARE_BASE_URL = `${READEST_WEB_BASE_URL}/s`;
 export const SHARE_EXPIRATION_DAYS = [1, 3, 7] as const;
 
@@ -830,19 +834,22 @@ export const ZOOM_STEP = 10;
 
 export const SHOW_UNREAD_STATUS_BADGE = false;
 
-// Readest Lite — Pro 体系删除，配额恒为无限
+// Readest Lite — 配额设为 100TB（足够大但不溢出 UI 显示）
+const QUOTA_100TB = 100 * 1024 * 1024 * 1024 * 1024; // 100 TB in bytes
+const QUOTA_TRANSLATION_100TB = 100 * 1024 * 1024 * 1024 * 1024; // 100 TB in chars
+
 export const DEFAULT_STORAGE_QUOTA: UserStorageQuota = {
-  free: Number.MAX_SAFE_INTEGER,
-  plus: Number.MAX_SAFE_INTEGER,
-  pro: Number.MAX_SAFE_INTEGER,
-  purchase: Number.MAX_SAFE_INTEGER,
+  free: QUOTA_100TB,
+  plus: QUOTA_100TB,
+  pro: QUOTA_100TB,
+  purchase: QUOTA_100TB,
 };
 
 export const DEFAULT_DAILY_TRANSLATION_QUOTA: UserDailyTranslationQuota = {
-  free: Number.MAX_SAFE_INTEGER,
-  plus: Number.MAX_SAFE_INTEGER,
-  pro: Number.MAX_SAFE_INTEGER,
-  purchase: Number.MAX_SAFE_INTEGER,
+  free: QUOTA_TRANSLATION_100TB,
+  plus: QUOTA_TRANSLATION_100TB,
+  pro: QUOTA_TRANSLATION_100TB,
+  purchase: QUOTA_TRANSLATION_100TB,
 };
 
 export const DOUBLE_CLICK_INTERVAL_THRESHOLD_MS = 250;
