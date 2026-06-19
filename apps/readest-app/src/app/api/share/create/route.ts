@@ -6,7 +6,6 @@ import { validateUserAndToken } from '@/utils/access';
 import { generateShareToken } from '@/libs/shareServer';
 import { objectExists } from '@/utils/object';
 import {
-  SHARE_BASE_URL,
   SHARE_CFI_MAX_LENGTH,
   SHARE_EXPIRATION_DAYS,
   SHARE_MAX_PER_USER,

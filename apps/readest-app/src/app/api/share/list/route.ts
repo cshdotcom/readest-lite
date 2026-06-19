@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { prismaClient } from '@/utils/db';
 import { validateUserAndToken } from '@/utils/access';
-import { SHARE_BASE_URL } from '@/services/constants';
+// SHARE_BASE_URL removed — uses process.env.PUBLIC_BASE_URL at runtime
 
 const PAGE_SIZE = 25;
 
