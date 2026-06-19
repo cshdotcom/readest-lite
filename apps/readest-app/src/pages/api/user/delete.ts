@@ -1,9 +1,8 @@
 // 改造自原 src/pages/api/user/delete.ts。
-// supabase.auth.admin.deleteUser → 删除本地 user 行（级联删所有业务表）。
+// supabase.auth.admin.deleteUser → 单账号模式下禁用（保护唯一管理员）。
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken } from '@/utils/access';
-import { prismaClient } from '@/utils/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
