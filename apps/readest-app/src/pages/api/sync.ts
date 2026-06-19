@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   if (isNaN(since.getTime())) {
     return NextResponse.json({ error: 'Invalid "since" timestamp' }, { status: 400 });
   }
-  const sinceIso = since.toISOString();
+  // 原版用 sinceIso 在 supabase .or() 过滤；Prisma 版直接用 Date 对象，不需要 ISO 字符串
 
   const results: SyncResult = { books: [], configs: [], notes: [], statBooks: [], statPages: [] };
   const errors: Record<TableName, { table: TableName; error: string } | null> = {
