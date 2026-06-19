@@ -33,7 +33,7 @@ export const getServerRuntimeConfig = (): ReadestRuntimeConfig => {
   return {
     // supabaseUrl 留空 — 前端 utils/supabase.ts 会用 window.location.origin
     supabaseUrl: publicBaseUrl || '',
-    supabaseAnonKey: process.env['SUPABASE_ANON_KEY'] ?? process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || 'anon',
+    supabaseAnonKey: (process.env['SUPABASE_ANON_KEY'] ?? process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']) || 'anon',
     // apiBaseUrl 用相对路径 /api，浏览器自动用当前 origin
     apiBaseUrl: publicBaseUrl ? `${publicBaseUrl}/api` : '/api',
     objectStorageType:
