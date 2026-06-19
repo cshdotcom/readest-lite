@@ -35,7 +35,6 @@ export interface AuthSession {
 // JWT 签发
 // ───────────────────────────────────────────────────────────────────────────
 const signAccessToken = (user: AuthUser): string => {
-  const now = Math.floor(Date.now() / 1000);
   return jwt.sign(
     {
       iss: ISSUER,
