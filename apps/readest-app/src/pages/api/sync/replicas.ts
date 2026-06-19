@@ -37,9 +37,9 @@ const rowToResponse = (r: {
   replica_id: r.replicaId,
   fields_jsonb: JSON.parse(r.fieldsJsonb || '{}'),
   manifest_jsonb: r.manifestJsonb ? JSON.parse(r.manifestJsonb) : null,
-  deleted_at_ts: r.deletedAtTs,
+  deleted_at_ts: (r.deletedAtTs as unknown as ReplicaRow['deleted_at_ts']) ?? null,
   reincarnation: r.reincarnation,
-  updated_at_ts: r.updatedAtTs,
+  updated_at_ts: r.updatedAtTs as unknown as ReplicaRow['updated_at_ts'],
   schema_version: r.schemaVersion,
 });
 
