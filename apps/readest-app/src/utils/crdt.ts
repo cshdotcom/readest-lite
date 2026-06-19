@@ -91,9 +91,9 @@ export const crdtMergeReplica = (
       replica_id: remote.replicaId,
       fields_jsonb: remote.fieldsJsonb ?? {},
       manifest_jsonb: remote.manifestJsonb,
-      deleted_at_ts: remote.deletedAtTs,
+      deleted_at_ts: (remote.deletedAtTs as unknown as Hlc) ?? null,
       reincarnation: remote.reincarnation,
-      updated_at_ts: remote.updatedAtTs,
+      updated_at_ts: remote.updatedAtTs as unknown as Hlc,
       schema_version: remote.schemaVersion,
     };
   }
@@ -144,9 +144,9 @@ export const crdtMergeReplica = (
     replica_id: local.replica_id,
     fields_jsonb: mergedFields,
     manifest_jsonb: manifest,
-    deleted_at_ts: mergedDeletedAt,
+    deleted_at_ts: (mergedDeletedAt as unknown as Hlc) ?? null,
     reincarnation,
-    updated_at_ts: updatedAtTs,
+    updated_at_ts: updatedAtTs as unknown as Hlc,
     schema_version: schemaVersion,
   };
 };
