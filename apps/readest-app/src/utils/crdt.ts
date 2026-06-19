@@ -71,7 +71,7 @@ export interface ReplicaMergeInput {
   kind: string;
   replicaId: string;
   fieldsJsonb: Record<string, FieldEnvelope>;
-  manifestJsonb: { files: unknown[]; schemaVersion: number } | null;
+  manifestJsonb: Manifest | null;
   deletedAtTs: string | null;
   reincarnation: string | null;
   updatedAtTs: string;
