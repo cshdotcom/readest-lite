@@ -16,11 +16,7 @@ export const hlcMax = (a: string | null, b: string | null): string | null => {
   return a >= b ? a : b;
 };
 
-interface FieldEnvelope {
-  v: unknown;
-  t: string; // Hlc
-  s: string; // deviceId
-}
+// FieldEnvelope 已从 @/types/replica 导入，无需重复定义
 
 // 判断对象是否为 cipher envelope（{c,i,s,alg,h}）
 const isCipherEnvelope = (v: unknown): boolean =>
