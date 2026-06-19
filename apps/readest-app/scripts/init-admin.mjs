@@ -1,12 +1,46 @@
 // init-admin.mjs — 自包含的管理员初始化脚本
 // 不依赖 TypeScript 源码链，直接用 PrismaClient + argon2
 // 容器启动时由 entrypoint.sh 调用
-import { createHash } from 'crypto';
-import { randomBytes } from 'crypto';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
 
-// 动态 import（这些模块在 production 镜像的 apps/readest-app/node_modules 下）
-const { PrismaClient } = await import('/app/apps/readest-app/node_modules/@prisma/client/index.js');
-const argon2 = (await import('/app/apps/readest-app/node_modules/argon2/argon2.cjs')).default;
+// 用 createRequire 从 apps/readest-app 目录解析模块
+// 这样能正确解析 pnpm 的符号链接结构
+const appDir = '/app/apps/readest-app';
+const require = createRequire(path.join(appDir, 'package.json'));
+
+// 尝试多种路径加载 PrismaClient（pnpm 的符号链接结构可能不同）
+let PrismaClient;
+try {
+  const prismaModule = require('@prisma/client');
+  PrismaClient = prismaModule.PrismaClient;
+} catch (e1) {
+  try {
+    // fallback: 直接从 .pnpm 目录加载
+    const prismaPath = require.resolve('@prisma/client', { paths: [appDir] });
+    const prismaModule = await import(pathToFileURL(prismaPath).href);
+    PrismaClient = prismaModule.PrismaClient;
+  } catch (e2) {
+    console.error('[init] Cannot load @prisma/client:', e1.message, e2.message);
+    process.exit(1);
+  }
+}
+
+// 加载 argon2
+let argon2;
+try {
+  argon2 = require('argon2');
+} catch (e1) {
+  try {
+    const argon2Path = require.resolve('argon2', { paths: [appDir] });
+    argon2 = (await import(pathToFileURL(argon2Path).href)).default;
+  } catch (e2) {
+    console.error('[init] Cannot load argon2:', e1.message, e2.message);
+    process.exit(1);
+  }
+}
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DATABASE_URL || 'file:/data/db/readest.db' } },
@@ -31,10 +65,11 @@ async function main() {
   }
 
   const userId = uuidV5(email);
+  console.log('[init] looking for user:', userId);
+
   const existing = await prisma.user.findUnique({ where: { id: userId } });
 
   if (existing) {
-    // 检查密码是否变化
     let needUpdate = false;
     try {
       needUpdate = !(await argon2.verify(existing.encryptedPass, password));
@@ -62,8 +97,10 @@ async function main() {
 
 try {
   await main();
+  console.log('[init] done.');
 } catch (e) {
   console.error('[init] failed:', e.message);
+  console.error(e.stack);
   process.exit(1);
 } finally {
   await prisma.$disconnect();
