@@ -14,9 +14,10 @@ if [ ! -f /data/config.json ]; then
 fi
 
 # prisma db push 同步 schema（无 migration 历史，直接 push）
+# 用 apps/readest-app/node_modules 下的 prisma CLI（完整依赖树）
 echo "[entrypoint] pushing prisma schema..."
 cd /app/apps/readest-app
-node /app/node_modules/prisma/build/index.js db push --schema=/app/prisma/schema.prisma --accept-data-loss=false 2>&1 | tail -5
+node ./node_modules/prisma/build/index.js db push --schema=/app/prisma/schema.prisma --accept-data-loss=false 2>&1 | tail -5
 
 # 初始化管理员账号（幂等：存在则更新密码，不存在则创建）
 echo "[entrypoint] ensuring admin user..."

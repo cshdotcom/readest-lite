@@ -133,17 +133,13 @@ COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/apps/readest-app/scripts ./apps/readest-app/scripts
 
 # 拷贝运行时需要的 node_modules。
-# standalone 构建已 trace 了 Next.js 运行时依赖，但不包含 prisma CLI（用于 db push）
-# 和 argon2（用于密码验证）。
-# pnpm 把实际包存在根 node_modules/.pnpm/ 下，子项目的 node_modules/ 只是符号链接，
-# 所以需要从根 node_modules 拷贝 .pnpm/ 和相关包。
+# standalone 构建会 trace Next.js 的依赖，但 prisma CLI 用于容器启动时
+# 的 db push，需要完整的 node_modules 树（pnpm 的符号链接结构在 COPY 后
+# 会断裂，所以需要拷贝整个 apps/readest-app/node_modules）。
+# 这会让镜像增大约 300-500MB，但保证了 prisma CLI、argon2、jsonwebtoken
+# 都能正常工作。
+COPY --from=build --chown=node:node /app/apps/readest-app/node_modules ./apps/readest-app/node_modules
 COPY --from=build --chown=node:node /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/prisma ./node_modules/prisma
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/argon2 ./node_modules/argon2
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/jsonwebtoken ./node_modules/jsonwebtoken
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/@types/jsonwebtoken ./node_modules/@types/jsonwebtoken
 
 # 创建数据目录
 RUN mkdir -p /data/db /data/books /data/inbox && chown -R node:node /data
