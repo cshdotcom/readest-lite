@@ -1,20 +1,17 @@
-// 本地 JWT 鉴权层。
+// 本地 JWT 鉴权层 — 多用户支持
 // 替代 supabase.auth.getUser(token) / supabase.auth.refreshSession() 等。
-// 完全兼容前端 utils/access.ts 对 JWT 声明的读取。
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import argon2 from 'argon2';
 import { randomUUID } from 'crypto';
 import { prismaClient } from './db';
 
-// JWT_SECRET 必填，但若用户未设置则用 ADMIN_EMAIL+ADMIN_PASSWORD 派生（部署页只列 ADMIN_EMAIL/PASSWORD/PORT 为必填）
-// 这样开箱即用，但生产环境强烈建议显式设置 JWT_SECRET
 const JWT_SECRET = process.env['JWT_SECRET'] || (
   process.env['ADMIN_EMAIL'] && process.env['ADMIN_PASSWORD']
     ? `readest-lite-${process.env['ADMIN_EMAIL']}-${process.env['ADMIN_PASSWORD']}`
     : 'dev-insecure-secret-change-me'
 );
-const JWT_EXP_SECONDS = parseInt(process.env['JWT_EXP_SECONDS'] || '604800', 10); // 7 天
-const REFRESH_EXP_SECONDS = parseInt(process.env['REFRESH_EXP_SECONDS'] || '2592000', 10); // 30 天
+const JWT_EXP_SECONDS = parseInt(process.env['JWT_EXP_SECONDS'] || '604800', 10);
+const REFRESH_EXP_SECONDS = parseInt(process.env['REFRESH_EXP_SECONDS'] || '2592000', 10);
 const ISSUER = 'readest-lite';
 const AUDIENCE = 'authenticated';
 
@@ -22,10 +19,15 @@ export interface AuthUser {
   id: string;
   email: string;
   aud: string;
-  role: string;
+  role: string; // 'authenticated' (Supabase 兼容)
   app_metadata: Record<string, unknown>;
   user_metadata: Record<string, unknown>;
   created_at: string;
+  // Readest Lite 扩展字段
+  userRole?: string; // 'admin' | 'user'
+  displayName?: string | null;
+  storageQuotaMB?: number;
+  translationQuotaKB?: number;
 }
 
 export interface AuthSession {
@@ -38,7 +40,7 @@ export interface AuthSession {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// JWT 签发
+// JWT 签发 — 包含 role / quota 信息
 // ───────────────────────────────────────────────────────────────────────────
 const signAccessToken = (user: AuthUser): string => {
   return jwt.sign(
@@ -49,12 +51,15 @@ const signAccessToken = (user: AuthUser): string => {
       email: user.email,
       aal: 'aal1',
       session_id: randomUUID(),
-      // 兼容前端 utils/access.ts 读取的 plan / storage_* 字段：
-      // Pro 体系已删除 → 全部按 'pro' + 无限配额返回，所有 plan 判断恒为已升级。
       plan: 'pro',
       storage_usage_bytes: 0,
       storage_purchased_bytes: Number.MAX_SAFE_INTEGER,
       is_anonymous: false,
+      // Readest Lite 多用户字段
+      user_role: user.userRole || 'user',
+      display_name: user.displayName || null,
+      storage_quota_mb: user.storageQuotaMB ?? 0,
+      translation_quota_kb: user.translationQuotaKB ?? 0,
     },
     JWT_SECRET,
     {
@@ -74,7 +79,7 @@ const signRefreshToken = (userId: string): string => {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 校验 access token，返回 AuthUser（替代 supabase.auth.getUser）
+// 校验 access token
 // ───────────────────────────────────────────────────────────────────────────
 export const verifyAccessToken = (token: string): AuthUser | null => {
   try {
@@ -82,7 +87,11 @@ export const verifyAccessToken = (token: string): AuthUser | null => {
       algorithms: ['HS256'],
       issuer: ISSUER,
       audience: AUDIENCE,
-    }) as JwtPayload & { sub: string; email: string };
+    }) as JwtPayload & {
+      sub: string; email: string;
+      user_role?: string; display_name?: string | null;
+      storage_quota_mb?: number; translation_quota_kb?: number;
+    };
 
     return {
       id: payload.sub!,
@@ -92,6 +101,10 @@ export const verifyAccessToken = (token: string): AuthUser | null => {
       app_metadata: {},
       user_metadata: {},
       created_at: new Date((payload.iat ?? 0) * 1000).toISOString(),
+      userRole: payload.user_role || 'user',
+      displayName: payload.display_name ?? null,
+      storageQuotaMB: payload.storage_quota_mb ?? 0,
+      translationQuotaKB: payload.translation_quota_kb ?? 0,
     };
   } catch {
     return null;
@@ -113,8 +126,7 @@ export const verifyRefreshToken = (token: string): { userId: string } | null => 
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 替代 utils/access.ts::validateUserAndToken
-// 路由调用：const { user, token } = await validateUserAndToken(req.headers.get('authorization'))
+// validateUserAndToken — 验证 token + 查库确认用户存在
 // ───────────────────────────────────────────────────────────────────────────
 export const validateUserAndToken = async (
   authHeader: string | null | undefined,
@@ -123,14 +135,29 @@ export const validateUserAndToken = async (
   const token = authHeader.replace(/^Bearer\s+/i, '');
   const user = verifyAccessToken(token);
   if (!user) return {};
-  // 单账号模式：仅允许本地存在的用户
   const dbUser = await prismaClient.user.findUnique({ where: { id: user.id } });
   if (!dbUser) return {};
+  // 从数据库刷新 role/quota（防止 JWT 过期后权限变更不生效）
+  user.userRole = dbUser.role;
+  user.displayName = dbUser.displayName;
+  user.storageQuotaMB = dbUser.storageQuotaMB;
+  user.translationQuotaKB = dbUser.translationQuotaKB;
   return { user, token };
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 邮箱密码登录（替代 supabase.auth.signInWithPassword）
+// validateAdmin — 仅管理员可通过
+// ───────────────────────────────────────────────────────────────────────────
+export const validateAdmin = async (
+  authHeader: string | null | undefined,
+): Promise<{ user?: AuthUser; token?: string }> => {
+  const result = await validateUserAndToken(authHeader);
+  if (!result.user || result.user.userRole !== 'admin') return {};
+  return result;
+};
+
+// ───────────────────────────────────────────────────────────────────────────
+// 邮箱密码登录
 // ───────────────────────────────────────────────────────────────────────────
 export const signInWithPassword = async (
   email: string,
@@ -154,6 +181,10 @@ export const signInWithPassword = async (
     app_metadata: {},
     user_metadata: {},
     created_at: user.createdAt.toISOString(),
+    userRole: user.role,
+    displayName: user.displayName,
+    storageQuotaMB: user.storageQuotaMB,
+    translationQuotaKB: user.translationQuotaKB,
   };
   const access_token = signAccessToken(authUser);
   const refresh_token = signRefreshToken(user.id);
@@ -168,7 +199,7 @@ export const signInWithPassword = async (
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 刷新会话（替代 supabase.auth.refreshSession）
+// 刷新会话
 // ───────────────────────────────────────────────────────────────────────────
 export const refreshSession = async (refreshToken: string): Promise<AuthSession | null> => {
   const decoded = verifyRefreshToken(refreshToken);
@@ -184,6 +215,10 @@ export const refreshSession = async (refreshToken: string): Promise<AuthSession 
     app_metadata: {},
     user_metadata: {},
     created_at: user.createdAt.toISOString(),
+    userRole: user.role,
+    displayName: user.displayName,
+    storageQuotaMB: user.storageQuotaMB,
+    translationQuotaKB: user.translationQuotaKB,
   };
   return {
     access_token: signAccessToken(authUser),
@@ -196,8 +231,7 @@ export const refreshSession = async (refreshToken: string): Promise<AuthSession 
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 初始化管理员账号（容器启动时调用一次）
-// 用 UUID v5(ADMIN_EMAIL) 作为 user_id，保持外键类型一致。
+// 初始化管理员账号（容器启动时调用）
 // ───────────────────────────────────────────────────────────────────────────
 import { createHash } from 'crypto';
 
@@ -205,8 +239,8 @@ const uuidV5 = (name: string, namespace = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
   const nsBytes = Buffer.from(namespace.replace(/-/g, ''), 'hex');
   const nameBytes = Buffer.from(name, 'utf8');
   const hash = createHash('sha1').update(Buffer.concat([nsBytes, nameBytes])).digest();
-  hash[6] = (hash[6]! & 0x0f) | 0x50; // version 5
-  hash[8] = (hash[8]! & 0x3f) | 0x80; // variant
+  hash[6] = (hash[6]! & 0x0f) | 0x50;
+  hash[8] = (hash[8]! & 0x3f) | 0x80;
   const hex = hash.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
@@ -220,15 +254,20 @@ export const ensureAdminUser = async (): Promise<void> => {
   const userId = uuidV5(email);
   const existing = await prismaClient.user.findUnique({ where: { id: userId } });
   if (existing) {
-    // 密码可能 env 改过 → 同步
     const samePass = await argon2.verify(existing.encryptedPass, password).catch(() => false);
     if (!samePass) {
       const encryptedPass = await argon2.hash(password);
       await prismaClient.user.update({
         where: { id: userId },
-        data: { encryptedPass, email },
+        data: { encryptedPass, email, role: 'admin' },
       });
       console.log(`[init] admin password updated for ${email}`);
+    } else if (existing.role !== 'admin') {
+      // 确保 role 是 admin
+      await prismaClient.user.update({
+        where: { id: userId },
+        data: { role: 'admin' },
+      });
     }
     return;
   }
@@ -238,6 +277,7 @@ export const ensureAdminUser = async (): Promise<void> => {
       id: userId,
       email,
       encryptedPass,
+      role: 'admin',
     },
   });
   console.log(`[init] admin user created: ${email} (${userId})`);

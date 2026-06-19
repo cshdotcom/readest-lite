@@ -15,15 +15,19 @@ datasource db {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// 用户表（替代 Supabase auth.users，单管理员账号）
+// 用户表（替代 Supabase auth.users，多用户支持）
 // ───────────────────────────────────────────────────────────────────────────
 model User {
-  id            String   @id // UUID v5(ADMIN_EMAIL)
-  email         String   @unique
-  encryptedPass String   // argon2id 哈希
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  lastSignInAt  DateTime?
+  id               String   @id // UUID v5(email) 或 randomUUID
+  email            String   @unique
+  encryptedPass    String   // argon2id 哈希
+  role             String   @default("user") // "admin" | "user"
+  displayName      String?  // 显示名称
+  storageQuotaMB   Int      @default(0) // 存储配额 MB，0=无限(100TB)
+  translationQuotaKB Int    @default(0) // 翻译配额 KB，0=无限(100TB)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastSignInAt     DateTime?
 
   books              Book[]
   bookConfigs        BookConfig[]

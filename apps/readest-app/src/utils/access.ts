@@ -80,6 +80,10 @@ export interface AuthUser {
   app_metadata: Record<string, unknown>;
   user_metadata: Record<string, unknown>;
   created_at: string;
+  userRole?: string;
+  displayName?: string | null;
+  storageQuotaMB?: number;
+  translationQuotaKB?: number;
 }
 
 export const validateUserAndToken = async (
@@ -93,10 +97,21 @@ export const validateUserAndToken = async (
   const { prismaClient } = await import('./db');
   const dbUser = await prismaClient.user.findUnique({ where: { id: user.id } });
   if (!dbUser) return {};
+  user.userRole = dbUser.role;
+  user.displayName = dbUser.displayName;
+  user.storageQuotaMB = dbUser.storageQuotaMB;
+  user.translationQuotaKB = dbUser.translationQuotaKB;
   return { user, token };
 };
 
-// 服务端实际查 files 表算真实 usage（供 storage/upload 与 share/import 使用）
+export const validateAdmin = async (
+  authHeader: string | null | undefined,
+): Promise<{ user?: AuthUser; token?: string }> => {
+  const result = await validateUserAndToken(authHeader);
+  if (!result.user || result.user.userRole !== 'admin') return {};
+  return result;
+};
+
 export const getActualStorageUsage = async (userId: string): Promise<number> => {
   const { prismaClient } = await import('./db');
   const agg = await prismaClient.file.aggregate({

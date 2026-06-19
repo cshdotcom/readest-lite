@@ -22,6 +22,7 @@ import StorageManager from './components/StorageManager';
 import SharedLinksSection from './components/SharedLinksSection';
 import { SyncPassphraseSection } from './components/SyncPassphraseSection';
 import { SyncCategoriesSection } from './components/SyncCategoriesSection';
+import UserManagement from './components/UserManagement';
 
 // Readest Lite — 用户中心。
 // Pro 体系已删除：移除 PlansComparison / Checkout / Stripe / IAP / useAvailablePlans。
@@ -144,6 +145,10 @@ const ProfilePage = () => {
                 </div>
               ) : (
                 <div className='flex flex-col gap-y-8 px-6'>
+                  {/* 管理员可见用户管理 */}
+                  {(user as unknown as { userRole?: string })?.userRole === 'admin' && (
+                    <UserManagement />
+                  )}
                   <AccountActions
                     userPlan={'pro'}
                     iapAvailable={false}
