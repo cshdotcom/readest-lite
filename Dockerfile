@@ -135,11 +135,10 @@ COPY --from=build --chown=node:node /app/apps/readest-app/scripts ./apps/readest
 # 拷贝运行时需要的 node_modules。
 # standalone 构建已 trace 了 Next.js 运行时依赖，但不包含 prisma CLI（用于 db push）
 # 和 argon2（用于密码验证）。
-# pnpm 用 .pnpm/ 目录存储实际包，node_modules/ 下的包只是符号链接，
-# 所以需要拷贝整个 .pnpm/ 目录以确保 prisma CLI 能找到它的依赖（如 @prisma/engines）。
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/.pnpm ./node_modules/.pnpm
+# pnpm 把实际包存在根 node_modules/.pnpm/ 下，子项目的 node_modules/ 只是符号链接，
+# 所以需要从根 node_modules 拷贝 .pnpm/ 和相关包。
+COPY --from=build --chown=node:node /app/node_modules/.pnpm ./node_modules/.pnpm
 COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/.bin/prisma.cmd ./node_modules/.bin/prisma.cmd
 COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/prisma ./node_modules/prisma
 COPY --from=build --chown=node:node /app/apps/readest-app/node_modules/argon2 ./node_modules/argon2
