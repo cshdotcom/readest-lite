@@ -55,11 +55,21 @@ const sign = (payload: string): string => {
   return createHmac('sha256', SIGNING_SECRET).update(payload).digest('hex');
 };
 
+// Readest Lite — 签名 URL 的 base：
+// - 如果设了 PUBLIC_BASE_URL（如 https://read.example.com），用它（反向代理场景）
+// - 否则用相对路径 /api/storage/_put（浏览器自动用当前 origin）
+// 这样无论从 localhost / IP / 域名访问都能正常上传下载
+const getStorageBase = (): string => {
+  const publicBase = process.env['PUBLIC_BASE_URL'];
+  if (publicBase) return publicBase.replace(/\/$/, '');
+  return ''; // 相对路径
+};
+
 const buildPutUrl = (fileKey: string, expires: number, contentType?: string): string => {
   const exp = Math.floor(Date.now() / 1000) + expires;
   const payload = `PUT|${fileKey}|${exp}`;
   const sig = sign(payload);
-  const base = process.env['PUBLIC_BASE_URL'] || 'http://localhost:8225';
+  const base = getStorageBase();
   const q = new URLSearchParams({
     key: fileKey,
     expires: String(exp),
@@ -73,7 +83,7 @@ const buildGetUrl = (fileKey: string, expires: number, bucketName?: string): str
   const exp = Math.floor(Date.now() / 1000) + expires;
   const payload = `GET|${fileKey}|${exp}|${bucketName ?? ''}`;
   const sig = sign(payload);
-  const base = process.env['PUBLIC_BASE_URL'] || 'http://localhost:8225';
+  const base = getStorageBase();
   const q = new URLSearchParams({
     key: fileKey,
     expires: String(exp),

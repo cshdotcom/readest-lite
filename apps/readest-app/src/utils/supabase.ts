@@ -15,9 +15,25 @@ import type { AuthUser } from './localAuth';
 // 仅类型 re-export，运行时不加载
 export type { AuthUser };
 
-const SUPABASE_URL =
-  process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8225');
+// ───────────────────────────────────────────────────────────────────────────
+// SUPABASE_URL 必须运行时动态计算，不能在模块加载时静态求值。
+//
+// 原因：NEXT_PUBLIC_SUPABASE_URL 是 Next.js 构建时烤死的变量，构建镜像时
+// 用 http://localhost:8225，部署到 https://read.example.com 后前端仍会
+// 打到 localhost，导致 "Failed to fetch"。
+//
+// 修复策略：浏览器里始终用 window.location.origin（即用户当前访问的域名），
+// 服务端（SSR）才用 env 变量。
+// ───────────────────────────────────────────────────────────────────────────
+const getSupabaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    // 浏览器：始终用当前页面 origin，无论用户从 localhost / IP / 域名访问都正确
+    return window.location.origin;
+  }
+  // 服务端 SSR：用 env 变量（运行时由 PUBLIC_BASE_URL 注入到 runtime-config.js）
+  // NEXT_PUBLIC_SUPABASE_URL 在构建时设为空字符串，所以需要 fallback
+  return process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'http://localhost:8225';
+};
 
 // ───────────────────────────────────────────────────────────────────────────
 // 极简的"伪 supabase auth client"。仅兼容前端在用的调用形态。
@@ -106,7 +122,7 @@ class LocalAuthClient {
     if (!refresh_token) return { data: { session: null }, error: null };
 
     try {
-      const resp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      const resp = await fetch(`${getSupabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: 'anon' },
         body: JSON.stringify({ refresh_token }),
@@ -166,7 +182,7 @@ class LocalAuthClient {
   }
 
   async signInWithPassword({ email, password }: { email: string; password: string }) {
-    const resp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    const resp = await fetch(`${getSupabaseUrl()}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: 'anon' },
       body: JSON.stringify({ email, password }),

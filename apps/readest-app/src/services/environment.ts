@@ -12,11 +12,27 @@ export const isTauriAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] 
 export const isWebAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'web';
 export const hasCli = () => window.__READEST_CLI_ACCESS === true;
 export const isPWA = () => window.matchMedia('(display-mode: standalone)').matches;
-export const getBaseUrl = () =>
-  getRuntimeConfig()?.apiBaseUrl ??
-  process.env['API_BASE_URL'] ??
-  process.env['NEXT_PUBLIC_API_BASE_URL'] ??
-  READEST_WEB_BASE_URL;
+
+// Readest Lite — getBaseUrl 在浏览器中返回空字符串（让 getAPIBaseUrl 拼出 '/api' 相对路径）
+// 原版返回 https://web.readest.com（烤死），部署到自定义域名后会跨域失败。
+// 在 Tauri / Node 环境仍用 env 变量。
+export const getBaseUrl = () => {
+  // 浏览器：返回空，让 getAPIBaseUrl() 拼出相对路径 '/api'
+  if (typeof window !== 'undefined') {
+    const cfg = getRuntimeConfig();
+    // 如果 runtime-config 显式设了完整 URL（如 PUBLIC_BASE_URL），用它
+    if (cfg?.apiBaseUrl && cfg.apiBaseUrl.startsWith('http')) {
+      return cfg.apiBaseUrl.replace(/\/api$/, '');
+    }
+    return ''; // 相对路径模式
+  }
+  // 服务端：用 env
+  return (
+    process.env['API_BASE_URL'] ??
+    process.env['NEXT_PUBLIC_API_BASE_URL'] ??
+    READEST_WEB_BASE_URL
+  );
+};
 export const getNodeBaseUrl = () =>
   process.env['NEXT_PUBLIC_NODE_BASE_URL'] ?? READEST_NODE_BASE_URL;
 

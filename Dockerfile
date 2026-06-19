@@ -69,11 +69,15 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 WORKDIR /app
 
-# 构建参数（与原项目一致 — 但 SUPABASE_URL 指向本地）
-ARG NEXT_PUBLIC_SUPABASE_URL=http://localhost:8225
+# 构建参数 — Readest Lite 改造：所有 URL 类变量不再烤死绝对路径
+# 前端代码运行时用 window.location.origin / 相对路径 '/api'，
+# 用户从任何域名访问都能正常工作。
+# NEXT_PUBLIC_SUPABASE_URL 设为空字符串（前端 getSupabaseUrl() 会用 window.location.origin）
+# NEXT_PUBLIC_API_BASE_URL 设为相对路径 /api
+ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=anon
 ARG NEXT_PUBLIC_APP_PLATFORM=web
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8225/api
+ARG NEXT_PUBLIC_API_BASE_URL=/api
 ARG NEXT_PUBLIC_OBJECT_STORAGE_TYPE=local
 ARG NEXT_PUBLIC_STORAGE_FIXED_QUOTA=0
 ARG NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=0
