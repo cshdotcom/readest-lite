@@ -68,7 +68,7 @@ export const resolveActiveShare = async (
       bookTitle: row.bookTitle, bookAuthor: row.bookAuthor,
       bookFormat: row.bookFormat, bookSize: Number(row.bookSize),
       cfi: row.cfi, expiresAt: row.expiresAt.toISOString(),
-      revokedAt: row.revokedAt instanceof Date ? row.revokedAt.toISOString() : null,
+      revokedAt: row.revokedAt ? new Date(row.revokedAt).toISOString() : null,
       downloadCount: row.downloadCount, createdAt: row.createdAt.toISOString(),
       bookFileKey: bookFile.fileKey, coverFileKey: coverFile?.fileKey ?? null,
     },
