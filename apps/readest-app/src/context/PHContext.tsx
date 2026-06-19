@@ -19,12 +19,18 @@ const shouldOptOutAtBoot = () => {
   return localStorage.getItem(TELEMETRY_OPT_OUT_KEY) !== 'false';
 };
 
+// Readest Lite — atob 在 BASE64 环境变量未设置时会抛 "string not correctly encoded"。
+// 加 fallback：如果 env 未设置或解码失败，使用空字符串（PostHog 不初始化）。
+const safeAtob = (s: string | undefined): string => {
+  if (!s) return '';
+  try { return atob(s); } catch { return ''; }
+};
 const posthogUrl =
   process.env['NEXT_PUBLIC_POSTHOG_HOST'] ||
-  atob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_URL_BASE64']!);
+  safeAtob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_URL_BASE64']);
 const posthogKey =
   process.env['NEXT_PUBLIC_POSTHOG_KEY'] ||
-  atob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64']!);
+  safeAtob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64']);
 
 if (typeof window !== 'undefined' && process.env['NODE_ENV'] === 'production' && posthogKey) {
   posthog.init(posthogKey, {
