@@ -238,14 +238,9 @@ export const useProgressSync = (bookKey: string) => {
           remoteCFILocation = candidateCFI;
         }
       }
-      const filteredSyncedConfig = Object.fromEntries(
-        Object.entries(syncedConfig).filter(([_, value]) => value !== null && value !== undefined),
-      );
-      if (syncedConfig.updatedAt >= config.updatedAt) {
-        setConfig(bookKey, { ...config, ...filteredSyncedConfig });
-      } else {
-        setConfig(bookKey, { ...filteredSyncedConfig, ...config });
-      }
+      // v8.6: view settings are now device-local — only sync reading progress (CFI),
+      // not config. TODO: Configuration sync will be handled through a more robust
+      // profile-based solution in the future.
       if (remoteCFILocation && configCFI) {
         if (CFI.compare(configCFI, remoteCFILocation) < 0) {
           // While previewing a deep-link target, do NOT yank the view to the

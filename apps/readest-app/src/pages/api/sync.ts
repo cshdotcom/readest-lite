@@ -277,6 +277,11 @@ export async function GET(req: NextRequest) {
 // ───────────────────────────────────────────────────────────────────────────
 // POST /api/sync — last-writer-wins + 软删除 union
 // ───────────────────────────────────────────────────────────────────────────
+// v8.6: fix(sync) — treat undefined and null reading_status as equal
+// prevents statusless books from being re-pinned to top after every sync
+const readingStatusChanged = (client: unknown, server: unknown): boolean =>
+  (client ?? null) !== (server ?? null);
+
 export async function POST(req: NextRequest) {
   const { user, token } = await validateUserAndToken(req.headers.get('authorization'));
   if (!user || !token) {
