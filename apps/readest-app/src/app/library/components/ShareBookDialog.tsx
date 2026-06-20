@@ -280,28 +280,33 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                     value={expirationDays}
                     onChange={setExpirationDays}
                     disabled={generating}
-                    options={SHARE_EXPIRATION_DAYS.map((n) => ({
-                      value: n,
-                      label: _('{{count}}d', { count: n }),
-                    }))}
+                    options={[
+                      ...SHARE_EXPIRATION_DAYS.map((n) => ({
+                        value: n,
+                        label: _('{{count}}d', { count: n }),
+                      })),
+                      { value: 0, label: _('∞') },
+                    ]}
                   />
-                  <input
-                    type='date'
-                    className='input input-sm input-bordered w-auto'
-                    value={(() => {
-                      const d = new Date(Date.now() + expirationDays * 86400000);
-                      return d.toISOString().split('T')[0];
-                    })()}
-                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                    max={new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]}
-                    disabled={generating}
-                    onChange={(e) => {
-                      const selected = new Date(e.target.value);
-                      const days = Math.ceil((selected.getTime() - Date.now()) / 86400000);
-                      if (days >= 1 && days <= 365) setExpirationDays(days);
-                    }}
-                    aria-label={_('Custom expiration date')}
-                  />
+                  {expirationDays !== 0 && (
+                    <input
+                      type='date'
+                      className='input input-sm input-bordered w-auto cursor-pointer'
+                      value={(() => {
+                        const d = new Date(Date.now() + expirationDays * 86400000);
+                        return d.toISOString().split('T')[0];
+                      })()}
+                      min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                      max={new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]}
+                      disabled={generating}
+                      onChange={(e) => {
+                        const selected = new Date(e.target.value);
+                        const days = Math.ceil((selected.getTime() - Date.now()) / 86400000);
+                        if (days >= 1 && days <= 365) setExpirationDays(days);
+                      }}
+                      aria-label={_('Custom expiration date')}
+                    />
+                  )}
                 </div>
               </div>
 

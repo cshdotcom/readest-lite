@@ -16,7 +16,7 @@ interface CreateShareBody {
 }
 
 const isAllowedExpiration = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 365;
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 365;
 
 const trimText = (value: unknown, max: number): string | null => {
   if (typeof value !== 'string') return null;
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   if (!bookHash) return NextResponse.json({ error: 'Missing or invalid bookHash' }, { status: 400 });
 
   if (!isAllowedExpiration(body.expirationDays)) {
-    return NextResponse.json({ error: `expirationDays must be an integer between 1 and 365`, code: 'invalid_expiration' }, { status: 400 });
+    return NextResponse.json({ error: `expirationDays must be 0 (permanent) or an integer between 1 and 365`, code: 'invalid_expiration' }, { status: 400 });
   }
   const expirationDays = body.expirationDays;
 
@@ -83,7 +83,10 @@ export async function POST(request: Request) {
   }
 
   const { raw, hash } = await generateShareToken();
-  const expiresAt = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000);
+  // 0 = permanent → year 9999
+  const expiresAt = expirationDays === 0
+    ? new Date('9999-12-31T23:59:59Z')
+    : new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000);
 
   await prismaClient.bookShare.create({
     data: {
