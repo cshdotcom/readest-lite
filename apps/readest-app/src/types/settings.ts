@@ -308,6 +308,12 @@ export interface SystemSettings {
   savedBookCoverForLockScreenPath: string;
   telemetryEnabled: boolean;
   discordRichPresenceEnabled: boolean;
+  /**
+   * v8.2.0: 服务器代理开关
+   * true = 翻译/词典走服务器代理（默认，绕过 GFW）
+   * false = 客户端直连目标 URL（需要客户端本地网络能访问 Google/Wikipedia 等）
+   */
+  proxyEnabled: boolean;
   libraryViewMode: LibraryViewModeType;
   librarySortBy: LibrarySortByType;
   librarySortAscending: boolean;

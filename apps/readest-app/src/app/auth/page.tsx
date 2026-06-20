@@ -66,7 +66,7 @@ export default function AuthPage() {
         <IoArrowBack className='text-base-content' />
       </button>
 
-      <h1 className='text-2xl font-bold mb-2 text-center'>{_('Sign in to Readest')}</h1>
+      <h1 className='text-2xl font-bold mb-2 text-center'>{_('Sign in to Readest Lite')}</h1>
       <p className='text-base-content/60 text-sm text-center mb-8'>
         {_('Enter your administrator credentials')}
       </p>

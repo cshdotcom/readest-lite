@@ -17,18 +17,21 @@ import { BUILTIN_PROVIDER_IDS } from '../types';
 import { stubTranslation as _ } from '@/utils/misc';
 import { isTauriAppPlatform } from '@/services/environment';
 import { getAPIBaseUrl } from '@/services/environment';
-import { getAccessToken } from '@/utils/access';
+import { fetchViaWikiProxy, isProxyEnabled } from '@/utils/proxy';
 
 const isTauri = isTauriAppPlatform();
 
-// Readest Lite — Wikipedia 通过服务器代理访问
+// v8.2.0: Wikipedia 走代理或直连（根据 proxyEnabled 自动切换）
 async function proxiedFetch(url: string, signal?: AbortSignal): Promise<Response> {
-  const token = await getAccessToken();
-  const proxyUrl = `${getAPIBaseUrl()}/proxy/wiki?url=${encodeURIComponent(url)}`;
-  return fetch(proxyUrl, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal,
-  });
+  return fetchViaWikiProxy(url, signal);
+}
+
+// v8.2.0 修复：缩略图也走代理，避免直连 upload.wikimedia.org 泄漏客户端 IP
+function proxiedImageUrl(url: string): string {
+  if (isProxyEnabled()) {
+    return `${getAPIBaseUrl()}/proxy/wiki?url=${encodeURIComponent(url)}`;
+  }
+  return url;
 }
 
 export const wikipediaProvider: DictionaryProvider = {
@@ -72,7 +75,8 @@ export const wikipediaProvider: DictionaryProvider = {
       }
 
       if (data.thumbnail?.source) {
-        hgroup.style.backgroundImage = `url("${data.thumbnail.source}")`;
+        // v8.2.0：缩略图走代理，避免直连 upload.wikimedia.org 泄漏客户端 IP
+        hgroup.style.backgroundImage = `url("${proxiedImageUrl(data.thumbnail.source)}")`;
       }
 
       const contentDiv = document.createElement('div');

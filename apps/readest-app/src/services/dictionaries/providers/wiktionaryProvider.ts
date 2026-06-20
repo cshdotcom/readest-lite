@@ -18,17 +18,11 @@ import type { DictionaryProvider, DictionaryLookupOutcome } from '../types';
 import { BUILTIN_PROVIDER_IDS } from '../types';
 import { fetchChineseDefinition } from '../chineseDict';
 import { normalizedLangCode } from '@/utils/lang';
-import { getAPIBaseUrl } from '@/services/environment';
-import { getAccessToken } from '@/utils/access';
+import { fetchViaWikiProxy } from '@/utils/proxy';
 
-// Readest Lite — Wiktionary 通过服务器代理访问
+// v8.2.0: Wiktionary 走代理或直连（根据 proxyEnabled 自动切换）
 async function proxiedFetch(url: string, signal?: AbortSignal): Promise<Response> {
-  const token = await getAccessToken();
-  const proxyUrl = `${getAPIBaseUrl()}/proxy/wiki?url=${encodeURIComponent(url)}`;
-  return fetch(proxyUrl, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal,
-  });
+  return fetchViaWikiProxy(url, signal);
 }
 import { stubTranslation as _ } from '@/utils/misc';
 

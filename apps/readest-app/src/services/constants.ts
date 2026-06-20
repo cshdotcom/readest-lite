@@ -123,6 +123,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   autoImportBooksOnOpen: false,
   telemetryEnabled: true,
   discordRichPresenceEnabled: false,
+  proxyEnabled: true, // v8.2.0: 默认开启服务器代理
   libraryViewMode: 'grid',
   librarySortBy: LibrarySortByType.Updated,
   librarySortAscending: false,
@@ -775,7 +776,8 @@ export const CJK_FONTS_PATTENS = new RegExp(
 
 export const BOOK_IDS_SEPARATOR = '+';
 
-export const DOWNLOAD_READEST_URL = 'https://readest.com?utm_source=readest_web';
+// v8.2.0: DOWNLOAD_READEST_URL 改为指向 Readest Lite 官网
+export const DOWNLOAD_READEST_URL = 'https://cshdotcom.github.io/readestl/';
 
 // Readest Lite — 使用 PUBLIC_BASE_URL 环境变量（运行时从 runtime-config 注入）
 // 如果未设，用空字符串让前端用相对路径 /s
@@ -821,7 +823,7 @@ export const READEST_UPDATER_PUBKEY =
 
 export const READEST_PUBLIC_STORAGE_BASE_URL = 'https://storage.readest.com';
 
-export const READEST_OPDS_USER_AGENT = 'Readest/1.0 (OPDS Browser)';
+export const READEST_OPDS_USER_AGENT = 'ReadestLite/1.0 (OPDS Browser)';
 
 export const SYNC_PROGRESS_INTERVAL_SEC = 3;
 export const SYNC_NOTES_INTERVAL_SEC = 5;

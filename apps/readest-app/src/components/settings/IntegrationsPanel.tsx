@@ -173,6 +173,23 @@ const IntegrationsPanel: React.FC = () => {
         </p>
       </div>
 
+      <div className='w-full' data-setting-id='settings.integrations.network'>
+        <SectionTitle className='mb-2'>{_('Network')}</SectionTitle>
+        <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
+          <div className='divide-base-200 divide-y'>
+            <IntegrationToggleRow
+              icon={RiCloudLine}
+              title={_('Server Proxy')}
+              description={_('Route Translate / Wikipedia / Edge TTS through this server. Off = direct client connection (requires client-side network access to Google/Wikipedia).')}
+              checked={settings.proxyEnabled}
+              onChange={() => {
+                saveSysSettings(envConfig, 'proxyEnabled', !settings.proxyEnabled);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className='w-full' data-setting-id='settings.integrations.sync'>
         <SectionTitle className='mb-2'>{_('Reading Sync')}</SectionTitle>
         <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>

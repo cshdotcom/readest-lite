@@ -17,11 +17,22 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const { user, token } = await validateUserAndToken(authHeader);
   if (!user || !token) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    return NextResponse.json({
+      ok: false,
+      error: 'Authentication required',
+      hint: 'This proxy requires login. Use the in-app dictionary feature, or test with: curl -H "Authorization: Bearer YOUR_TOKEN" "https://your-host/api/proxy/wiki?url=https://en.wikipedia.org/api/rest_v1/page/summary/Hello"',
+    }, { status: 401 });
   }
 
   const targetUrl = req.nextUrl.searchParams.get('url');
-  if (!targetUrl) return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
+  if (!targetUrl) {
+    return NextResponse.json({
+      ok: true,
+      message: 'Wikipedia/Wiktionary proxy is up',
+      user: user.email,
+      usage: 'GET with ?url=<target Wikipedia/Wiktionary URL>',
+    });
+  }
 
   let parsed: URL;
   try { parsed = new URL(targetUrl); } catch { return NextResponse.json({ error: 'Invalid URL' }, { status: 400 }); }
