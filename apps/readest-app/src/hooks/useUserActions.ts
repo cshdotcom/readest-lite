@@ -1,5 +1,4 @@
 import { useRouter } from 'next/navigation';
-import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
 import { useVault } from '@/context/VaultContext';
 import { deleteUser } from '@/libs/user';
@@ -19,7 +18,6 @@ import { setVaultState } from '@/utils/vaultState';
 
 export const useUserActions = () => {
   const router = useRouter();
-  const { envConfig } = useEnv();
   const { logout } = useAuth();
   const { clearVault } = useVault();
 
