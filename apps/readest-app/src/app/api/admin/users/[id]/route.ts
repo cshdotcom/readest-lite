@@ -36,6 +36,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     if (password && typeof password === 'string' && password.length > 0) {
       updateData['encryptedPass'] = await argon2.hash(password);
+      // v8.4: 改密码时清空 encryptedVaultKey
+      // 旧密码派的 KE 无法解密新密码登录后的 K_enc，用户需重新设置 vault
+      updateData['encryptedVaultKey'] = null;
     }
     if (displayName !== undefined) {
       updateData['displayName'] = displayName || null;

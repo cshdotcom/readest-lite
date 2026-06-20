@@ -37,6 +37,8 @@ export interface AuthSession {
   expires_at: number;
   token_type: 'bearer';
   user: AuthUser;
+  // v8.4: 加密的 vault 密钥（base64 JSON CipherEnvelope），客户端用密码派生 KE 解密
+  encryptedVaultKey?: string | null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -195,6 +197,7 @@ export const signInWithPassword = async (
     expires_at: Math.floor(Date.now() / 1000) + JWT_EXP_SECONDS,
     token_type: 'bearer',
     user: authUser,
+    encryptedVaultKey: user.encryptedVaultKey ?? null,
   };
 };
 
@@ -227,6 +230,7 @@ export const refreshSession = async (refreshToken: string): Promise<AuthSession 
     expires_at: Math.floor(Date.now() / 1000) + JWT_EXP_SECONDS,
     token_type: 'bearer',
     user: authUser,
+    encryptedVaultKey: user.encryptedVaultKey ?? null,
   };
 };
 

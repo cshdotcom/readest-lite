@@ -21,6 +21,7 @@ model User {
   id               String   @id // UUID v5(email) 或 randomUUID
   email            String   @unique
   encryptedPass    String   // argon2id 哈希
+  encryptedVaultKey String? // v8.4: base64(JSON(CipherEnvelope)) — 用密码派生 KE 加密的随机 AES 密钥 K
   role             String   @default("user") // "admin" | "user"
   displayName      String?  // 显示名称
   storageQuotaMB   Int      @default(0) // 存储配额 MB，0=无限(100TB)
