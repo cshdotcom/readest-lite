@@ -1,6 +1,7 @@
 import { useRouter } from 'next/navigation';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
+import { useVault } from '@/context/VaultContext';
 import { deleteUser } from '@/libs/user';
 import { eventDispatcher } from '@/utils/event';
 import { navigateToLibrary, navigateToResetPassword, navigateToUpdatePassword } from '@/utils/nav';
@@ -14,71 +15,64 @@ import {
   DEFAULT_WEBDAV_SETTINGS,
 } from '@/services/constants';
 import { DEFAULT_AI_SETTINGS } from '@/services/ai/constants';
+import { setVaultState } from '@/utils/vaultState';
 
 export const useUserActions = () => {
   const router = useRouter();
   const { envConfig } = useEnv();
   const { logout } = useAuth();
+  const { clearVault } = useVault();
 
-  // v8.3.0: 登出时彻底清理当前账号数据，防止跨账号泄露
-  // - 清空 library（内存 + 磁盘 library.json）
-  // - 重置 sync cursor（lastSyncedAtBooks/Configs/Notes = 0）
-  // - 清账号绑定的 settings 字段（WebDAV/KOSync/Readwise/Hardcover/AI/App Lock PIN）
-  // - 清 transfer queue（避免上个账号的上传/下载任务继续跑给下个账号）
-  // 不删 Books/ 目录下的 <hash>/ 文件夹（文件本体保留，重新登录同账号可复用）
+  // v8.4: 登出时彻底清理当前账号数据
+  // - 数据已经加密保存在磁盘上（library-<userId>.enc / settings-<userId>.enc）
+  // - K_enc 已经在登录时上传到服务端
+  // - 登出只需：清 VaultContext（K 从内存清除）+ 清 library/settings state + 重置 cursor
+  // - 加密数据保留在磁盘，重新登录同账号时用密码解密 K_enc → K → 解密数据恢复
+  // - 不需要密码（K_enc 已在服务端，不需要重新加密 K）
+  // - 不删 Books/ 目录下的 <hash>/ 文件夹（文件本体保留）
   const handleLogout = async () => {
     try {
-      const appService = await envConfig.getAppService();
-
-      // 1. 清空 library（内存 state + 磁盘 library.json）
-      //    用 replace: true 覆盖为空数组，防止 merge-floor 保护把书留住
+      // 1. 清空 library 内存 state
+      //    磁盘上的加密文件 library-<userId>.enc 保留（重新登录可解密恢复）
       useLibraryStore.getState().setLibrary([]);
-      try {
-        await appService.saveLibraryBooks([], { replace: true });
-      } catch (err) {
-        console.warn('Failed to clear library.json on logout:', err);
-      }
 
-      // 2. 清账号绑定的 settings 字段 + 重置 sync cursor
-      //    构造新对象（不原地 mutate），避免 replica push subscriber 漏触发
-      const { settings, setSettings, saveSettings } = useSettingsStore.getState();
+      // 2. 清账号绑定的 settings state + 重置 sync cursor
+      const { settings, setSettings } = useSettingsStore.getState();
       const clearedSettings = {
         ...settings,
         keepLogin: false,
-        // 重置 sync cursor，下次登录走全量 pull
         lastSyncedAtBooks: 0,
         lastSyncedAtConfigs: 0,
         lastSyncedAtNotes: 0,
-        // 清账号绑定的第三方服务配置（防止下个账号看到上个账号的凭据）
         kosync: { ...DEFAULT_KOSYNC_SETTINGS },
         readwise: { ...DEFAULT_READWISE_SETTINGS },
         hardcover: { ...DEFAULT_HARDCOVER_SETTINGS },
         webdav: { ...DEFAULT_WEBDAV_SETTINGS },
         aiSettings: { ...DEFAULT_AI_SETTINGS },
-        // 清 App Lock PIN（防止下个账号用上个账号的 PIN）
         pinCodeEnabled: false,
         pinCodeHash: undefined,
         pinCodeSalt: undefined,
-        // 清 replica 同步状态
         lastSyncedAtReplicas: {},
       };
       setSettings(clearedSettings);
-      try {
-        await saveSettings(envConfig, clearedSettings);
-      } catch (err) {
-        console.warn('Failed to save cleared settings on logout:', err);
-      }
+      // 注意：不调 saveSettings——因为 vaultState 还没清，saveSettings 会加密写盘
+      // 加密数据已经在磁盘上了，不需要再写一次
 
-      // 3. 清 transfer queue（上传/下载队列）
+      // 3. 清 transfer queue
       try {
         useTransferStore.getState().clearAll();
       } catch (err) {
         console.warn('Failed to clear transfer queue on logout:', err);
       }
+
+      // 4. 清 VaultContext + vaultState（K 从内存清除）
+      //    这一步必须在 saveSettings 之后，防止 saveSettings 用已清除的 K 加密失败
+      clearVault();
+      setVaultState(null, null);
     } catch (err) {
       console.error('Error during logout cleanup:', err);
     } finally {
-      // 4. 最后走原 logout（清 token/user）
+      // 5. 最后走原 logout（清 token/user）
       await logout();
       navigateToLibrary(router);
     }

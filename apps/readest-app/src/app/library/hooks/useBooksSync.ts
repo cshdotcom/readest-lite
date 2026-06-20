@@ -115,10 +115,13 @@ export const useBooksSync = () => {
     pullLibrary();
   }, [user, useSyncInited, libraryLoaded, pullLibrary]);
 
-  // v8.3.0: 用户切换检测 — 检测 user.id 变化时清空 library + 触发全量 pull replace
+  // v8.4: 用户切换检测 — 检测 user.id 变化时清空 library + 触发全量 pull replace
+  // v8.4 改动：不再清磁盘（加密文件 library-<userId>.enc 按 userId 隔离，自动不串号）
+  // 只清内存 state，让 pullLibrary 走 since=0 全量拉新账号的书
   // 场景：登出账号 A → 登录账号 B
   //   - prevUserIdRef.current = A, user.id = B → 检测到切换
-  //   - 清空 library state + 磁盘 library.json
+  //   - 清空 library state（内存）
+  //   - 不清磁盘（A 的 library-A.enc 保留，B 用 library-B.enc）
   //   - 设 replaceModeRef = true，让下次 updateLibrary 走 replace（不 merge）
   //   - 重置 didInitialPushRef，让登录后 push effect 重新触发
   // 场景：未登录 → 登录（prevUserIdRef.current = null）
@@ -132,13 +135,8 @@ export const useBooksSync = () => {
     prevUserIdRef.current = currId;
 
     if (prevId !== null && currId !== null && prevId !== currId) {
-      // 账号切换（A → B）：清 library + 设 replace 模式
+      // 账号切换（A → B）：只清内存 state（磁盘加密文件按 userId 隔离）
       useLibraryStore.getState().setLibrary([]);
-      try {
-        appService?.saveLibraryBooks([], { replace: true });
-      } catch (err) {
-        console.warn('Failed to clear library on user switch:', err);
-      }
       replaceModeRef.current = true;
       didInitialPushRef.current = false;
     }

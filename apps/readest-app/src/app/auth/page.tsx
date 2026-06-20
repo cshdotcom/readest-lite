@@ -11,12 +11,14 @@ import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/utils/supabase';
 import { User } from '@supabase/supabase-js';
 import { derivePbkdf2Key } from '@/libs/crypto/derive';
-import { decryptFromEnvelope } from '@/libs/crypto/envelope';
+import { decryptFromEnvelope, encryptToEnvelope } from '@/libs/crypto/envelope';
 import {
   generateVaultKey,
+  exportVaultKeyToBase64,
   importVaultKeyFromBase64,
   getVaultSalt,
 } from '@/libs/crypto/vaultKey';
+import { getAPIBaseUrl } from '@/services/environment';
 import type { CipherEnvelope } from '@/types/replica';
 
 // Readest Lite — 登录页（仅邮箱密码，无社交登录、无注册）
@@ -49,28 +51,55 @@ export default function AuthPage() {
         // v8.4: Vault 密钥解密
         // 登录返回的 session 含 encryptedVaultKey（K_enc）
         // 用密码派生 KE → 解密 K_enc → K → setVaultKey
+        // 然后用 KE 加密 K → 上传 K_enc（确保服务端有最新的 K_enc）
         const encryptedVaultKey = (data.session as { encryptedVaultKey?: string | null }).encryptedVaultKey;
         const userId = user.id;
         const salt = getVaultSalt(userId);
+        const accessToken = data.session.access_token;
+
+        // 派生 KE（用于解密/加密 K）
+        const KE = await derivePbkdf2Key(password, salt);
+
+        let K: CryptoKey;
+        let needUpload = false;
 
         if (encryptedVaultKey) {
           // 已有 vault：解密 K_enc → K
           try {
-            const KE = await derivePbkdf2Key(password, salt);
             const envelope = JSON.parse(encryptedVaultKey) as CipherEnvelope;
             const kBase64 = await decryptFromEnvelope(envelope, KE);
-            const K = await importVaultKeyFromBase64(kBase64);
-            setVaultKey(K);
+            K = await importVaultKeyFromBase64(kBase64);
           } catch (vaultErr) {
-            console.error('Vault decryption failed:', vaultErr);
-            // 解密失败：生成新 K（旧数据无法恢复，但用户能继续使用）
-            const K = await generateVaultKey();
-            setVaultKey(K);
+            console.error('Vault decryption failed, generating new key:', vaultErr);
+            K = await generateVaultKey();
+            needUpload = true;
           }
         } else {
-          // 首次登录/改密码后：生成新 K，稍后登出时上传 K_enc
-          const K = await generateVaultKey();
-          setVaultKey(K);
+          // 首次登录/改密码后：生成新 K
+          K = await generateVaultKey();
+          needUpload = true;
+        }
+
+        setVaultKey(K);
+
+        // 上传 K_enc 到服务端（首次登录或解密失败时）
+        // 后续登录不需要重复上传（K_enc 已在服务端）
+        if (needUpload) {
+          try {
+            const kBase64 = await exportVaultKeyToBase64(K);
+            const envelope = await encryptToEnvelope(kBase64, KE, 'vault');
+            await fetch(`${getAPIBaseUrl()}/auth/v1/vault-key`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ encryptedVaultKey: JSON.stringify(envelope) }),
+            });
+          } catch (uploadErr) {
+            console.warn('Failed to upload vault key:', uploadErr);
+            // 不阻塞登录——下次登录会重试
+          }
         }
 
         const redirectTo = new URLSearchParams(window.location.search).get('redirect');
