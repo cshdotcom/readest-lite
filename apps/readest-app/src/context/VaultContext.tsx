@@ -27,6 +27,8 @@ import {
   useMemo,
   ReactNode,
 } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { setVaultState } from '@/utils/vaultState';
 
 interface VaultContextType {
   vaultKey: CryptoKey | null;
@@ -38,6 +40,7 @@ interface VaultContextType {
 const VaultContext = createContext<VaultContextType | undefined>(undefined);
 
 export const VaultProvider = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
   const [vaultKey, setVaultKeyState] = useState<CryptoKey | null>(null);
 
   const setVaultKey = useCallback((key: CryptoKey) => {
@@ -47,6 +50,13 @@ export const VaultProvider = ({ children }: { children: ReactNode }) => {
   const clearVault = useCallback(() => {
     setVaultKeyState(null);
   }, []);
+
+  // v8.4: 同步 vaultKey + userId 到全局 vaultState
+  // 让 libraryService/settingsService 能在不变签名的情况下自动加密
+  const currentUserId = user?.id ?? null;
+  useMemo(() => {
+    setVaultState(vaultKey, currentUserId);
+  }, [vaultKey, currentUserId]);
 
   // isVaultReady = true 当 vaultKey 已设置（不管是解密的还是新生成的）
   // 当用户没有 encryptedVaultKey（首次登录/改密码后），auth/page.tsx 会生成新 K 并 setVaultKey

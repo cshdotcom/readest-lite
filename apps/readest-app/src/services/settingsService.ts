@@ -27,6 +27,9 @@ import {
 import { DEFAULT_AI_SETTINGS } from './ai/constants';
 import { getTargetLang, isCJKEnv } from '@/utils/misc';
 import { safeLoadJSON, safeSaveJSON } from './persistence';
+import { isVaultActive, getVaultKey, getVaultUserId } from '@/utils/vaultState';
+import { encryptToEnvelope, decryptFromEnvelope } from '@/libs/crypto/envelope';
+import type { CipherEnvelope } from '@/types/replica';
 
 export interface Context {
   fs: FileSystem;
@@ -117,12 +120,40 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
     globalViewSettings: getDefaultViewSettings(ctx),
   } as SystemSettings;
 
-  let settings = await safeLoadJSON<SystemSettings>(
-    ctx.fs,
-    SETTINGS_FILENAME,
-    'Settings',
-    defaultSettings,
-  );
+  let settings: SystemSettings;
+
+  // v8.4: 加密模式 — 从 per-user 加密文件读
+  if (isVaultActive()) {
+    const userId = getVaultUserId();
+    const filename = userId ? `settings-${userId}.enc` : SETTINGS_FILENAME;
+    const vaultKey = getVaultKey();
+    if (vaultKey) {
+      try {
+        const txt = await ctx.fs.readFile(filename, 'Settings', 'text');
+        if (txt && typeof txt === 'string' && txt.trim().length > 0) {
+          const envelope = JSON.parse(txt as string) as CipherEnvelope;
+          const plain = await decryptFromEnvelope(envelope, vaultKey);
+          settings = JSON.parse(plain) as SystemSettings;
+        } else {
+          // 加密文件不存在，尝试旧明文 settings.json（迁移场景）
+          settings = await safeLoadJSON<SystemSettings>(ctx.fs, SETTINGS_FILENAME, 'Settings', defaultSettings);
+        }
+      } catch (err) {
+        console.warn('Failed to decrypt settings, using defaults:', err);
+        settings = { ...defaultSettings };
+      }
+    } else {
+      settings = { ...defaultSettings };
+    }
+  } else {
+    // 明文模式（未登录）
+    settings = await safeLoadJSON<SystemSettings>(
+      ctx.fs,
+      SETTINGS_FILENAME,
+      'Settings',
+      defaultSettings,
+    );
+  }
 
   const version = settings.version ?? 0;
   if (ctx.isAppDataSandbox || version < SYSTEM_SETTINGS_VERSION) {
@@ -172,5 +203,25 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
 }
 
 export async function saveSettings(fs: FileSystem, settings: SystemSettings): Promise<void> {
+  // v8.4: 加密模式 — 写入 per-user 加密文件
+  if (isVaultActive()) {
+    const userId = getVaultUserId();
+    const filename = userId ? `settings-${userId}.enc` : SETTINGS_FILENAME;
+    const vaultKey = getVaultKey();
+    if (vaultKey) {
+      try {
+        const plain = JSON.stringify(settings);
+        const envelope = await encryptToEnvelope(plain, vaultKey, 'vault');
+        const jsonData = JSON.stringify(envelope);
+        await fs.writeFile(`${filename}.bak`, 'Settings', jsonData);
+        await fs.writeFile(filename, 'Settings', jsonData);
+        return;
+      } catch (err) {
+        console.error('Failed to save encrypted settings:', err);
+        // 回退到明文
+      }
+    }
+  }
+  // 明文模式（未登录或加密失败）
   await safeSaveJSON(fs, SETTINGS_FILENAME, 'Settings', settings);
 }
