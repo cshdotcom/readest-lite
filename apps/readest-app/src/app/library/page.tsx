@@ -1554,7 +1554,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       <RemoteDownloadDialog
         open={showRemoteDownload}
         onClose={() => setShowRemoteDownload(false)}
-        onDownloadComplete={() => { void pullLibrary(true, true); }}
       />
       <Toast />
     </div>

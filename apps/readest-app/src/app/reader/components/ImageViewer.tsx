@@ -373,16 +373,15 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const cursorStyle = scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default';
 
-  // v8.6: save/share image — Web 端用 saveFile（下载），Tauri 端用 saveImageToGallery
+  // v8.6: save/share image — Web 端用 saveFile（下载）
   const handleSaveImage = useCallback(async () => {
     if (!src || !appService) return;
     try {
       const response = await fetch(src);
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
       const filename = `readest-image-${Date.now()}.png`;
 
-      // Web 端直接用 saveFile 下载
-      await appService.saveFile(filename, blob, { share: true });
+      await appService.saveFile(filename, arrayBuffer, { share: true });
       eventDispatcher.dispatch('toast', { type: 'success', message: _('Image saved successfully'), timeout: 2000 });
     } catch (err) {
       console.error('Failed to save image:', err);

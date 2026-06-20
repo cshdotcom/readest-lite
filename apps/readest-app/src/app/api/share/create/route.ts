@@ -17,7 +17,7 @@ interface CreateShareBody {
 }
 
 const isAllowedExpiration = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && (SHARE_EXPIRATION_DAYS as readonly number[]).includes(value);
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 365;
 
 const trimText = (value: unknown, max: number): string | null => {
   if (typeof value !== 'string') return null;
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (!bookHash) return NextResponse.json({ error: 'Missing or invalid bookHash' }, { status: 400 });
 
   if (!isAllowedExpiration(body.expirationDays)) {
-    return NextResponse.json({ error: `expirationDays must be one of ${SHARE_EXPIRATION_DAYS.join(', ')}`, code: 'invalid_expiration' }, { status: 400 });
+    return NextResponse.json({ error: `expirationDays must be an integer between 1 and 365`, code: 'invalid_expiration' }, { status: 400 });
   }
   const expirationDays = body.expirationDays;
 

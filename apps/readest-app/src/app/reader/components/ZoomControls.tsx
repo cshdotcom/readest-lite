@@ -1,5 +1,5 @@
 import React from 'react';
-import { IoClose, IoExpand, IoAdd, IoRemove, IoShareOutline, IoDownloadOutline } from 'react-icons/io5';
+import { IoClose, IoExpand, IoAdd, IoRemove, IoCloudDownloadOutline } from 'react-icons/io5';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
 import { Insets } from '@/types/misc';
@@ -50,7 +50,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = ({
           aria-label={canShare ? _('Share Image') : _('Save Image')}
           title={canShare ? _('Share Image') : _('Save Image')}
         >
-          {canShare ? <IoShareOutline className='h-6 w-6' /> : <IoDownloadOutline className='h-6 w-6' />}
+          <IoCloudDownloadOutline className='h-6 w-6' />
         </button>
       )}
 
