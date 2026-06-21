@@ -43,6 +43,28 @@ model User {
   statBooks          StatBook[]
   statPages          StatPage[]
   usageStats         UsageStat[]
+  downloadTasks      DownloadTask[]
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// download_tasks (PK: id) — v8.7: 远程下载任务队列，跨设备同步
+// ───────────────────────────────────────────────────────────────────────────
+model DownloadTask {
+  id          String   @id @default(uuid())
+  userId      String
+  url         String
+  filename    String
+  status      String   @default("pending") // pending|in_progress|paused|completed|failed
+  error       String?
+  bookHash    String?
+  fileSize    BigInt?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

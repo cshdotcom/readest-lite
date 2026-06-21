@@ -434,11 +434,13 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useEffect(() => {
     eventDispatcher.on('import-book-files', handleImportBookFiles);
     eventDispatcher.on('import-book-directory', handleImportBookDirectory);
+    eventDispatcher.on('refresh-library', () => { void pullLibrary(true, true); });
     return () => {
       eventDispatcher.off('import-book-files', handleImportBookFiles);
       eventDispatcher.off('import-book-directory', handleImportBookDirectory);
+      eventDispatcher.off('refresh-library');
     };
-  }, [handleImportBookFiles, handleImportBookDirectory]);
+  }, [handleImportBookFiles, handleImportBookDirectory, pullLibrary]);
 
   useEffect(() => {
     if (!libraryBooks.some((book) => !book.deletedAt)) {
