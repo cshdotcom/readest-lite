@@ -207,3 +207,83 @@ export const createWriteStreamForKey = (fileKey: string, bucketName?: string) =>
   }
   return createWriteStream(localPath);
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// v8.8: 分块上传支持 — 大文件 >5MB 自动切分，规避 Cloudflare 100s 524 超时
+// 流程：客户端串行 PUT 每块到 /api/storage/_put?...&index=N&total=M →
+//       全部传完发一次 /api/storage/_put?...&merge=1&total=M → 服务端流式合并
+// ───────────────────────────────────────────────────────────────────────────
+
+// 写第 N 块到 <fileKey>.parts/<NNNNN>（5 位补零，确保字典序 == 数字序）
+// 当 index === 0 时先清空 parts 目录，避免上次失败上传残留的旧 part 干扰本次合并
+export const createPartWriteStream = (fileKey: string, index: number, total: number) => {
+  const localPath = resolveLocalPath(fileKey);
+  const partsDir = `${localPath}.parts`;
+  const fsSync = require('fs');
+  try {
+    fsSync.mkdirSync(partsDir, { recursive: true });
+  } catch {
+    // 目录已存在，忽略
+  }
+  // index=0 时清空 parts 目录里所有旧文件（重试上传场景）
+  if (index === 0) {
+    try {
+      const oldParts = fsSync.readdirSync(partsDir) as string[];
+      for (const old of oldParts) {
+        try { fsSync.unlinkSync(path.join(partsDir, old)); } catch { /* ignore */ }
+      }
+    } catch { /* parts dir not exist, ignore */ }
+  }
+  const partPath = path.join(partsDir, String(index).padStart(5, '0'));
+  void total; // total 仅用于客户端校验，服务端 merge 时从目录扫描
+  return createWriteStream(partPath);
+};
+
+// 流式合并所有 part 文件到 <fileKey>，完成后删除 parts 目录
+// 用 pipeline + Readable.from (concat streams)，避免一次性 buffer 整个大文件到内存
+export const mergePartsForKey = async (fileKey: string, expectedTotal: number): Promise<void> => {
+  const localPath = resolveLocalPath(fileKey);
+  const partsDir = `${localPath}.parts`;
+
+  const partNames = await fs.readdir(partsDir).catch(() => [] as string[]);
+  if (partNames.length === 0) {
+    throw new Error(`No parts found for ${fileKey}`);
+  }
+  // 按文件名（数字补零）升序排序
+  partNames.sort();
+
+  // 校验：part 数量必须匹配客户端声明的 total
+  if (partNames.length !== expectedTotal) {
+    throw new Error(
+      `Part count mismatch: expected ${expectedTotal}, got ${partNames.length}`,
+    );
+  }
+  // 校验：part 名必须是 0..expectedTotal-1 的补零形式
+  for (let i = 0; i < expectedTotal; i++) {
+    const expected = String(i).padStart(5, '0');
+    if (partNames[i] !== expected) {
+      throw new Error(`Missing part ${expected} (found ${partNames[i]})`);
+    }
+  }
+
+  // 确保目标目录存在
+  const targetDir = path.dirname(localPath);
+  await fs.mkdir(targetDir, { recursive: true });
+
+  // 流式合并：每个 part createReadStream → pipe 到 target writeStream
+  const { Readable } = await import('stream');
+  const { pipeline } = await import('stream/promises');
+
+  const partStreams = partNames.map((name) => createReadStream(path.join(partsDir, name)));
+  const concat = Readable.from((async function* () {
+    for (const s of partStreams) {
+      yield* s;
+    }
+  })());
+
+  const target = createWriteStream(localPath);
+  await pipeline(concat, target);
+
+  // 合并成功后删除 parts 目录
+  await fs.rm(partsDir, { recursive: true, force: true }).catch(() => {});
+};
