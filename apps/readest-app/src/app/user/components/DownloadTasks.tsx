@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getAPIBaseUrl } from '@/services/environment';
 import { getAccessToken } from '@/utils/access';
 import { eventDispatcher } from '@/utils/event';
-import { IoRefresh, IoTrashOutline, IoPlayOutline, IoPauseOutline, IoCheckmarkDoneOutline, IoCloseOutline, IoAlertCircleOutline } from 'react-icons/io5';
+import { IoRefresh, IoTrashOutline, IoPlayCircle, IoPauseCircle, IoCloudDownloadOutline, IoAlertCircleOutline } from 'react-icons/io5';
 
 interface DownloadTask {
   id: string;
@@ -150,7 +150,7 @@ export default function DownloadTasks() {
     <div className='card bg-base-100 border-base-200 shadow-sm border rounded-lg p-4'>
       <div className='flex items-center justify-between mb-3'>
         <h3 className='text-lg font-bold flex items-center gap-2'>
-          <IoCheckmarkDoneOutline className='w-5 h-5' />
+          <IoCloudDownloadOutline className='w-5 h-5' />
           {_('Download Tasks')}
         </h3>
         <button onClick={() => void fetchTasks()} className='btn btn-ghost btn-sm btn-square' title={_('Refresh')}>
@@ -168,12 +168,12 @@ export default function DownloadTasks() {
           )}
           {hasActive && (
             <button onClick={() => void doBatch('pause_all')} className='btn btn-xs btn-ghost'>
-              <IoPauseOutline className='w-3 h-3' /> {_('Pause All')}
+              <IoPauseCircle className='w-3 h-3' /> {_('Pause All')}
             </button>
           )}
           {hasPaused && (
             <button onClick={() => void doBatch('resume_all')} className='btn btn-xs btn-ghost'>
-              <IoPlayOutline className='w-3 h-3' /> {_('Resume All')}
+              <IoPlayCircle className='w-3 h-3' /> {_('Resume All')}
             </button>
           )}
           {hasCompleted && (
@@ -231,12 +231,12 @@ export default function DownloadTasks() {
                 )}
                 {(task.status === 'pending' || task.status === 'in_progress') && (
                   <button onClick={() => void doAction(task.id, 'pause')} className='btn btn-ghost btn-xs btn-square' title={_('Pause')}>
-                    <IoPauseOutline className='w-3.5 h-3.5' />
+                    <IoPauseCircle className='w-3.5 h-3.5' />
                   </button>
                 )}
                 {task.status === 'paused' && (
                   <button onClick={() => void doAction(task.id, 'resume')} className='btn btn-ghost btn-xs btn-square' title={_('Resume')}>
-                    <IoPlayOutline className='w-3.5 h-3.5' />
+                    <IoPlayCircle className='w-3.5 h-3.5' />
                   </button>
                 )}
                 <button onClick={() => void deleteTask(task.id)} className='btn btn-ghost btn-xs btn-square text-error' title={_('Delete')}>
