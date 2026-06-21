@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getAPIBaseUrl } from '@/services/environment';
 import { getAccessToken } from '@/utils/access';
 import { eventDispatcher } from '@/utils/event';
-import { IoRefresh, IoTrashOutline, IoPlayCircle, IoPauseCircle, IoCloudDownloadOutline, IoAlertCircleOutline } from 'react-icons/io5';
+import { IoRefresh, IoTrashOutline, IoPlayCircle, IoPauseCircle, IoCloudDownloadOutline } from 'react-icons/io5';
 
 interface DownloadTask {
   id: string;

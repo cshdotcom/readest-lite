@@ -8,7 +8,6 @@ import { putObject, isSafeObjectKeyName } from '@/utils/object';
 import { createHash } from 'crypto';
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = ['epub', 'pdf', 'mobi', 'azw', 'azw3', 'fb2', 'txt', 'zip', 'cbz'];
 
 interface RouteParams {
   params: Promise<{ id: string }>;
