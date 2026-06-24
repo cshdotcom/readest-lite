@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getAccessToken } from '@/utils/access';
 import { getAPIBaseUrl } from '@/services/environment';
 import { eventDispatcher } from '@/utils/event';
-import { IoClose, IoCreateOutline, IoTrashOutline, IoPersonOutline } from 'react-icons/io5';
+import { IoClose, IoCreateOutline, IoTrashOutline, IoPersonOutline, IoChevronForwardOutline } from 'react-icons/io5';
 import { MdAdminPanelSettings } from 'react-icons/md';
 
 interface UserItem {
@@ -27,6 +27,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [showAllUsers, setShowAllUsers] = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -87,7 +88,8 @@ export default function UserManagement() {
       </div>
 
       <div className='space-y-2'>
-        {users.map((u) => (
+        {/* v8.10.2: 默认只显示前 3 个用户，避免长列表撑爆用户中心 */}
+        {users.slice(0, 3).map((u) => (
           <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3'>
             <div className='flex items-center gap-3'>
               <IoPersonOutline className='w-5 h-5 opacity-50' />
@@ -127,6 +129,28 @@ export default function UserManagement() {
         ))}
       </div>
 
+      {/* v8.10.2: 超过 3 个用户时显示「查看全部」按钮 */}
+      {users.length > 3 && (
+        <button
+          onClick={() => setShowAllUsers(true)}
+          className='btn btn-ghost btn-sm w-full text-base-content/60 hover:text-base-content'
+        >
+          {_('View All')} ({users.length})
+          <IoChevronForwardOutline className='w-3 h-3' />
+        </button>
+      )}
+
+      {/* v8.10.2: 全部用户 Modal */}
+      {showAllUsers && (
+        <AllUsersModal
+          users={users}
+          currentUser={currentUser}
+          onClose={() => setShowAllUsers(false)}
+          onEdit={(u) => { setShowAllUsers(false); setEditingUser(u); }}
+          onDelete={handleDelete}
+        />
+      )}
+
       {(showCreate || editingUser) && (
         <UserEditDialog
           user={editingUser}
@@ -134,6 +158,77 @@ export default function UserManagement() {
           onSaved={() => { setShowCreate(false); setEditingUser(null); loadUsers(); }}
         />
       )}
+    </div>
+  );
+}
+
+// v8.10.2: 全部用户列表 Modal — 当 UserManagement 折叠时，点「查看全部」打开
+function AllUsersModal({
+  users,
+  currentUser,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  users: UserItem[];
+  currentUser: { id?: string } | null;
+  onClose: () => void;
+  onEdit: (u: UserItem) => void;
+  onDelete: (id: string, email: string) => void;
+}) {
+  const _ = useTranslation();
+  return (
+    <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/60'>
+      <div className='bg-base-100 rounded-lg shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col'>
+        <div className='flex items-center justify-between p-4 border-b border-base-200'>
+          <h2 className='text-lg font-bold'>
+            {_('User Management')} ({users.length})
+          </h2>
+          <button onClick={onClose} className='btn btn-ghost btn-sm btn-square' title={_('Close')}>
+            <IoClose className='w-5 h-5' />
+          </button>
+        </div>
+        <div className='flex-1 overflow-y-auto p-3 space-y-2'>
+          {users.map((u) => (
+            <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3'>
+              <div className='flex items-center gap-3'>
+                <IoPersonOutline className='w-5 h-5 opacity-50' />
+                <div>
+                  <div className='font-medium'>
+                    {u.displayName || u.email}
+                    {u.role === 'admin' && (
+                      <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>
+                    )}
+                  </div>
+                  <div className='text-xs opacity-60'>{u.email}</div>
+                </div>
+              </div>
+              <div className='flex items-center gap-2'>
+                <div className='text-xs opacity-60 text-right'>
+                  <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
+                  <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
+                </div>
+                {u.id !== currentUser?.id && (
+                  <button onClick={() => onEdit(u)} className='btn btn-ghost btn-xs'>
+                    {_('Edit')}
+                  </button>
+                )}
+                {u.id !== currentUser?.id && u.role !== 'admin' && (
+                  <button
+                    onClick={() => onDelete(u.id, u.email)}
+                    className='btn btn-ghost btn-xs text-error'
+                  >
+                    <IoTrashOutline className='w-4 h-4' />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className='px-4 py-2 border-t border-base-200 text-xs text-base-content/50 text-center'>
+          {users.length} {_('users')}
+        </div>
+      </div>
     </div>
   );
 }

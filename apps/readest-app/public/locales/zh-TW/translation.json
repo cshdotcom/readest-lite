@@ -1797,5 +1797,6 @@
   "Book not in your library — try refreshing the library or import this book first": "書不在您的書庫中 — 請嘗試重新整理書庫或先匯入此書",
   "Lines starting with # are comments": "# 開頭的行是註解",
   "Per-URL syntax:": "每行 URL 語法：",
-  "URLs without directives use the global Cookies/Headers from Advanced Options below.": "沒有指令的 URL 使用下方進階選項裡的全局 Cookies/Headers。"
+  "URLs without directives use the global Cookies/Headers from Advanced Options below.": "沒有指令的 URL 使用下方進階選項裡的全局 Cookies/Headers。",
+  "users": "個使用者"
 }
