@@ -822,6 +822,7 @@ const FoliateViewer: React.FC<{
     viewSettings?.overrideColor,
     viewSettings?.invertImgColorInDark,
     viewSettings?.applyThemeToPDF,
+    viewSettings?.contrast,
     viewSettings?.hideScrollbar,
   ]);
 
