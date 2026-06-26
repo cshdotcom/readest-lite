@@ -333,6 +333,11 @@ export interface NoteExportConfig {
   useCustomTemplate: boolean;
   customTemplate: string;
   exportAsPlainText: boolean;
+  // Highlight colors/styles to omit from the export. Empty arrays export
+  // everything; storing exclusions keeps colors/styles added later included
+  // by default (#4801).
+  excludedColors: HighlightColor[];
+  excludedStyles: HighlightStyle[];
 }
 
 export interface AnnotatorConfig {
