@@ -209,3 +209,4 @@ docker image prune -f    # 清理旧镜像
 ## License
 
 Inherited from upstream Readest — see [LICENSE](./LICENSE).
+[LICENSE_NOTICE.md](LICENSE_NOTICE.md)
