@@ -4,7 +4,7 @@
 
 ## 开源重要声明（必看）
 本项目基于上游仓库 [readest/readest](https://github.com/readest/readest)（AGPL-3.0 协议）二次开发，本人衍生版完整开源仓库地址：
-https://github.com/你的用户名/你的仓库名
+https://github.com/cshdotcom/readest-lite
 
 ### 1. 免费获取说明
 全套源码永久公开免费下载，内置一键化部署脚本，安装流程极简，**完全不需要付费购买源码、付费找人代安装**。
@@ -27,6 +27,7 @@ https://github.com/你的用户名/你的仓库名
 ### 4. 商用补充约束
 个人非盈利使用、分发完全自由；
 企业、商业主体通过售卖本源码、付费部署服务进行商业盈利，需提前联系作者获取书面商用授权，未经授权商用分发视为侵权。
+[LICENSE_NOTICE.md](LICENSE_NOTICE.md)
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
