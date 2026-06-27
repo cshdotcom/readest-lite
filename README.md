@@ -2,6 +2,32 @@
 
 > Single-container, self-hostable fork of [Readest](https://github.com/readest/readest) — Supabase + R2/S3 replaced with SQLite + local filesystem, Pro/paywall removed, signup disabled, per-user AES-GCM encrypted vault, quota enforce, proxy toggle.
 
+## 开源重要声明（必看）
+本项目基于上游仓库 [readest/readest](https://github.com/readest/readest)（AGPL-3.0 协议）二次开发，本人衍生版完整开源仓库地址：
+https://github.com/你的用户名/你的仓库名
+
+### 1. 免费获取说明
+全套源码永久公开免费下载，内置一键化部署脚本，安装流程极简，**完全不需要付费购买源码、付费找人代安装**。
+任何平台（闲鱼、淘宝、各类资源站）以“源码收集费、独家源码、付费代部署”为由收费，均属于商家自主盈利行为，与本作者无关。
+
+### 2. AGPL-3.0 分发强制要求
+任何个人/商家转发、打包、售卖本源码，必须同时满足以下全部条件，缺一不可：
+1. 商品页面、压缩包内完整标注本开源仓库地址；
+2. 完整保留源码内所有版权注释、LICENSE 协议文件；
+3. 不得添加额外限制：禁止标注「独家源码、禁止转发、买断商用」等违规条款；
+4. 不得隐瞒源码免费开源事实，虚构付费专属资源。
+
+### 3. 侵权警示
+若商家存在以下行为，均违反 AGPL-3.0 开源协议，构成软件著作权侵权，本人将固定全套证据发起平台投诉、版权维权：
+- 商品全程不标注本开源仓库地址，隐瞒免费开源来源；
+- 谎称源码独家闭源，收取高额源码倒卖费用；
+- 限制买家二次转发、分享源码；
+- 删除源码内版权、协议、项目来源信息。
+
+### 4. 商用补充约束
+个人非盈利使用、分发完全自由；
+企业、商业主体通过售卖本源码、付费部署服务进行商业盈利，需提前联系作者获取书面商用授权，未经授权商用分发视为侵权。
+
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
 [![Version](https://img.shields.io/badge/version-v8.10.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
