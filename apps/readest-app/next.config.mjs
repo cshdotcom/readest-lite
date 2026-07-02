@@ -79,6 +79,7 @@ const nextConfig = {
         argon2: false,
         '@prisma/client': false,
         jsonwebtoken: false,
+        '@tauri-apps/plugin-biometric': false,
       };
     }
     return config;
