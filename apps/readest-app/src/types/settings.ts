@@ -273,6 +273,8 @@ export interface SystemSettings {
   keepLogin: boolean;
   autoUpload: boolean;
   alwaysOnTop: boolean;
+  // Lite: v8.2 代理开关
+  proxyEnabled: boolean;
   openBookInNewWindow: boolean;
   autoCheckUpdates: boolean;
   updateChannel: 'stable' | 'nightly';
