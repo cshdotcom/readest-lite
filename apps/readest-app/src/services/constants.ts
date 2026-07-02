@@ -440,6 +440,7 @@ export const DEFAULT_SCREEN_CONFIG: ScreenConfig = {
 
 export const DEFAULT_BOOK_SEARCH_CONFIG: BookSearchConfig = {
   scope: 'book',
+  mode: 'contains',
   matchCase: false,
   matchWholeWords: false,
   matchDiacritics: false,
