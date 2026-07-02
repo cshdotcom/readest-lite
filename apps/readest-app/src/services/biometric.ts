@@ -1,8 +1,9 @@
 // Lite: stub @tauri-apps/plugin-biometric for web platform (no biometric support)
 // Original import: import { authenticate, checkStatus, BiometryType } from '@tauri-apps/plugin-biometric';
 const authenticate = async (_opts?: unknown): Promise<void> => {};
-const checkStatus = async (): Promise<{ available: boolean }> => ({ available: false });
-const BiometryType = { none: 0, touchId: 1, faceId: 2, iris: 3, fingerprint: 4 } as const;
+const checkStatus = async (): Promise<{ isAvailable: boolean; biometryType: number }> => ({ isAvailable: false, biometryType: 0 });
+const BiometryType = { None: 0, TouchID: 1, FaceID: 2, Iris: 3, Fingerprint: 4 } as const;
+type BiometryType = (typeof BiometryType)[keyof typeof BiometryType];
 
 import type { AppService } from '@/types/system';
 import { stubTranslation as _ } from '@/utils/misc';
