@@ -142,7 +142,41 @@ export interface WebDAVSettings {
   // Wall-clock millisecond timestamp of the last successful end-to-end
   // sync, surfaced in the WebDAV settings sub-page.
   lastSyncedAt?: number;
+  // Lite: sync history log for the WebDAV settings sub-page.
+  syncLog?: WebDAVSyncLogEntry[];
 }
+
+// Lite: WebDAV sync log types (for SyncHistoryPanel)
+export type WebDAVSyncLogStatus = 'success' | 'partial' | 'failure';
+
+export interface WebDAVSyncLogFailure {
+  hash: string;
+  title: string;
+  reason: string;
+}
+
+export interface WebDAVSyncLogEntry {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  status: WebDAVSyncLogStatus;
+  kind?: 'sync' | 'cleanup';
+  trigger: 'manual' | 'auto';
+  totalBooks: number;
+  booksDownloaded: number;
+  filesUploaded: number;
+  filesAlreadyInSync: number;
+  configsUploaded: number;
+  configsDownloaded: number;
+  coversUploaded: number;
+  booksDeleted?: number;
+  failures: number;
+  summary: string;
+  errorMessage?: string;
+  failedBooks?: WebDAVSyncLogFailure[];
+}
+
+export const WEBDAV_SYNC_LOG_LIMIT = 10;
 
 /**
  * Google Drive file-sync settings. A second file-sync backend alongside
