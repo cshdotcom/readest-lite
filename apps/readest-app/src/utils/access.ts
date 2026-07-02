@@ -120,3 +120,7 @@ export const getActualStorageUsage = async (userId: string): Promise<number> => 
   });
   return Number(agg._sum.fileSize ?? 0);
 };
+
+// v8.12: Cloud sync is always allowed in Lite (no premium gate)
+export const CLOUD_SYNC_REQUIRES_PREMIUM = false;
+export const isCloudSyncAllowed = (_plan: UserPlan): boolean => true;
