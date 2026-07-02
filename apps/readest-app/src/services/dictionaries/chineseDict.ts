@@ -1,5 +1,3 @@
-import { fetchViaWikiProxy } from '@/utils/proxy';
-
 export type ChineseDefinition = {
   partOfSpeech: string;
   meanings: string[];
@@ -13,10 +11,9 @@ export type ChineseEntry = {
 
 const WIKTIONARY_API = 'https://en.wiktionary.org/w/api.php';
 
-// v8.2.0: 走代理或直连（根据 proxyEnabled 自动切换）
 async function fetchWikitext(word: string): Promise<string | null> {
   const url = `${WIKTIONARY_API}?action=parse&page=${encodeURIComponent(word)}&prop=wikitext&format=json&origin=*`;
-  const response = await fetchViaWikiProxy(url);
+  const response = await fetch(url);
   if (!response.ok) return null;
   const json = await response.json();
   return json?.parse?.wikitext?.['*'] ?? null;

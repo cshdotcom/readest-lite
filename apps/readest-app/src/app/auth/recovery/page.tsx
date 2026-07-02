@@ -1,26 +1,65 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { useThemeStore } from '@/store/themeStore';
 import { useTranslation } from '@/hooks/useTranslation';
+import { ThemeSupa } from '@supabase/auth-ui-shared';
+import { Auth } from '@supabase/auth-ui-react';
+import { supabase } from '@/utils/supabase';
 
-// Readest Lite — 密码恢复页。
-// Lite 单账号模式下密码由 ADMIN_PASSWORD 环境变量控制，不支持自助恢复。
 export default function ResetPasswordPage() {
   const _ = useTranslation();
   const router = useRouter();
+  const { login } = useAuth();
   const { isDarkMode } = useThemeStore();
+
+  const getAuthLocalization = () => {
+    return {
+      variables: {
+        update_password: {
+          password_label: _('New Password'),
+          password_input_placeholder: _('Your new password'),
+          button_label: _('Update password'),
+          loading_button_label: _('Updating password ...'),
+          confirmation_text: _('Your password has been updated'),
+        },
+      },
+    };
+  };
+
+  useEffect(() => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.access_token && session.user && event === 'USER_UPDATED') {
+        login(session.access_token, session.user);
+        const redirectTo = new URLSearchParams(window.location.search).get('redirect');
+        router.push(redirectTo ?? '/library');
+      }
+    });
+
+    return () => {
+      subscription?.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   return (
     <div className='flex min-h-screen items-center justify-center'>
-      <div className='w-full max-w-md p-8 text-center'>
-        <h2 className='text-xl font-bold mb-4'>{_('Password Recovery Unavailable')}</h2>
-        <p className='text-base-content/70 text-sm mb-6'>
-          {_('In Readest Lite, the admin password is managed via the ADMIN_PASSWORD environment variable. Contact your administrator to reset it.')}
-        </p>
+      <div className='w-full max-w-md p-8'>
+        <Auth
+          supabaseClient={supabase}
+          view='update_password'
+          appearance={{ theme: ThemeSupa }}
+          theme={isDarkMode ? 'dark' : 'light'}
+          magicLink={false}
+          providers={[]}
+          localization={getAuthLocalization()}
+        />
+
         <button
           onClick={() => router.back()}
-          className={`flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm transition-colors ${
+          className={`mt-6 flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm transition-colors ${
             isDarkMode
               ? 'border-gray-600 text-gray-300 hover:bg-gray-800'
               : 'border-gray-300 text-gray-700 hover:bg-gray-100'

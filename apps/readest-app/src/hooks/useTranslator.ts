@@ -146,7 +146,7 @@ export function useTranslator({
           eventDispatcher.dispatch('toast', {
             timeout: 5000,
             message: _(
-              'Daily translation quota reached. Please try again later.',
+              'Daily translation quota reached. Upgrade your plan to continue using AI translations.',
             ),
             type: 'error',
           });

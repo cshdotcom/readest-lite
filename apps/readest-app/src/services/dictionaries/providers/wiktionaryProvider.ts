@@ -18,12 +18,6 @@ import type { DictionaryProvider, DictionaryLookupOutcome } from '../types';
 import { BUILTIN_PROVIDER_IDS } from '../types';
 import { fetchChineseDefinition } from '../chineseDict';
 import { normalizedLangCode } from '@/utils/lang';
-import { fetchViaWikiProxy } from '@/utils/proxy';
-
-// v8.2.0: Wiktionary 走代理或直连（根据 proxyEnabled 自动切换）
-async function proxiedFetch(url: string, signal?: AbortSignal): Promise<Response> {
-  return fetchViaWikiProxy(url, signal);
-}
 import { stubTranslation as _ } from '@/utils/misc';
 
 type Definition = {
@@ -109,9 +103,9 @@ const renderWiktionary = async (
   signal: AbortSignal,
   onNavigate?: (word: string) => void,
 ): Promise<DictionaryLookupOutcome> => {
-  const response = await proxiedFetch(
+  const response = await fetch(
     `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
-    signal,
+    { signal },
   );
   if (!response.ok) {
     return { ok: false, reason: 'error', message: `HTTP ${response.status}` };

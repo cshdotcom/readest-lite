@@ -54,16 +54,11 @@ export function useOpenAnnotationLink() {
       const { bookHash, cfi } = parsed;
       const book = getBookByHash(bookHash);
       if (!book) {
-        // v8.10: 书不在库里时不要只弹 toast 就放弃 — 应该尝试 pullLibrary 重新同步一次
-        // 场景：用户从导出的笔记链接进入，但本地库还没拉到这本（多设备同步延迟）
-        // 处理：先提示用户，导航到书库页让用户看到全局状态
         eventDispatcher.dispatch('toast', {
           type: 'warning',
-          message: _('Book not in your library — try refreshing the library or import this book first'),
-          timeout: 5000,
+          message: _('Book not in your library'),
+          timeout: 2500,
         });
-        // 跳到书库页，避免停留在空白 reader 页面
-        router.push('/library');
         return;
       }
 

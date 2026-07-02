@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { MdLink, MdRssFeed, MdDownload } from 'react-icons/md';
+import { MdLink, MdRssFeed } from 'react-icons/md';
 import { IoFileTray } from 'react-icons/io5';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -11,7 +11,6 @@ interface ImportMenuProps {
   onImportBooksFromFiles: () => void;
   onImportBooksFromDirectory?: () => void;
   onImportBookFromUrl?: () => void;
-  onDownloadFromUrl?: () => void;
   onOpenCatalogManager: () => void;
 }
 
@@ -20,7 +19,6 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
   onImportBooksFromFiles,
   onImportBooksFromDirectory,
   onImportBookFromUrl,
-  onDownloadFromUrl,
   onOpenCatalogManager,
 }) => {
   const _ = useTranslation();
@@ -38,11 +36,6 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
 
   const handleImportFromUrl = () => {
     onImportBookFromUrl?.();
-    setIsDropdownOpen?.(false);
-  };
-
-  const handleDownloadFromUrl = () => {
-    onDownloadFromUrl?.();
     setIsDropdownOpen?.(false);
   };
 
@@ -73,13 +66,6 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
           label={_('From Web URL')}
           Icon={<MdLink className='h-5 w-5' />}
           onClick={handleImportFromUrl}
-        />
-      )}
-      {onDownloadFromUrl && (
-        <MenuItem
-          label={_('Download from URL')}
-          Icon={<MdDownload className='h-5 w-5' />}
-          onClick={handleDownloadFromUrl}
         />
       )}
       <MenuItem

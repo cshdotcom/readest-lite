@@ -16,23 +16,8 @@ import type { DictionaryProvider, DictionaryLookupOutcome } from '../types';
 import { BUILTIN_PROVIDER_IDS } from '../types';
 import { stubTranslation as _ } from '@/utils/misc';
 import { isTauriAppPlatform } from '@/services/environment';
-import { getAPIBaseUrl } from '@/services/environment';
-import { fetchViaWikiProxy, isProxyEnabled } from '@/utils/proxy';
 
 const isTauri = isTauriAppPlatform();
-
-// v8.2.0: Wikipedia 走代理或直连（根据 proxyEnabled 自动切换）
-async function proxiedFetch(url: string, signal?: AbortSignal): Promise<Response> {
-  return fetchViaWikiProxy(url, signal);
-}
-
-// v8.2.0 修复：缩略图也走代理，避免直连 upload.wikimedia.org 泄漏客户端 IP
-function proxiedImageUrl(url: string): string {
-  if (isProxyEnabled()) {
-    return `${getAPIBaseUrl()}/proxy/wiki?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
 
 export const wikipediaProvider: DictionaryProvider = {
   id: BUILTIN_PROVIDER_IDS.wikipedia,
@@ -42,9 +27,9 @@ export const wikipediaProvider: DictionaryProvider = {
     const bookLang = typeof ctx.lang === 'string' ? ctx.lang : ctx.lang?.[0];
     const langCode = bookLang ? bookLang.split('-')[0]! : 'en';
     try {
-      const response = await proxiedFetch(
+      const response = await fetch(
         `https://${langCode}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(word)}`,
-        ctx.signal,
+        { signal: ctx.signal },
       );
       if (!response.ok) {
         return { ok: false, reason: 'error', message: `HTTP ${response.status}` };
@@ -75,8 +60,7 @@ export const wikipediaProvider: DictionaryProvider = {
       }
 
       if (data.thumbnail?.source) {
-        // v8.2.0：缩略图走代理，避免直连 upload.wikimedia.org 泄漏客户端 IP
-        hgroup.style.backgroundImage = `url("${proxiedImageUrl(data.thumbnail.source)}")`;
+        hgroup.style.backgroundImage = `url("${data.thumbnail.source}")`;
       }
 
       const contentDiv = document.createElement('div');

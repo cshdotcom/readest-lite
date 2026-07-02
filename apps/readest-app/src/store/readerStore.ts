@@ -76,6 +76,7 @@ interface ReaderStore {
     pageinfo: PageInfo,
     timeinfo: TimeInfo,
     range: Range,
+    fraction: number,
   ) => void;
   getProgress: (key: string) => BookProgress | null;
   setView: (key: string, view: FoliateView) => void;
@@ -166,22 +167,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     try {
       const appService = await envConfig.getAppService();
       const { settings } = useSettingsStore.getState();
-      let { getBookByHash, library } = useLibraryStore.getState();
-      let book = getBookByHash(id);
-      // v8.10.2: 书不在库里时，先尝试从磁盘重新加载一次再放弃
-      // 场景：用户从导出的笔记链接进入 /reader/{hash}，但内存 library 还没加载完整
-      // （多设备同步延迟 / 冷启动时 pullLibrary 还没完成）
-      // 处理：调 loadLibraryBooks 重读磁盘，如果找到就继续；找不到才报错
-      if (!book) {
-        console.warn(`Book ${id} not in memory library (size=${library.length}), retrying from disk...`);
-        try {
-          const diskBooks = await appService.loadLibraryBooks();
-          useLibraryStore.getState().setLibrary(diskBooks);
-          book = useLibraryStore.getState().getBookByHash(id);
-        } catch (reloadErr) {
-          console.error('Failed to reload library from disk:', reloadErr);
-        }
-      }
+      const { getBookByHash, library } = useLibraryStore.getState();
+      const book = getBookByHash(id);
       if (!book) {
         console.error(
           `Book ${id} not found in library (size=${library.length}); likely the in-memory entry was dropped by a library reload.`,
@@ -389,6 +376,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     pageinfo: PageInfo,
     timeinfo: TimeInfo,
     range: Range,
+    fraction: number,
   ) => {
     const id = key.split('-')[0]!;
     const bookData = useBookDataStore.getState().booksData[id];
@@ -450,6 +438,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       section,
       pageinfo,
       timeinfo,
+      fraction,
       index: section.current,
       range,
       page: pageInfo.current + 1,

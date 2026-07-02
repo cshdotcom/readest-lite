@@ -55,6 +55,9 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   const previousSectionLabelRef = useRef<string | undefined>(undefined);
   const ttsControllerRef = useRef<TTSController | null>(null);
   const isStartingTTSRef = useRef(false);
+  // Last broadcast playback state, so a follower engaging mid-session can be
+  // replayed the current state on demand (see handleTTSSyncRequest).
+  const playbackStateRef = useRef<'playing' | 'paused' | 'stopped'>('stopped');
   const [ttsController, setTtsController] = useState<TTSController | null>(null);
   const [ttsClientsInited, setTtsClientsInitialized] = useState(false);
 
@@ -69,7 +72,28 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   // Broadcast playback transitions on the app-wide bus so consumers that
   // can't read the hook-local isPlaying flag (RSVP, paragraph mode) can react.
   const emitPlaybackState = (state: 'playing' | 'paused' | 'stopped') => {
+    playbackStateRef.current = state;
     eventDispatcher.dispatch('tts-playback-state', { bookKey, state });
+  };
+
+  // A follower (paragraph / RSVP mode) that engages mid-session asks the
+  // controller to re-broadcast its current playback state and position, so it
+  // can sync immediately instead of waiting for the next word/sentence boundary
+  // (or forcing the user to stop and restart TTS inside the mode). Replays only
+  // when a session actually exists (playing or paused).
+  const handleTTSSyncRequest = (event: CustomEvent) => {
+    const detail = event.detail as { bookKey?: string } | undefined;
+    if (detail?.bookKey !== bookKey) return;
+    const state = playbackStateRef.current;
+    if (state !== 'playing' && state !== 'paused') return;
+    if (!ttsControllerRef.current) return;
+    // Position first, then state: RSVP's 'paused' handler drops following, which
+    // would discard a position arriving after it. Position-first lets the
+    // follower sync the current word/paragraph before a (possibly paused) state
+    // lands. Only the entering mode listens to these events, so the order is
+    // deterministic. The live flow (separate emits) is unaffected.
+    ttsControllerRef.current.redispatchPosition();
+    emitPlaybackState(state);
   };
 
   const handleTTSForward = async (event: CustomEvent) => {
@@ -144,6 +168,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
     eventDispatcher.on('tts-toggle-play', handleTTSTogglePlay);
     eventDispatcher.on('tts-set-rate', handleTTSSetRate);
     eventDispatcher.on('tts-highlight-sentence', handleTTSHighlightSentence);
+    eventDispatcher.on('tts-sync-request', handleTTSSyncRequest);
     return () => {
       eventDispatcher.off('tts-speak', handleTTSSpeak);
       eventDispatcher.off('tts-stop', handleTTSStop);
@@ -152,6 +177,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
       eventDispatcher.off('tts-toggle-play', handleTTSTogglePlay);
       eventDispatcher.off('tts-set-rate', handleTTSSetRate);
       eventDispatcher.off('tts-highlight-sentence', handleTTSHighlightSentence);
+      eventDispatcher.off('tts-sync-request', handleTTSSyncRequest);
       if (ttsControllerRef.current) {
         ttsControllerRef.current.shutdown();
         ttsControllerRef.current = null;
@@ -515,26 +541,42 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   const handleStop = useCallback(
     async (bookKey: string) => {
       const ttsController = ttsControllerRef.current;
-      if (ttsController) {
-        await ttsController.shutdown();
-        ttsControllerRef.current = null;
-        setTtsController(null);
-        getView(bookKey)?.deselect();
-        setIsPlaying(false);
-        emitPlaybackState('stopped');
-        onRequestHidePanel?.();
-        setShowIndicator(false);
-        setShowBackToCurrentTTSLocation(false);
-      }
+      // Reset all UI/session state up front — including the TTS toggle
+      // (ttsEnabled) and indicator that color the TTS icon — so disabling TTS
+      // always takes effect immediately. The teardown below is best-effort and
+      // must never block or skip these resets if it hangs or throws, which was
+      // observed with iOS system TTS (Edge TTS was unaffected). See #4676.
+      ttsControllerRef.current = null;
+      setTtsController(null);
+      setIsPlaying(false);
+      emitPlaybackState('stopped');
+      onRequestHidePanel?.();
+      setShowIndicator(false);
+      setShowBackToCurrentTTSLocation(false);
       previousSectionLabelRef.current = undefined;
-      if (appService?.isIOSApp) {
-        await invokeUseBackgroundAudio({ enabled: false });
-      }
+      setTTSEnabled(bookKey, false);
+      getView(bookKey)?.deselect();
       if (appService?.isMobile) {
         releaseUnblockAudio();
       }
-      await deinitMediaSession();
-      setTTSEnabled(bookKey, false);
+
+      // Tear down the controller, the lock-screen media session, and the
+      // background-audio session best-effort and IN PARALLEL. The controller's
+      // own shutdown can stall on iOS system TTS, and it must NOT gate the media
+      // session / background-audio teardown — otherwise the lock-screen Now
+      // Playing keeps running after TTS is disabled (Edge TTS was unaffected
+      // because it never hits the stalling native path). See #4676.
+      await Promise.all([
+        ttsController
+          ? Promise.resolve()
+              .then(() => ttsController.shutdown())
+              .catch((error) => console.warn('TTS shutdown failed:', error))
+          : Promise.resolve(),
+        appService?.isIOSApp
+          ? invokeUseBackgroundAudio({ enabled: false }).catch(() => {})
+          : Promise.resolve(),
+        deinitMediaSession().catch(() => {}),
+      ]);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [appService],

@@ -29,7 +29,6 @@ interface LibraryHeaderProps {
   onImportBooksFromFiles: () => void;
   onImportBooksFromDirectory?: () => void;
   onImportBookFromUrl?: () => void;
-  onDownloadFromUrl?: () => void;
   onOpenCatalogManager: () => void;
   onToggleSelectMode: () => void;
   onSelectAll: () => void;
@@ -43,7 +42,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   onImportBooksFromFiles,
   onImportBooksFromDirectory,
   onImportBookFromUrl,
-  onDownloadFromUrl,
   onOpenCatalogManager,
   onToggleSelectMode,
   onSelectAll,
@@ -164,7 +162,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 onImportBooksFromFiles={onImportBooksFromFiles}
                 onImportBooksFromDirectory={onImportBooksFromDirectory}
                 onImportBookFromUrl={onImportBookFromUrl}
-                onDownloadFromUrl={onDownloadFromUrl}
                 onOpenCatalogManager={onOpenCatalogManager}
               />
             </Dropdown>

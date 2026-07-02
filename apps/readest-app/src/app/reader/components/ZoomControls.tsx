@@ -1,27 +1,35 @@
 import React from 'react';
-import { IoClose, IoExpand, IoAdd, IoRemove, IoCloudDownloadOutline } from 'react-icons/io5';
+import {
+  IoClose,
+  IoExpand,
+  IoAdd,
+  IoRemove,
+  IoShareOutline,
+  IoDownloadOutline,
+} from 'react-icons/io5';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
 import { Insets } from '@/types/misc';
 
 interface ZoomControlsProps {
   gridInsets: Insets;
+  // Save/Share is image-specific; omit `onSave` (e.g. the table viewer) to hide it.
+  canShare?: boolean;
   onClose: () => void;
+  onSave?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
-  onSave?: () => void;
-  canShare?: boolean;
 }
 
 const ZoomControls: React.FC<ZoomControlsProps> = ({
   gridInsets,
+  canShare,
   onClose,
+  onSave,
   onZoomIn,
   onZoomOut,
   onReset,
-  onSave,
-  canShare,
 }) => {
   const _ = useTranslation();
   const { systemUIVisible, statusBarHeight } = useThemeStore();
@@ -50,7 +58,11 @@ const ZoomControls: React.FC<ZoomControlsProps> = ({
           aria-label={canShare ? _('Share Image') : _('Save Image')}
           title={canShare ? _('Share Image') : _('Save Image')}
         >
-          <IoCloudDownloadOutline className='h-6 w-6' />
+          {canShare ? (
+            <IoShareOutline className='h-6 w-6' />
+          ) : (
+            <IoDownloadOutline className='h-6 w-6' />
+          )}
         </button>
       )}
 

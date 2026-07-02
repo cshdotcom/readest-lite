@@ -1,19 +1,23 @@
 import { PiUserCircle } from 'react-icons/pi';
 import { useTranslation } from '@/hooks/useTranslation';
+import { PlanDetails } from '../utils/plan';
 import UserAvatar from '@/components/UserAvatar';
 
-// Readest Lite — Pro 体系删除，planDetails 改为可选；为空时不渲染 plan badge。
 interface UserInfoProps {
   avatarUrl?: string;
   userFullName: string;
   userEmail: string;
-  planDetails?: { name: string; color: string } | null;
+  planDetails: PlanDetails;
 }
 
 const UserInfo: React.FC<UserInfoProps> = ({ avatarUrl, userFullName, userEmail, planDetails }) => {
   const _ = useTranslation();
   return (
     <div className='flex flex-col items-center gap-x-6 gap-y-2 md:flex-row md:items-center'>
+      {/* Lock the avatar box to a square via classes so it can't go oval
+          across breakpoints. fillContainer drops UserAvatar's inline
+          width/height so the child stretches to this wrapper instead of
+          fighting it. */}
       <div className='aspect-square h-16 w-16 flex-shrink-0 md:h-24 md:w-24'>
         {avatarUrl ? (
           <UserAvatar
@@ -32,15 +36,13 @@ const UserInfo: React.FC<UserInfoProps> = ({ avatarUrl, userFullName, userEmail,
       <div className='flex-grow text-center md:text-left'>
         <h2 className='text-base-content text-xl font-bold md:text-2xl'>{userFullName}</h2>
         <p className='text-base-content/60'>{userEmail}</p>
-        {planDetails && (
-          <div className='mt-3'>
-            <span
-              className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${planDetails.color}`}
-            >
-              {_(planDetails.name)}
-            </span>
-          </div>
-        )}
+        <div className='mt-3'>
+          <span
+            className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${planDetails.color}`}
+          >
+            {_(planDetails.name)}
+          </span>
+        </div>
       </div>
     </div>
   );

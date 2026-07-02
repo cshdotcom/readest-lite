@@ -16,23 +16,6 @@ type QuotaProps = {
   showProgress?: boolean;
 };
 
-// v8.5: 格式化字节/字符数 — total=0 表示无限
-const formatValue = (value: number, unit: string): string => {
-  if (unit === 'bytes') {
-    if (value < 1024) return `${value} B`;
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-    if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-    if (value < 1024 * 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-    return `${(value / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
-  }
-  if (unit === 'chars') {
-    if (value < 1000) return `${value}`;
-    if (value < 1000000) return `${(value / 1000).toFixed(1)}K`;
-    return `${(value / 1000000).toFixed(2)}M`;
-  }
-  return `${value}`;
-};
-
 const Quota: React.FC<QuotaProps> = ({ quotas, showProgress, className, labelClassName }) => {
   const _ = useTranslation();
   const [now, setNow] = useState(() => Date.now());
@@ -48,7 +31,6 @@ const Quota: React.FC<QuotaProps> = ({ quotas, showProgress, className, labelCla
   return (
     <div className={clsx('text-base-content w-full rounded-md text-base sm:text-sm', className)}>
       {quotas.map((quota) => {
-        const isUnlimited = quota.total === 0;
         const usageRatio = quota.total > 0 ? quota.used / quota.total : 0;
         const usagePercentage = Math.min(100, usageRatio * 100);
         const usagePercentageRounded = Math.round(usagePercentage);
@@ -66,19 +48,15 @@ const Quota: React.FC<QuotaProps> = ({ quotas, showProgress, className, labelCla
         const resetHours = Math.floor(totalMinutes / 60);
         const resetMinutes = totalMinutes % 60;
 
-        const usageText = isUnlimited
-          ? `${formatValue(quota.used, quota.unit)} / ∞`
-          : `${formatValue(quota.used, quota.unit)} / ${formatValue(quota.total, quota.unit)}`;
-
         return (
           <div key={quota.name} className='w-full'>
             <div
               className={clsx(
                 'relative w-full overflow-hidden rounded-md',
-                showProgress && !isUnlimited && 'bg-base-300',
+                showProgress && 'bg-base-300',
               )}
             >
-              {showProgress && !isUnlimited && (
+              {showProgress && (
                 <div
                   className={`absolute left-0 top-0 h-full ${bgColor}`}
                   style={{ width: `${usagePercentage}%` }}
@@ -95,7 +73,7 @@ const Quota: React.FC<QuotaProps> = ({ quotas, showProgress, className, labelCla
                   {quota.name}
                 </span>
                 <div className='text-right text-sm'>
-                  {usageText}
+                  {quota.used} / {quota.total} {quota.unit}
                 </div>
               </div>
             </div>
@@ -106,19 +84,13 @@ const Quota: React.FC<QuotaProps> = ({ quotas, showProgress, className, labelCla
                   labelClassName,
                 )}
               >
+                <span>{_('{{percentage}}% used', { percentage: usagePercentageRounded })}</span>
                 <span>
-                  {isUnlimited
-                    ? _('Unlimited')
-                    : _('{{percentage}}% used', { percentage: usagePercentageRounded })}
+                  {_('Resets in {{hours}} hr {{minutes}} min', {
+                    hours: resetHours,
+                    minutes: resetMinutes,
+                  })}
                 </span>
-                {quota.resetAt && (
-                  <span>
-                    {_('Resets in {{hours}} hr {{minutes}} min', {
-                      hours: resetHours,
-                      minutes: resetMinutes,
-                    })}
-                  </span>
-                )}
               </div>
             )}
           </div>

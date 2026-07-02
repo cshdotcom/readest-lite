@@ -274,40 +274,16 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                   toggle row below. */}
               <div className='flex min-h-12 items-center justify-between gap-3 px-4 py-2'>
                 <span className='text-base-content text-sm font-medium'>{_('Expires in')}</span>
-                <div className='flex items-center gap-2'>
-                  <SegmentedControl<number>
-                    ariaLabel={_('Expires in')}
-                    value={expirationDays}
-                    onChange={setExpirationDays}
-                    disabled={generating}
-                    options={[
-                      ...SHARE_EXPIRATION_DAYS.map((n) => ({
-                        value: n,
-                        label: _('{{count}}d', { count: n }),
-                      })),
-                      { value: 0, label: _('∞') },
-                    ]}
-                  />
-                  {expirationDays !== 0 && (
-                    <input
-                      type='date'
-                      className='input input-sm input-bordered w-auto cursor-pointer'
-                      value={(() => {
-                        const d = new Date(Date.now() + expirationDays * 86400000);
-                        return d.toISOString().split('T')[0];
-                      })()}
-                      min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                      max={new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]}
-                      disabled={generating}
-                      onChange={(e) => {
-                        const selected = new Date(e.target.value);
-                        const days = Math.ceil((selected.getTime() - Date.now()) / 86400000);
-                        if (days >= 1 && days <= 365) setExpirationDays(days);
-                      }}
-                      aria-label={_('Custom expiration date')}
-                    />
-                  )}
-                </div>
+                <SegmentedControl<number>
+                  ariaLabel={_('Expires in')}
+                  value={expirationDays}
+                  onChange={setExpirationDays}
+                  disabled={generating}
+                  options={SHARE_EXPIRATION_DAYS.map((n) => ({
+                    value: n,
+                    label: _('{{count}} days', { count: n }),
+                  }))}
+                />
               </div>
 
               {cfi && (

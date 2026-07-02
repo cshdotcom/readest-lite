@@ -196,8 +196,16 @@ const compareBookByKey = (a: Book, b: Book, sortBy: string, uiLanguage: string):
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     case LibrarySortByType.Format:
       return a.format.localeCompare(b.format, uiLanguage || navigator.language);
-    case LibrarySortByType.Series:
+    case LibrarySortByType.Series: {
+      // Group by series name first so books of the same series stay consecutive,
+      // then order within a series by index. Comparing index alone would interleave
+      // series (all #1s, then all #2s) when this key is used as a secondary sort.
+      const aSeries = a.metadata?.series || '';
+      const bSeries = b.metadata?.series || '';
+      const bySeries = aSeries.localeCompare(bSeries, uiLanguage || navigator.language);
+      if (bySeries !== 0) return bySeries;
       return (a.metadata?.seriesIndex || 0) - (b.metadata?.seriesIndex || 0);
+    }
     case LibrarySortByType.Published: {
       const aPublished = a.metadata?.published || '0001-01-01';
       const bPublished = b.metadata?.published || '0001-01-01';
@@ -227,8 +235,8 @@ const compareBookByKey = (a: Book, b: Book, sortBy: string, uiLanguage: string):
 
 /**
  * @param secondarySortBy - Optional tiebreaker key applied when the primary
- *   comparison returns 0. Pass `'none'` (or omit) to disable. Series-index ties
- *   on a Series secondary fall through to the underlying primary tie.
+ *   comparison returns 0. Pass `'none'` (or omit) to disable. A Series secondary
+ *   orders by series name then index; ties on both fall through to the primary tie.
  */
 export const createBookSorter =
   (sortBy: string, uiLanguage: string, secondarySortBy: LibrarySecondarySortByType = 'none') =>
@@ -611,6 +619,7 @@ export type BookContextMenuItemId =
   | 'group'
   | 'markFinished'
   | 'markUnread'
+  | 'markAbandoned'
   | 'clearStatus'
   | 'showDetails'
   | 'showInFinder'
@@ -619,6 +628,78 @@ export type BookContextMenuItemId =
   | 'upload'
   | 'share'
   | 'delete';
+
+/**
+ * Build a new Book with an explicit reading status. Stamps both `updatedAt`
+ * (so the library sync picks it up) and `readingStatusUpdatedAt` (so the
+ * field-level merge resolves status independently of progress). Use this for
+ * every deliberate status edit so the timestamp is never forgotten.
+ */
+export const withReadingStatus = (book: Book, status: ReadingStatus | undefined): Book => {
+  const now = Date.now();
+  return { ...book, readingStatus: status, readingStatusUpdatedAt: now, updatedAt: now };
+};
+
+type ReadingStatusFields = Pick<Book, 'readingStatus' | 'readingStatusUpdatedAt'>;
+
+/**
+ * Field-level last-writer-wins for reading status: return whichever side's
+ * status was set more recently (ties → `a`). Missing timestamp = epoch 0.
+ * The book row's `updatedAt` is dominated by page-turn progress, so status
+ * must be resolved by its own timestamp or progress would clobber it.
+ */
+export const pickFresherReadingStatus = (
+  a: ReadingStatusFields,
+  b: ReadingStatusFields,
+): ReadingStatusFields => {
+  const at = (x: ReadingStatusFields) => x.readingStatusUpdatedAt ?? 0;
+  const winner = at(a) >= at(b) ? a : b;
+  return {
+    readingStatus: winner.readingStatus,
+    readingStatusUpdatedAt: winner.readingStatusUpdatedAt,
+  };
+};
+
+type CoverFields = Pick<Book, 'coverHash' | 'coverUpdatedAt'>;
+type CoverSyncFields = Pick<
+  Book,
+  'coverHash' | 'coverUpdatedAt' | 'coverDownloadedAt' | 'deletedAt' | 'uploadedAt'
+>;
+
+const coverMs = (t?: number | null) => t ?? 0;
+
+/**
+ * Decide whether a peer should (re)download a book's cover from the cloud
+ * (issue #4544). True when the synced book is in the cloud AND either:
+ *  - this device has never fetched the cover (first download), or
+ *  - a newer cover edit exists (synced `coverUpdatedAt` strictly newer) whose
+ *    content hash differs from the local one.
+ *
+ * Gating on `coverUpdatedAt` (not just the hash) prevents two failure modes:
+ *  - churn: once a device adopts the synced `coverUpdatedAt` after downloading,
+ *    the comparison stops firing on every subsequent sync;
+ *  - the unpushed-local-edit race: a device that just edited its cover (newer
+ *    local `coverUpdatedAt`) is not made to overwrite it with the stale cloud
+ *    copy before its own push lands.
+ */
+export const needsCoverRefresh = (local: CoverSyncFields, synced: CoverSyncFields): boolean => {
+  if (synced.deletedAt || !synced.uploadedAt) return false;
+  if (!local.coverDownloadedAt) return true; // first download
+  if (!synced.coverHash) return false; // nothing to compare (legacy book)
+  if (coverMs(synced.coverUpdatedAt) <= coverMs(local.coverUpdatedAt)) return false;
+  return synced.coverHash !== local.coverHash;
+};
+
+/**
+ * Field-level last-writer-wins for the cover, by `coverUpdatedAt` (ties →
+ * `local`, which already holds the file). Mirrors {@link pickFresherReadingStatus}:
+ * the row's `updatedAt` is dominated by page-turn progress, so the cover must be
+ * resolved by its own timestamp or progress would clobber a cover edit.
+ */
+export const pickFresherCover = (local: CoverFields, synced: CoverFields): CoverFields =>
+  coverMs(synced.coverUpdatedAt) > coverMs(local.coverUpdatedAt)
+    ? { coverHash: synced.coverHash, coverUpdatedAt: synced.coverUpdatedAt }
+    : { coverHash: local.coverHash, coverUpdatedAt: local.coverUpdatedAt };
 
 /**
  * Resolve the ordered list of context-menu item ids for a book from its state.
@@ -631,8 +712,13 @@ export type BookContextMenuItemId =
 export const getBookContextMenuItemIds = (book: Book): BookContextMenuItemId[] => {
   const ids: BookContextMenuItemId[] = ['select', 'group'];
   ids.push(book.readingStatus === 'finished' ? 'markUnread' : 'markFinished');
+  if (book.readingStatus !== 'abandoned') ids.push('markAbandoned');
   // "Clear Status" is offered only when the book has an explicit status set.
-  if (book.readingStatus === 'finished' || book.readingStatus === 'unread') {
+  if (
+    book.readingStatus === 'finished' ||
+    book.readingStatus === 'unread' ||
+    book.readingStatus === 'abandoned'
+  ) {
     ids.push('clearStatus');
   }
   ids.push('showDetails', 'showInFinder', 'searchGoodreads');
@@ -643,15 +729,4 @@ export const getBookContextMenuItemIds = (book: Book): BookContextMenuItemId[] =
   if (book.downloadedAt || book.uploadedAt) ids.push('share');
   ids.push('delete');
   return ids;
-};
-
-/**
- * Build a new Book with an explicit reading status. Stamps both `updatedAt`
- * (so the library sync picks it up) and `readingStatusUpdatedAt` (so the
- * field-level merge resolves status independently of progress). Use this for
- * every deliberate status edit so the timestamp is never forgotten.
- */
-export const withReadingStatus = (book: Book, status: ReadingStatus | undefined): Book => {
-  const now = Date.now();
-  return { ...book, readingStatus: status, readingStatusUpdatedAt: now, updatedAt: now };
 };
