@@ -86,6 +86,11 @@ export abstract class BaseAppService implements AppService {
       sharePosition?: { x: number; y: number; preferredEdge?: 'top' | 'bottom' | 'left' | 'right' };
     },
   ): Promise<boolean>;
+  abstract saveImageToGallery(
+    filename: string,
+    content: ArrayBuffer,
+    mimeType: string,
+  ): Promise<boolean>;
   abstract ask(message: string): Promise<boolean>;
   abstract openDatabase(
     schema: SchemaType,
@@ -159,7 +164,13 @@ export abstract class BaseAppService implements AppService {
 
   async resolveFilePath(path: string, base: BaseDir): Promise<string> {
     const prefix = await this.fs.getPrefix(base);
-    return path ? `${prefix}/${path}` : prefix;
+    if (!path) return prefix;
+    // `base: 'None'` carries an already-absolute source path (in-place /
+    // external books point `book.filePath` outside Books/<hash>/) and its
+    // prefix is empty. Joining unconditionally turned `C:\Users\…` into
+    // `/C:\Users\…` (and `/Users/…` into `//Users/…`), which the native
+    // upload guard rejects as outside the fs scope — issue #4720.
+    return prefix ? `${prefix}/${path}` : path;
   }
 
   async readDirectory(path: string, base: BaseDir): Promise<FileItem[]> {
@@ -225,6 +236,10 @@ export abstract class BaseAppService implements AppService {
 
   async updateCoverImage(book: Book, imageUrl?: string, imageFile?: string): Promise<void> {
     return BookSvc.updateCoverImage(this.coverCtx, book, imageUrl, imageFile);
+  }
+
+  async computeCoverHash(book: Book): Promise<string | null> {
+    return BookSvc.computeCoverHash(this.fs, book);
   }
 
   async importFont(file?: string | File): Promise<CustomFontInfo | null> {
@@ -341,6 +356,10 @@ export abstract class BaseAppService implements AppService {
 
   async uploadBook(book: Book, onProgress?: ProgressHandler): Promise<void> {
     return CloudSvc.uploadBook(this.fs, this.resolveFilePath.bind(this), book, onProgress);
+  }
+
+  async uploadBookCover(book: Book, onProgress?: ProgressHandler): Promise<void> {
+    return CloudSvc.uploadBookCover(this.fs, this.resolveFilePath.bind(this), book, onProgress);
   }
 
   async downloadCloudFile(lfp: string, cfp: string, onProgress: ProgressHandler) {
