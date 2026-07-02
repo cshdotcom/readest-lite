@@ -157,7 +157,7 @@ export default function AuthPage() {
         handleOAuthUrl(res.redirectUrl);
       }
     } else {
-      await openUrl(data.url);
+      await openUrl(data.url ?? '');
     }
   };
 
