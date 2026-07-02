@@ -121,8 +121,8 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           <div className='border-base-300 mt-8 border-t pt-6'>
             <p className='text-base-content/60 text-sm'>
               {_('Need help?')}{' '}
-              <a href='mailto:support@readest.com' className='link link-primary'>
-                {_('Contact Support')}
+              <a href='https://cshdotcom.github.io/readestl/' className='link link-primary' target='_blank' rel='noopener noreferrer'>
+                {_('Visit Website')}
               </a>
             </p>
           </div>
