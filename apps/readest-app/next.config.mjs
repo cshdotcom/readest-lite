@@ -57,6 +57,12 @@ const nextConfig = {
       fflate: path.resolve(__dirname, 'node_modules/fflate'),
       ...(appPlatform !== 'web' ? { '@tursodatabase/database-wasm': false } : {}),
     };
+    // v8.12: stub Tauri-only plugins for web build (both server + client)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@tauri-apps/plugin-biometric': path.resolve(__dirname, 'src/utils/stubs/biometric.ts'),
+    };
+
     // 客户端构建时把 server-only 模块设为空（避免 'fs' not found）
     // 服务端构建时保留真实模块（serverExternalPackages 会处理）
     if (!isServer && appPlatform === 'web') {
@@ -79,7 +85,6 @@ const nextConfig = {
         argon2: false,
         '@prisma/client': false,
         jsonwebtoken: false,
-        '@tauri-apps/plugin-biometric': path.resolve(__dirname, 'src/utils/stubs/biometric.ts'),
       };
     }
     return config;
