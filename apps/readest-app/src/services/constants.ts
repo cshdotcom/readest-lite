@@ -430,6 +430,8 @@ export const DEFAULT_WORD_LENS_CONFIG: WordLensConfig = {
   wordLensEnabled: false,
   wordLensLevel: 3,
   wordLensHintLang: '',
+  wordLensGlossFontSize: 14,
+  wordLensGlossColor: '#ffffff',
 };
 
 export const DEFAULT_SCREEN_CONFIG: ScreenConfig = {
