@@ -222,6 +222,20 @@ export async function uploadBook(
   book.coverDownloadedAt = Date.now();
 }
 
+export async function uploadBookCover(
+  fs: FileSystem,
+  resolveFilePath: (path: string, base: BaseDir) => Promise<string>,
+  book: Book,
+  onProgress?: ProgressHandler,
+): Promise<void> {
+  if (!(await fs.exists(getCoverFilename(book), 'Books'))) return;
+  const completedFiles = { count: 0 };
+  const handleProgress = createProgressHandler(1, completedFiles, onProgress);
+  const lfp = getCoverFilename(book);
+  const cfp = `${CLOUD_BOOKS_SUBDIR}/${getCoverFilename(book)}`;
+  await uploadFileToCloud(fs, resolveFilePath, lfp, cfp, 'Books', handleProgress, book.hash);
+}
+
 export async function downloadCloudFile(
   appService: AppService,
   localBooksDir: string,
