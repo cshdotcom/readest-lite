@@ -272,6 +272,7 @@ export const DEFAULT_BOOK_LAYOUT: BookLayout = {
   scrollingOverlap: 0,
   allowScript: false,
   hideScrollbar: false,
+  webtoonMode: false,
 };
 
 export const DEFAULT_BOOK_LANGUAGE: BookLanguage = {
