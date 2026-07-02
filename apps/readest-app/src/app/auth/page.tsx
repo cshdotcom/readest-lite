@@ -147,12 +147,12 @@ export default function AuthPage() {
     // Open the OAuth URL in a ASWebAuthenticationSession on iOS to comply with Apple's guidelines
     // for other platforms, open the OAuth URL in the default browser
     if (appService?.isIOSApp || appService?.isMacOSApp) {
-      const res = await authWithSafari({ authUrl: data.url });
+      const res = await authWithSafari({ authUrl: data.url ?? '' });
       if (res) {
         handleOAuthUrl(res.redirectUrl);
       }
     } else if (appService?.isAndroidApp) {
-      const res = await authWithCustomTab({ authUrl: data.url });
+      const res = await authWithCustomTab({ authUrl: data.url ?? '' });
       if (res) {
         handleOAuthUrl(res.redirectUrl);
       }
