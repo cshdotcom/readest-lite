@@ -1,9 +1,10 @@
 import { getRuntimeConfig } from '@/services/runtimeConfig';
 
-// Readest Lite — 加 'local' 类型，默认 'local'（原项目默认 'r2'）。
-type ObjectStorageType = 'r2' | 's3' | 'local';
+type ObjectStorageType = 'r2' | 's3';
 
 export const getStorageType = (): ObjectStorageType => {
+  // Client: read from runtime config injected via /runtime-config.js at container start.
+  // Server: fall back to the OBJECT_STORAGE_TYPE process env var.
   const runtimeType = getRuntimeConfig()?.objectStorageType ?? process.env['OBJECT_STORAGE_TYPE'];
-  return (runtimeType as ObjectStorageType) || 'local';
+  return (runtimeType as ObjectStorageType) || 'r2';
 };

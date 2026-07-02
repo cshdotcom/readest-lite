@@ -23,22 +23,9 @@ export const fetchWithAuth = async (url: string, options: RequestInit) => {
   const response = await fetch(url, { ...options, headers });
 
   if (!response.ok) {
-    // 安全解析错误响应 — 如果不是 JSON（如 HTML 错误页），用 statusText
-    let errorMessage = response.statusText || 'Request failed';
-    try {
-      const errorData = await response.json();
-      if (errorData && errorData.error) {
-        errorMessage = errorData.error;
-      } else if (typeof errorData === 'string') {
-        errorMessage = errorData;
-      } else if (errorData && errorData.message) {
-        errorMessage = errorData.message;
-      }
-    } catch {
-      // response body 不是 JSON，用 statusText
-    }
-    console.error('Fetch error:', errorMessage, 'URL:', url, 'Status:', response.status);
-    throw new Error(errorMessage);
+    const errorData = await response.json();
+    console.error('Error:', errorData.error || response.statusText);
+    throw new Error(errorData.error || 'Request failed');
   }
 
   return response;
