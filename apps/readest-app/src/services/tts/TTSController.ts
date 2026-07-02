@@ -23,6 +23,26 @@ import {
   TTSWordOffset,
 } from './wordHighlight';
 
+// App-wide monotonic sequence for 'tts-position' events. A fresh TTSController
+// is constructed per `tts-speak`, so a per-instance counter would restart at 0
+// and consumers (paragraph mode, RSVP) holding `lastSequenceSeen` from a prior
+// session would drop the new session's early positions until they exceeded the
+// old count. A module-level counter keeps the sequence strictly increasing
+// across sessions.
+let ttsPositionSequence = 0;
+
+// Native TTS (Android System TTS / iOS) can report a terminal 'error' for an
+// utterance it cannot synthesize offline — typically a specific unsupported
+// character, hit characteristically on the first utterance after a chapter
+// boundary even with a local/offline voice (online the engine often
+// network-falls-back, which is why it only breaks offline). #speak only
+// auto-advances on 'end', so without handling, a single such error dead-ends
+// playback and wedges the controls in 'playing'. Re-speaking the same text
+// would just fail again, so we skip the bad chunk and advance — bounding
+// consecutive failures so a wholly-unusable engine still stops gracefully
+// instead of silently racing to the end of the book. See #4613, #4408.
+const TTS_NATIVE_SPEAK_MAX_CONSECUTIVE_ERRORS = 5;
+
 type TTSState =
   | 'stopped'
   | 'playing'
@@ -42,14 +62,14 @@ export class TTSController extends EventTarget {
   preprocessCallback?: (ssml: string) => Promise<string>;
   onSectionChange?: (sectionIndex: number) => Promise<void>;
   #nossmlCnt: number = 0;
+  // Consecutive native-TTS utterances that ended in a terminal 'error' without
+  // a successful 'end' in between. Reset on success; caps skip-on-error so a
+  // wholly-unusable engine stops instead of racing to the book end. See #4613.
+  #consecutiveSpeakErrors: number = 0;
   #currentSpeakAbortController: AbortController | null = null;
   #currentSpeakPromise: Promise<void> | null = null;
 
   #ttsSectionIndex: number = -1;
-
-  // Monotonic counter for the canonical 'tts-position' event so downstream
-  // consumers (paragraph mode, RSVP) can drop out-of-order positions.
-  #positionSequence: number = 0;
 
   // Word-level highlight state for the currently spoken chunk. Armed by a
   // successful dispatchSpeakMark, populated by prepareSpeakWords when a TTS
@@ -94,8 +114,9 @@ export class TTSController extends EventTarget {
     super();
     this.ttsWebClient = new WebSpeechClient(this);
     this.ttsEdgeClient = new EdgeTTSClient(this, appService);
-    // TODO: implement native TTS client for iOS and PC
-    if (appService?.isAndroidApp) {
+    // Native TTS is backed by Android TextToSpeech and iOS AVSpeechSynthesizer.
+    // TODO: implement native TTS client for desktop platforms.
+    if (appService?.isAndroidApp || appService?.isIOSApp) {
       this.ttsNativeClient = new NativeTTSClient(this);
     }
     this.ttsClient = this.ttsWebClient;
@@ -410,6 +431,9 @@ export class TTSController extends EventTarget {
           }
           await this.preloadSSML(ssml, signal);
         }
+        // Only the native client surfaces an offline engine failure as a
+        // terminal 'error' code (Edge/Web throw, which the catch below handles).
+        const canSkipOnError = this.ttsClient === this.ttsNativeClient;
         const iter = await this.ttsClient.speak(ssml, signal);
         let lastCode;
         for await (const { code } of iter) {
@@ -421,8 +445,33 @@ export class TTSController extends EventTarget {
         }
 
         if (lastCode === 'end' && this.state === 'playing' && !oneTime) {
+          this.#consecutiveSpeakErrors = 0;
           resolve();
           await this.forward();
+        } else if (
+          lastCode === 'error' &&
+          canSkipOnError &&
+          !signal.aborted &&
+          this.state === 'playing' &&
+          !oneTime
+        ) {
+          // The native engine reported it can't speak this chunk. Offline this
+          // is almost always a specific unsynthesizable utterance (e.g. an
+          // unsupported character) that would fail every time, not a transient
+          // glitch — so retrying the same text is futile. Skip it and advance
+          // exactly as a normal 'end' would, so one bad chunk (often the first
+          // utterance across a chapter boundary) can't strand playback with the
+          // controls wedged in 'playing'. Bound consecutive failures so a
+          // wholly-unusable engine stops gracefully instead of silently racing
+          // to the end of the book. See #4613, #4408.
+          this.#consecutiveSpeakErrors++;
+          resolve();
+          if (this.#consecutiveSpeakErrors <= TTS_NATIVE_SPEAK_MAX_CONSECUTIVE_ERRORS) {
+            await this.forward();
+          } else {
+            this.#consecutiveSpeakErrors = 0;
+            await this.stop();
+          }
         }
         resolve();
       } catch (e) {
@@ -629,7 +678,7 @@ export class TTSController extends EventTarget {
           cfi,
           kind,
           sectionIndex: this.#ttsSectionIndex,
-          sequence: ++this.#positionSequence,
+          sequence: ++ttsPositionSequence,
         },
       }),
     );
@@ -697,6 +746,31 @@ export class TTSController extends EventTarget {
     }
   }
 
+  // Re-emit the controller's current position on the canonical 'tts-position'
+  // signal with a fresh (monotonic) sequence. Lets a follower that engages
+  // mid-session (paragraph / RSVP mode entered while TTS is already playing or
+  // paused) sync to the current position without waiting for the next word or
+  // sentence boundary. Mirrors reapplyCurrentHighlight's word-vs-sentence
+  // choice, but dispatches a position instead of drawing a highlight.
+  redispatchPosition() {
+    if (this.#ttsSectionIndex < 0) return;
+    if (this.#wordHighlightActive && this.#lastSpeakWordRange) {
+      try {
+        const cfi = this.view.getCFI(this.#ttsSectionIndex, this.#lastSpeakWordRange);
+        if (cfi) {
+          this.#dispatchPosition(cfi, 'word');
+          return;
+        }
+      } catch {}
+    }
+    const range = this.view.tts?.getLastRange();
+    if (!range) return;
+    try {
+      const cfi = this.view.getCFI(this.#ttsSectionIndex, range);
+      if (cfi) this.#dispatchPosition(cfi, 'sentence');
+    } catch {}
+  }
+
   // Word-level highlighting within the chunk of the last dispatched mark,
   // driven by TTS clients that report word boundaries (Edge TTS). It only
   // swaps the visual highlight from the sentence to the spoken word —
@@ -711,8 +785,24 @@ export class TTSController extends EventTarget {
     const range = this.view.tts?.getLastRange();
     if (!range) return;
     this.#speakWordBaseRange = range;
-    this.#speakWordOffsets = computeWordOffsets(rangeTextExcludingInert(range), words);
+    const matchText = rangeTextExcludingInert(range);
+    this.#speakWordOffsets = computeWordOffsets(matchText, words);
     this.#speakWordRanges = [];
+    if (process.env.NODE_ENV !== 'production') {
+      // Dev-only trace of the Edge word-sync: each spoken (boundary) word vs the
+      // text it actually highlights. A drifted or "(unmatched)" mapping — or an
+      // empty word list — pinpoints word-highlight bugs without instrumenting
+      // the overlayer by hand. `process.env.NODE_ENV` is statically inlined, so
+      // this whole block is dropped from production builds.
+      const mapping = words.map((word, i) => {
+        const offset = this.#speakWordOffsets[i];
+        const highlighted = offset
+          ? getTextSubRange(range, offset.start, offset.end)?.toString()
+          : '';
+        return { spoken: word, highlighted: highlighted || '(unmatched)' };
+      });
+      console.log('[TTS] word-sync', { sentence: matchText, words: mapping });
+    }
     if (words.length === 0) {
       // No word boundaries for this chunk: the sentence highlight was
       // suppressed at mark dispatch, so draw it now as the fallback.
