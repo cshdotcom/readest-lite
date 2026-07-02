@@ -16,7 +16,6 @@ export const ALL_ANNOTATION_TOOL_TYPES: AnnotationToolType[] = [
 
 // Default toolbar: the eight pre-existing tools in their original order.
 // 'share' starts hidden in the Available tray per the #4014 design.
-// v8.1: 'websearch' removed (X-Frame-Options rejects iframe embedding).
 export const DEFAULT_ANNOTATION_TOOLBAR_ITEMS: AnnotationToolType[] = [
   'copy',
   'highlight',
