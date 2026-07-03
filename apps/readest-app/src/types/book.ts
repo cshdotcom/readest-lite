@@ -381,6 +381,7 @@ export interface ProofreadRule {
   wholeWord?: boolean; // Match whole words only (uses \b word boundaries)
   caseSensitive?: boolean; // Case-sensitive matching (default true)
   onlyForTTS?: boolean; // Only replace text for TTS, not in the book display (only for book/library scope)
+  deletedAt?: number | null;
 }
 
 export interface ProofreadRulesConfig {
