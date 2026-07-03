@@ -1,12 +1,8 @@
+// 改造自原 src/pages/api/send/address.ts。
+// Pro 校验移除（plan 永远为 pro）；supabase → prisma。
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createSupabaseAdminClient } from '@/utils/supabase';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
-import {
-  EMAIL_IN_PLANS,
-  getUserProfilePlan,
-  isEmailInPlan,
-  validateUserAndToken,
-} from '@/utils/access';
+import { validateUserAndToken } from '@/utils/access';
 import {
   generateSendAddress,
   buildSendAddress,
@@ -15,102 +11,51 @@ import {
   normalizeSenderEmail,
 } from '@/services/send/sendAddress';
 import { SEND_EMAIL_DOMAIN } from '@/services/constants';
-import type { DBSendAddress } from '@/types/sendRecords';
+import { prismaClient } from '@/utils/db';
 
 const MAX_COLLISION_RETRIES = 5;
-
-/** Build the full inbound email address from a stored local part. */
 const fullAddress = (localPart: string) => `${localPart}@${SEND_EMAIL_DOMAIN}`;
 
-/**
- * GET  — return the caller's inbound address, lazily creating one on first call.
- * POST — rotate the address (issue a fresh random local part).
- *
- * The address is the local part only in the DB; the `@send.readest.com` host
- * is appended here so the domain can change without a migration.
- */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
-
   const { user, token } = await validateUserAndToken(req.headers['authorization']);
-  if (!user || !token) {
-    return res.status(403).json({ error: 'Not authenticated' });
-  }
+  if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
 
-  // Email-in is a paid feature. The client renders a friendly upgrade
-  // card on receiving this response, so the structured body (code +
-  // requiredPlans) matters — UI keys off it.
-  const plan = getUserProfilePlan(token);
-  if (!isEmailInPlan(plan)) {
-    return res.status(403).json({
-      error: 'Email-in is available on the Plus, Pro, and Lifetime plans',
-      code: 'plan_required',
-      plan,
-      requiredPlans: EMAIL_IN_PLANS,
-    });
-  }
-
-  const supabase = createSupabaseAdminClient();
+  // Pro 校验移除（恒为 pro）
 
   if (req.method === 'GET') {
-    const { data, error } = await supabase
-      .from('send_addresses')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle<DBSendAddress>();
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
+    const data = await prismaClient.sendAddress.findUnique({ where: { userId: user.id } });
     if (data) {
       return res.status(200).json({ address: fullAddress(data.address), enabled: data.enabled });
     }
-    // Lazily create on first access.
-    const created = await insertWithRetry(supabase, user.id, user.email ?? user.id);
-    if (!created) {
-      return res.status(500).json({ error: 'Could not allocate an address' });
-    }
-    // Auto-seed the allowlist with the user's account email so the most common
-    // first send ("email it to yourself") works without a separate approval.
-    // Best-effort: address creation succeeds even if the seed insert fails.
-    if (user.email) {
-      await seedOwnEmail(supabase, user.id, user.email);
-    }
+    // 懒创建
+    const created = await insertWithRetry(user.id, user.email ?? user.id);
+    if (!created) return res.status(500).json({ error: 'Could not allocate an address' });
+    if (user.email) await seedOwnEmail(user.id, user.email);
     return res.status(200).json({ address: fullAddress(created), enabled: true });
   }
 
   if (req.method === 'POST') {
-    // Optional custom slug; the token suffix is always regenerated. Without a
-    // slug this is a plain rotation with an identity-derived slug.
     let customSlug: string | undefined;
     if (req.body?.slug !== undefined) {
       customSlug = sanitizeSlug(String(req.body.slug));
-      if (!customSlug) {
-        return res.status(400).json({ error: 'Name must contain letters or digits' });
-      }
-      if (isReservedSlug(customSlug)) {
-        return res.status(400).json({ error: 'That name is reserved' });
-      }
+      if (!customSlug) return res.status(400).json({ error: 'Name must contain letters or digits' });
+      if (isReservedSlug(customSlug)) return res.status(400).json({ error: 'That name is reserved' });
     }
-    // Rotation: overwrite with a fresh local part. PK is user_id, so upsert.
     for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
-      const localPart = customSlug
-        ? buildSendAddress(customSlug)
-        : generateSendAddress(user.email ?? user.id);
-      const { error } = await supabase.from('send_addresses').upsert(
-        {
-          user_id: user.id,
-          address: localPart,
-          enabled: true,
-          rotated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' },
-      );
-      if (!error) {
+      const localPart = customSlug ? buildSendAddress(customSlug) : generateSendAddress(user.email ?? user.id);
+      try {
+        await prismaClient.sendAddress.upsert({
+          where: { userId: user.id },
+          create: { userId: user.id, address: localPart, enabled: true, rotatedAt: new Date() },
+          update: { address: localPart, enabled: true, rotatedAt: new Date() },
+        });
         return res.status(200).json({ address: fullAddress(localPart), enabled: true });
-      }
-      // 23505 = unique_violation on the address column; retry with a new token.
-      if (error.code !== '23505') {
-        return res.status(500).json({ error: error.message });
+      } catch (err) {
+        // SQLite UNIQUE 约束违反：地址冲突 → 重试
+        if (!String((err as Error).message).includes('UNIQUE')) {
+          return res.status(500).json({ error: (err as Error).message });
+        }
       }
     }
     return res.status(500).json({ error: 'Could not allocate an address' });
@@ -119,40 +64,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-async function seedOwnEmail(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string,
-  email: string,
-): Promise<void> {
+async function seedOwnEmail(userId: string, email: string) {
   const normalized = normalizeSenderEmail(email);
   if (!normalized) return;
-  await supabase
-    .from('send_allowed_senders')
-    .upsert(
-      { user_id: userId, email: normalized, status: 'approved' },
-      { onConflict: 'user_id,email' },
-    );
+  await prismaClient.sendAllowedSender.upsert({
+    where: { userId_email: { userId, email: normalized } },
+    create: { userId, email: normalized, status: 'approved' },
+    update: { status: 'approved' },
+  });
 }
 
-async function insertWithRetry(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string,
-  identity: string,
-): Promise<string | null> {
+async function insertWithRetry(userId: string, identity: string): Promise<string | null> {
   for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
     const localPart = generateSendAddress(identity);
-    const { error } = await supabase
-      .from('send_addresses')
-      .insert({ user_id: userId, address: localPart, enabled: true });
-    if (!error) return localPart;
-    // Another request created the row first — read it back.
-    if (error.code === '23505') {
-      const { data } = await supabase
-        .from('send_addresses')
-        .select('address')
-        .eq('user_id', userId)
-        .maybeSingle<Pick<DBSendAddress, 'address'>>();
-      if (data) return data.address;
+    try {
+      await prismaClient.sendAddress.create({ data: { userId, address: localPart, enabled: true } });
+      return localPart;
+    } catch (err) {
+      if (String((err as Error).message).includes('UNIQUE')) {
+        const existing = await prismaClient.sendAddress.findUnique({ where: { userId } });
+        if (existing) return existing.address;
+      } else {
+        return null;
+      }
     }
   }
   return null;

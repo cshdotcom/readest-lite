@@ -1,39 +1,42 @@
+// 改造自原 src/pages/api/send/inbox/claim.ts。
+// 替代 RPC claim_inbox_item（FOR UPDATE SKIP LOCKED）——
+// SQLite 不支持 SKIP LOCKED；改用 status='pending' OR (status='claimed' AND claimedAt < now-15min) 的查询，
+// 再用乐观更新（updateMany where 状态匹配）实现伪 SKIP LOCKED。
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createSupabaseClient } from '@/utils/supabase';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken } from '@/utils/access';
-import type { DBSendInboxItem } from '@/types/sendRecords';
+import { prismaClient } from '@/utils/db';
 
-/**
- * Claim the oldest drainable inbox item for the caller, via the
- * `claim_inbox_item` RPC. Clients route through here instead of calling
- * Supabase directly. The RPC self-scopes to `auth.uid()`, so a user-scoped
- * Supabase client (carrying the caller's JWT) is used.
- */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { user, token } = await validateUserAndToken(req.headers['authorization']);
-  if (!user || !token) {
-    return res.status(403).json({ error: 'Not authenticated' });
-  }
+  if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
 
   const device = String(req.body?.device ?? '').slice(0, 100);
-  if (!device) {
-    return res.status(400).json({ error: 'Missing device id' });
-  }
+  if (!device) return res.status(400).json({ error: 'Missing device id' });
 
-  const supabase = createSupabaseClient(token);
-  const { data, error } = await supabase.rpc('claim_inbox_item', { p_device: device });
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
+  const leaseExpired = new Date(Date.now() - 15 * 60 * 1000);
+  // 找最旧的 pending 或租约过期的 claimed
+  const candidate = await prismaClient.sendInbox.findFirst({
+    where: {
+      userId: user.id,
+      OR: [{ status: 'pending' }, { status: 'claimed', claimedAt: { lt: leaseExpired } }],
+    },
+    orderBy: { createdAt: 'asc' as const },
+  });
+  if (!candidate) return res.status(200).json({ item: null });
 
-  // The RPC yields null (or a NULL-filled row) when nothing was claimable.
-  const item = data && data.id ? (data as DBSendInboxItem) : null;
+  // 乐观更新：仅当状态未变时才认领
+  const result = await prismaClient.sendInbox.updateMany({
+    where: { id: candidate.id, status: candidate.status },
+    data: { status: 'claimed', claimedBy: device, claimedAt: new Date(), updatedAt: new Date() },
+  });
+  if (result.count === 0) {
+    // 被并发抢走，递归重试一次
+    return handler(req, res);
+  }
+  const item = await prismaClient.sendInbox.findUnique({ where: { id: candidate.id } });
   return res.status(200).json({ item });
 }
