@@ -1,4 +1,10 @@
-import { createSupabaseAdminClient } from '@/utils/supabase';
+// Readest Lite — 翻译用量统计。
+// 替代原 Supabase RPC increment_daily_usage / get_current_usage。
+// 数据落到 SQLite UsageStat 表（由 prisma 管理）。
+//
+// 重要：此文件既被客户端 deepl.ts（浏览器侧）又被服务端 deepl/translate.ts 引用。
+// 客户端调用返回 0（no-op），实际统计由服务端 deepl/translate.ts 完成。
+// 不能在客户端 import prismaClient — 否则 Next.js build 会因 'fs' 模块找不到而失败。
 
 export const USAGE_TYPES = {
   TRANSLATION_CHARS: 'translation_chars',
@@ -10,6 +16,8 @@ export const QUOTA_TYPES = {
   YEARLY: 'yearly',
 } as const;
 
+// 服务端调用：动态 import prismaClient 避免客户端 build 时拉入
+// 客户端调用（typeof window !== 'undefined'）：no-op
 export class UsageStatsManager {
   static async trackUsage(
     userId: string,
@@ -17,22 +25,20 @@ export class UsageStatsManager {
     increment: number = 1,
     metadata: Record<string, string | number> = {},
   ): Promise<number> {
+    if (typeof window !== 'undefined') return 0;
+    const { prismaClient } = await import('./db');
     try {
-      const supabase = createSupabaseAdminClient();
-      const { data, error } = await supabase.rpc('increment_daily_usage', {
-        p_user_id: userId,
-        p_usage_type: usageType,
-        p_usage_date: new Date().toISOString().split('T')[0],
-        p_increment: increment,
-        p_metadata: metadata,
+      const today = new Date().toISOString().split('T')[0]!;
+      await prismaClient.usageStat.create({
+        data: {
+          userId,
+          usageType,
+          usageDate: today,
+          increment,
+          metadata: JSON.stringify(metadata),
+        },
       });
-
-      if (error) {
-        console.error('Usage tracking error:', error);
-        return 0;
-      }
-
-      return data || 0;
+      return await UsageStatsManager.getCurrentUsage(userId, usageType, 'daily');
     } catch (error) {
       console.error('Usage tracking failed:', error);
       return 0;
@@ -42,22 +48,17 @@ export class UsageStatsManager {
   static async getCurrentUsage(
     userId: string,
     usageType: string,
-    period: 'daily' | 'monthly' = 'daily',
+    _period: 'daily' | 'monthly' = 'daily',
   ): Promise<number> {
+    if (typeof window !== 'undefined') return 0;
+    const { prismaClient } = await import('./db');
     try {
-      const supabase = createSupabaseAdminClient();
-      const { data, error } = await supabase.rpc('get_current_usage', {
-        p_user_id: userId,
-        p_usage_type: usageType,
-        p_period: period,
+      const today = new Date().toISOString().split('T')[0]!;
+      const rows = await prismaClient.usageStat.findMany({
+        where: { userId, usageType, usageDate: today },
+        select: { increment: true },
       });
-
-      if (error) {
-        console.error('Get current usage error:', error);
-        return 0;
-      }
-
-      return data || 0;
+      return rows.reduce((s, r) => s + r.increment, 0);
     } catch (error) {
       console.error('Get current usage failed:', error);
       return 0;
