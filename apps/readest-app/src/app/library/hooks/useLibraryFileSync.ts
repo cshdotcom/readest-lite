@@ -42,7 +42,7 @@ import {
 /** Quiet window before an auto library sync fires; collapses import bursts. */
 const SYNC_DEBOUNCE_MS = 5_000;
 
-const settingsKeyFor = (kind: FileSyncBackendKind): 'webdav' => 'webdav';
+const settingsKeyFor = (_kind: FileSyncBackendKind): 'webdav' => 'webdav';
 
 export const useLibraryFileSync = () => {
   const _ = useTranslation();
