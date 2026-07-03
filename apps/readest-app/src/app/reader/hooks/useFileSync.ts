@@ -62,7 +62,7 @@ const PULL_COOLDOWN_MS = 60_000;
 const OPEN_PULL_SKIP_MS = 30_000;
 
 /** Settings key for a backend kind. */
-const settingsKeyFor = (kind: FileSyncBackendKind): 'webdav' =>
+const settingsKeyFor = (_kind: FileSyncBackendKind): 'webdav' =>
   'webdav';
 
 export const useFileSync = (bookKey: string) => {
