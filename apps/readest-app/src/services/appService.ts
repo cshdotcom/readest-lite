@@ -355,7 +355,6 @@ export abstract class BaseAppService implements AppService {
 
   async computeCoverHash(book: Book): Promise<string | null> {
     try {
-      const coverPath = await this.resolveFilePath(getCoverFilename(book), 'Books');
       const exists = await this.fs.exists(getCoverFilename(book), 'Books');
       if (!exists) return null;
       const data = await this.fs.readFile(getCoverFilename(book), 'Books', 'binary');
