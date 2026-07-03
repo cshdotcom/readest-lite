@@ -269,6 +269,7 @@ export interface HardwarePageTurnerSettings {
     pageNext: KeyBinding | null;
     sectionPrev: KeyBinding | null;
     sectionNext: KeyBinding | null;
+    refresh: KeyBinding | null;
   };
 }
 
