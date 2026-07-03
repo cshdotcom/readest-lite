@@ -31,3 +31,18 @@ export const authenticateWithBiometrics = async (reason: string): Promise<boolea
     return false;
   }
 };
+
+export const getBiometryLabelKey = (biometryType: BiometryType): string => {
+  switch (biometryType) {
+    case BiometryType.TouchID:
+      return 'settings.appLock.biometric.touchId';
+    case BiometryType.FaceID:
+      return 'settings.appLock.biometric.faceId';
+    case BiometryType.Iris:
+      return 'settings.appLock.biometric.iris';
+    case BiometryType.Fingerprint:
+      return 'settings.appLock.biometric.fingerprint';
+    default:
+      return 'settings.appLock.biometric.none';
+  }
+};
