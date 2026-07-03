@@ -17,7 +17,7 @@ import { DatabaseOpts, DatabaseService } from '@/types/database';
 import { SchemaType } from '@/services/database/migrate';
 import { Book, BookConfig, BookContent, ImportBookOptions, ViewSettings } from '@/types/book';
 import type { BookNav } from '@/services/nav';
-import { getLibraryFilename, getLibraryBackupFilename } from '@/utils/book';
+import { getLibraryFilename, getLibraryBackupFilename, getCoverFilename } from '@/utils/book';
 
 import { getOSPlatform } from '@/utils/misc';
 import { ProgressHandler } from '@/utils/transfer';
