@@ -1,42 +1,30 @@
 /**
- * Registry that maps a backend kind to a concrete {@link FileSyncProvider}, so
- * the reader hook and the Sync-now form stay backend-agnostic: they ask which
- * backends are enabled and build each one by kind, never naming WebDAV or Drive
- * directly.
- *
- * The settings view here is intentionally narrow — just the `enabled` flags plus
- * the WebDAV transport config — so this PR can land the seam without depending on
- * the full Google Drive settings shape and Integrations UI (which arrive with the
- * settings-UI phase). Drive builds itself from the env-baked client id + the
- * keychain token, so it needs no settings to construct.
+ * Lite: WebDAV-only file sync provider registry (no Google Drive).
+ * The upstream version also supports Google Drive, but Lite doesn't have
+ * the gdrive provider or OAuth client.
  */
 import type { FileSyncProvider } from './provider';
 import type { WebDAVSettings } from '@/types/settings';
 import { createWebDAVProvider } from '@/services/sync/providers/webdav/WebDAVProvider';
-import { buildGoogleDriveProvider } from '@/services/sync/providers/gdrive/buildGoogleDriveProvider';
 
-export type FileSyncBackendKind = 'webdav' | 'gdrive';
+export type FileSyncBackendKind = 'webdav';
 
 /** Minimal settings the registry reads to pick + build backends. */
 export interface FileSyncBackendsSettings {
   webdav?: WebDAVSettings;
-  googleDrive?: { enabled?: boolean };
 }
 
-/** The backends the user has switched on, in a stable order. */
+/** The backends the user has switched on. */
 export const getEnabledFileSyncBackends = (
   settings: FileSyncBackendsSettings,
 ): FileSyncBackendKind[] => {
   const enabled: FileSyncBackendKind[] = [];
   if (settings.webdav?.enabled) enabled.push('webdav');
-  if (settings.googleDrive?.enabled) enabled.push('gdrive');
   return enabled;
 };
 
 /**
- * Build the provider for one backend, or `null` when it cannot run here (WebDAV
- * without config, Drive without a baked client id / secure storage). Async
- * because Drive probes the keychain to assemble its token store.
+ * Build the provider for one backend, or `null` when it cannot run here.
  */
 export const createFileSyncProvider = async (
   kind: FileSyncBackendKind,
@@ -45,5 +33,5 @@ export const createFileSyncProvider = async (
   if (kind === 'webdav') {
     return settings.webdav ? createWebDAVProvider(settings.webdav) : null;
   }
-  return buildGoogleDriveProvider();
+  return null;
 };
