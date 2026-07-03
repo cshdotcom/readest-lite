@@ -358,7 +358,8 @@ export abstract class BaseAppService implements AppService {
       const exists = await this.fs.exists(getCoverFilename(book), 'Books');
       if (!exists) return null;
       const data = await this.fs.readFile(getCoverFilename(book), 'Books', 'binary');
-      return createHash('md5').update(Buffer.from(data)).digest('hex');
+      const buf = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data);
+      return createHash('md5').update(buf).digest('hex');
     } catch {
       return null;
     }
