@@ -9,9 +9,6 @@ import {
   MdCheck,
   MdDeleteSweep,
   MdClose,
-  MdSearch,
-  MdArrowUpward,
-  MdArrowDownward,
 } from 'react-icons/md';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
@@ -28,22 +25,20 @@ import {
   listDirectory,
   normalizeRootPath,
   WebDAVEntry,
-} from '@/services/sync/providers/webdav/client';
-import { buildBasePath, SYNC_BOOKS_DIR } from '@/services/sync/file/layout';
-import { createWebDAVProvider } from '@/services/sync/providers/webdav/WebDAVProvider';
-import { deleteRemoteBookDir } from '@/services/sync/file/engine';
-import { FileSyncError } from '@/services/sync/file/provider';
-import { WebDAVBrowseSortByType, WebDAVSettings } from '@/types/settings';
+  WebDAVRequestError,
+} from '@/services/webdav/WebDAVClient';
+import { buildBasePath, WEBDAV_BOOKS_DIR } from '@/services/webdav/WebDAVPaths';
+import { deleteRemoteBookDir } from '@/services/webdav/WebDAVSync';
+import { v4 as uuidv4 } from 'uuid';
+import { WebDAVSettings, WebDAVSyncLogEntry, WebDAVSyncLogFailure } from '@/types/settings';
 import { Book } from '@/types/book';
 import { SettingLabel } from '../primitives';
 import {
-  filterWebDAVEntries,
   formatLastModified,
   formatShortHash,
   formatSize,
   getEntryIcon,
   isSupportedBookExt,
-  sortWebDAVEntries,
 } from './webdavBrowseUtils';
 
 /**
@@ -55,15 +50,11 @@ import {
  */
 export interface WebDAVBrowsePaneProps {
   settings: WebDAVSettings;
-  /**
-   * Persist a partial WebDAV settings patch. Used to remember the sort
-   * field + direction across sessions. Optional so the pane still renders
-   * (sort/search just stay session-local) when a caller omits it.
-   */
-  onUpdateSettings?: (patch: Partial<WebDAVSettings>) => void | Promise<void>;
+  /** Persist a cleanup run into the parent's sync log when supplied. */
+  onAppendSyncLogEntry?: (entry: WebDAVSyncLogEntry) => Promise<void> | void;
 }
 
-const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateSettings }) => {
+const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onAppendSyncLogEntry }) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const { user } = useAuth();
@@ -73,10 +64,6 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
   // limit. Memoise so we don't recompute on every keystroke.
   const savedRoot = useMemo(() => normalizeRootPath(settings.rootPath || '/'), [settings.rootPath]);
 
-  // Provider for the engine-level cleanup helper (orphan GC). The browse
-  // pane is WebDAV-specific UI, so it builds the WebDAV provider directly.
-  const provider = useMemo(() => createWebDAVProvider(settings), [settings]);
-
   // Absolute path of the per-book hash directories. When the user has
   // drilled into this exact path, each row's `entry.name` is a content
   // hash and we can swap in the human-readable book title from the
@@ -85,7 +72,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
   // can be string-compared against `currentPath` without further
   // normalisation.
   const booksDirPath = useMemo(
-    () => `${buildBasePath(settings.rootPath || '/')}/${SYNC_BOOKS_DIR}`,
+    () => `${buildBasePath(settings.rootPath || '/')}/${WEBDAV_BOOKS_DIR}`,
     [settings.rootPath],
   );
 
@@ -105,15 +92,6 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
   const [downloadStatus, setDownloadStatus] = useState<
     Record<string, 'downloading' | 'done' | 'error'>
   >({});
-
-  // —— Sort & filter ——
-  // Free-text filter over the current folder (transient: reset on every
-  // navigation/refresh below). Sort field + direction seed from the
-  // persisted settings — default name/ascending reproduces the legacy
-  // directories-first alphabetical order — and write back on change.
-  const [query, setQuery] = useState('');
-  const [sortBy, setSortBy] = useState<WebDAVBrowseSortByType>(settings.browseSortBy ?? 'name');
-  const [ascending, setAscending] = useState<boolean>(settings.browseSortAscending ?? true);
 
   // —— Cleanup mode ——
   // GC surface for remote orphans (per-hash dirs whose local Book
@@ -168,24 +146,13 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
     return !!bookByHash.get(entry.name)?.deletedAt;
   };
 
-  // The listing the UI renders: cleanup mode pins to orphan rows (search
-  // is hidden there); normal mode applies the free-text filter. Both then
-  // run through the chosen sort. Sort/search resolve a hashed book dir to
-  // its library title so they operate on what the user actually sees.
-  const displayedEntries = useMemo(() => {
-    const resolveDisplayName = (entry: WebDAVEntry): string => {
-      if (entry.isDirectory && currentPath === booksDirPath) {
-        const matched = bookByHash.get(entry.name);
-        if (matched) return matched.title || entry.name;
-      }
-      return entry.name;
-    };
-    const base = cleanupMode
-      ? entries.filter(isEntryLocallyDeleted)
-      : filterWebDAVEntries(entries, query, resolveDisplayName);
-    return sortWebDAVEntries(base, sortBy, ascending, resolveDisplayName);
+  // Cleanup mode shows only the orphan rows; the toolbar uses the
+  // count too, so materialise the filter once here.
+  const displayedEntries = useMemo(
+    () => (cleanupMode ? entries.filter(isEntryLocallyDeleted) : entries),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, cleanupMode, bookByHash, currentPath, booksDirPath, query, sortBy, ascending]);
+    [entries, cleanupMode, bookByHash, currentPath, booksDirPath],
+  );
 
   /**
    * Sequentially DELETE the selected per-hash directories from the
@@ -224,6 +191,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
     );
     if (!confirmed) return;
 
+    const startedAt = Date.now();
     let succeeded = 0;
     const failed: Array<{ hash: string; title: string; reason: string }> = [];
     let authFailed = false;
@@ -233,7 +201,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
       for (let i = 0; i < targets.length; i++) {
         const t0 = targets[i]!;
         try {
-          const res = await deleteRemoteBookDir(provider, t0.hash);
+          const res = await deleteRemoteBookDir(settings, t0.hash);
           if (res.ok) {
             succeeded++;
             // Splice on success so the listing itself is the progress
@@ -253,7 +221,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
             });
           }
         } catch (e) {
-          if (e instanceof FileSyncError && e.code === 'AUTH_FAILED') {
+          if (e instanceof WebDAVRequestError && e.code === 'AUTH_FAILED') {
             // Every remaining target would fail identically; stop
             // and surface a single re-auth toast.
             authFailed = true;
@@ -274,16 +242,23 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
     // listing in lock-step with the server, and a redundant reload
     // would briefly swap in the loading spinner — visible jump.
 
+    // One source of truth for the toast and the log entry.
     let toastType: 'info' | 'warning' | 'error';
     let message: string;
+    let status: 'success' | 'partial' | 'failure';
+    let errorMessage: string | undefined;
     if (authFailed) {
       toastType = 'error';
+      status = 'failure';
       message = _('WebDAV authentication failed. Reconnect in Settings.');
+      errorMessage = message;
     } else if (failed.length === 0) {
       toastType = 'info';
+      status = 'success';
       message = _('Deleted {{n}} book(s) from server.', { n: succeeded });
     } else if (succeeded > 0) {
       toastType = 'warning';
+      status = 'partial';
       message = _(
         'Deleted {{ok}} of {{total}} book(s) from server; {{n}} failed (first: "{{first}}").',
         {
@@ -295,6 +270,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
       );
     } else {
       toastType = 'warning';
+      status = 'failure';
       message = _('Couldn\'t delete any of {{n}} book(s) from server (first: "{{first}}").', {
         n: failed.length,
         first: failed[0]?.title ?? '',
@@ -305,6 +281,43 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
       console.warn('[webdav cleanup] delete failures', failed);
     }
     eventDispatcher.dispatch('toast', { type: toastType, message });
+
+    // Persist into the shared sync log so cleanup runs are auditable
+    // alongside Sync now. The 'cleanup' kind tag drives the panel's
+    // badge and summary line; sync-only counters stay zero and the
+    // panel's zero-suppress filter hides them.
+    if (onAppendSyncLogEntry) {
+      const failedBooks: WebDAVSyncLogFailure[] | undefined =
+        failed.length > 0
+          ? failed.map((f) => ({ hash: f.hash, title: f.title, reason: f.reason }))
+          : undefined;
+      const entry: WebDAVSyncLogEntry = {
+        id: uuidv4(),
+        startedAt,
+        finishedAt: Date.now(),
+        kind: 'cleanup',
+        status,
+        trigger: 'manual',
+        totalBooks: targets.length,
+        booksDownloaded: 0,
+        filesUploaded: 0,
+        filesAlreadyInSync: 0,
+        configsUploaded: 0,
+        configsDownloaded: 0,
+        coversUploaded: 0,
+        booksDeleted: succeeded,
+        failures: failed.length,
+        summary: message,
+        errorMessage,
+        failedBooks,
+      };
+      // Fire-and-forget: a log-write failure shouldn't surface as a
+      // second toast right after the cleanup result, the user has
+      // already seen the outcome they care about.
+      void Promise.resolve(onAppendSyncLogEntry(entry)).catch((e) =>
+        console.warn('WD cleanup: failed to append sync log entry', e),
+      );
+    }
   };
 
   // Drop stale paths from the selection whenever displayedEntries
@@ -332,11 +345,8 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
     if (!currentPath) return;
     let cancelled = false;
     // Reset per-entry download status on every (re)load so stale
-    // "done" badges don't carry across folders. The filter is
-    // per-folder too — clear it so a query typed in one directory
-    // doesn't silently hide rows in the next.
+    // "done" badges don't carry across folders.
     setDownloadStatus({});
-    setQuery('');
     const load = async () => {
       setIsLoading(true);
       setLoadError(null);
@@ -385,18 +395,6 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
 
   const handleRefresh = () => {
     setReloadTick((n) => n + 1);
-  };
-
-  const handleSortByChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = e.target.value as WebDAVBrowseSortByType;
-    setSortBy(next);
-    void onUpdateSettings?.({ browseSortBy: next });
-  };
-
-  const handleToggleDirection = () => {
-    const next = !ascending;
-    setAscending(next);
-    void onUpdateSettings?.({ browseSortAscending: next });
   };
 
   /**
@@ -541,67 +539,6 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
         </div>
       </div>
 
-      {/* Sort + filter controls. Normal browse only — cleanup keeps its
-          own focused toolbar. Gated on a non-empty listing so empty /
-          unloaded folders stay uncluttered; `entries` is the pre-filter
-          length, so the row stays put (and the box clearable) even when a
-          query matches nothing. */}
-      {!cleanupMode && !loadError && entries.length > 0 && (
-        <div className='flex items-center gap-2 px-1'>
-          <div className='eink-bordered bg-base-100 flex h-8 min-w-0 flex-1 items-center rounded-lg'>
-            <MdSearch className='text-base-content/50 ms-2 h-4 w-4 flex-shrink-0' />
-            <input
-              type='text'
-              value={query}
-              spellCheck={false}
-              onChange={(e) => setQuery(e.target.value)}
-              // Keep keystrokes (Esc/Backspace) from bubbling to the
-              // Settings dialog's key handlers while typing a filter.
-              onKeyDown={(e) => e.stopPropagation()}
-              placeholder={_('Filter')}
-              aria-label={_('Filter')}
-              className='min-w-0 flex-1 bg-transparent px-2 text-sm focus:outline-none'
-            />
-            {query && (
-              <button
-                type='button'
-                onClick={() => setQuery('')}
-                className='btn btn-ghost h-8 min-h-8 w-8 flex-shrink-0 rounded-none rounded-e-lg p-0'
-                title={_('Clear')}
-                aria-label={_('Clear')}
-              >
-                <MdClose className='text-base-content/50 h-3.5 w-3.5' />
-              </button>
-            )}
-          </div>
-          <select
-            value={sortBy}
-            onChange={handleSortByChange}
-            onKeyDown={(e) => e.stopPropagation()}
-            aria-label={_('Sort by')}
-            className='select select-bordered select-sm eink-bordered bg-base-100 text-base-content h-8 min-h-8 flex-shrink-0'
-          >
-            <option value='name'>{_('Name')}</option>
-            <option value='modified'>{_('Date modified')}</option>
-            <option value='created'>{_('Date created')}</option>
-            <option value='size'>{_('Size')}</option>
-          </select>
-          <button
-            type='button'
-            onClick={handleToggleDirection}
-            className='btn btn-ghost btn-sm eink-bordered h-8 min-h-8 w-8 flex-shrink-0 px-0'
-            title={ascending ? _('Sort ascending') : _('Sort descending')}
-            aria-label={ascending ? _('Sort ascending') : _('Sort descending')}
-          >
-            {ascending ? (
-              <MdArrowUpward className='h-4 w-4' />
-            ) : (
-              <MdArrowDownward className='h-4 w-4' />
-            )}
-          </button>
-        </div>
-      )}
-
       <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
         {isLoading ? (
           <div className='flex min-h-32 items-center justify-center py-8'>
@@ -641,11 +578,6 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
               const rowTitle = isLocallyDeleted
                 ? _('Deleted locally · still on server')
                 : undefined;
-              // Surface whichever date the active sort orders by, so a
-              // "Date created" sort is legible at a glance; every other
-              // sort keeps showing the modified time. Undefined (server
-              // didn't report it) simply omits the date from the row.
-              const activeDateRaw = sortBy === 'created' ? entry.created : entry.lastModified;
               return (
                 <li key={entry.path}>
                   <div
@@ -735,7 +667,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
                           so directories don't render an empty span. */}
                       {(matchedBook ||
                         (!entry.isDirectory && typeof entry.size === 'number') ||
-                        activeDateRaw) && (
+                        entry.lastModified) && (
                         <span className='text-base-content/60 flex flex-wrap gap-x-2 text-[0.75em]'>
                           {matchedBook && (
                             <span title={entry.name} className='font-mono'>
@@ -745,8 +677,10 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
                           {!entry.isDirectory && typeof entry.size === 'number' && (
                             <span>{formatSize(entry.size)}</span>
                           )}
-                          {activeDateRaw && (
-                            <span title={activeDateRaw}>{formatLastModified(activeDateRaw)}</span>
+                          {entry.lastModified && (
+                            <span title={entry.lastModified}>
+                              {formatLastModified(entry.lastModified)}
+                            </span>
                           )}
                         </span>
                       )}
