@@ -109,7 +109,7 @@ export interface Book {
   downloadedAt?: number | null;
   coverDownloadedAt?: number | null;
   coverHash?: string | null;
-  coverUpdatedAt?: number;
+  coverUpdatedAt?: number | null;
   syncedAt?: number | null;
 
   lastUpdated?: number; // deprecated in favor of updatedAt
