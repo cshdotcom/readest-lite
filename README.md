@@ -31,7 +31,7 @@ https://github.com/cshdotcom/readest-lite
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.10.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.12.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -82,11 +82,11 @@ docker compose up -d
 | `DEEPL_PRO_API_KEYS` | 可选 | — | DeepL Pro API key，逗号分隔 |
 | `AI_GATEWAY_API_KEY` | 可选 | — | AI 聊天网关 key |
 
-指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.10.0`（每个版本都有对应 git tag）。
+指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.12.0`（每个版本都有对应 git tag）。
 
 完整说明见 [部署教程 - 环境变量](https://cshdotcom.github.io/readestl/deploy.html#env)。
 
-## v8.0 → v8.10 功能列表
+## v8.0 → v8.12 功能列表
 
 | 版本 | 核心改动 |
 |---|---|
@@ -101,7 +101,13 @@ docker compose up -d
 | v8.7 | 跨设备下载任务队列（DownloadTask 表 · 暂停/恢复/重试 · 5s 轮询） |
 | v8.8 | 分块上传规避 Cloudflare 524 超时（大文件自动切 5MB · 流式合并） |
 | v8.9 | 下载进度条/速度/ETA/用时 · 点击任务看完整日志 · 批量下载 · 自动重命名 · Cookie/Headers 高级选项 |
-| **v8.10** | **中文汉化 · 笔记链接手机默认走 web reader · 登出清空残留 library.json · 阅读统计（总/今日/本周 + 书榜） · 下载记录折叠** |
+| v8.10 | 中文汉化 · 笔记链接手机默认走 web reader · 登出清空残留 library.json · 阅读统计（总/今日/本周 + 书榜） · 下载记录折叠 |
+| v8.10.1 | 批量下载 per-URL Cookie/Headers 语法（`URL \| cookie:VALUE \| header:Key: VALUE`） |
+| v8.10.2 | 笔记导出链接绝对 URL（站外可点击） · Reader 书不在库里时自动重试加载 · 用户管理折叠 |
+| v8.10.3 | 登出后隐藏全部书籍（修复 demo books 残留） · 移出分组不再踢出用户 |
+| v8.10.4 | 恢复跨设备视图设置同步（可选开关，默认关） |
+| v8.11 | 合并上游 v0.11.17（Markdown 渲染 · PDF/CBZ 对比度 · TTS 高亮粒度 · 最近阅读书架 · foliate-js 自动更新） |
+| **v8.12** | **上游 v0.11.17 全量同步（163 文件复制 + 21 新文件 + 58 Lite 自定义保留 · 排除 Google Drive/payment/tests · 手动同步 30+ 类型字段）** |
 
 ## 数据持久化
 

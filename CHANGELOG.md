@@ -3,6 +3,201 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.12.0] — 2026-07-02
+
+### Added — 上游 v0.11.17 全量同步（逐文件对比）
+
+#### 方法
+逐文件对比 Lite 和上游 v0.11.17，分类处理：
+- **163 个安全文件**：直接从上游复制（reader 组件/hooks/utils、settings 面板、OPDS、store、services、types、helpers、styles）
+- **21 个新文件**：从上游添加（排除 Google Drive/payment/tests）
+- **58 个 Lite 自定义文件**：**绝不覆盖**，只手动添加缺失字段
+
+#### Lite 自定义保留（全部完整）
+- VaultProvider（AES-GCM 加密）
+- PHContext（safe atob，防 SSR 崩溃）
+- 本地 JWT 认证（auth pages）
+- Prisma + SQLite 后端
+- 本地文件存储
+- 登出清空逻辑
+- 用户/demo 守卫
+- syncViewSettings 开关
+- Bookshelf group-empty 修复
+- deeplink resolveWebBaseUrl
+- proxyEnabled + WebDAVSyncLogEntry
+- 下载任务（进度条/速度/ETA/日志/批量/Cookie/Headers）
+- 阅读统计（总/今日/本周 + 书榜）
+- 用户管理折叠
+- RemoteDownloadDialog
+- 所有 pages/api/* 文件（Supabase → Prisma）
+
+#### 排除（不需要/不适用）
+- Google Drive（gdrive provider, gdrive-callback, GoogleDriveForm）
+- Stripe/Apple/payment（Plan*, Checkout, useAvailablePlans）
+- 所有 __tests__/*
+
+#### 手动添加的类型字段
+webtoonMode, showStickyProgressBar, wordLensGlossFontSize/Color, SearchMode, mode,
+abandoned(ReadingStatus), coverHash/coverUpdatedAt, fraction(BookProgress),
+deletedAt+updatedAt(ProofreadRule), nearbyWords, segments+emphasized+text(SearchExcerpt),
+refresh(HardwarePageTurner), biometricUnlockEnabled, WebDAVBrowseSortByType,
+browseSortBy/browseSortAscending, synced_at/uploaded_at/downloaded_at(BookDataRecord)
+
+### CI Status
+- ✅ TypeScript 通过
+- ✅ SSR Collecting page data 通过
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像已推送：`ghcr.io/cshdotcom/readest-lite:8.12.0` / `8.12` / `latest`
+
+---
+
+## [v8.11.0] — 2026-07-01
+
+### Added — 合并上游 v0.11.13-v0.11.17 功能
+
+#### 1. Markdown (.md) 文件渲染 (#4816)
+- 直接打开和阅读 Markdown 文件
+- 布局/字体/主题设置与其他格式一致
+
+#### 2. PDF/CBZ 对比度选项 (#4800)
+- PDF/CBZ 视图菜单新增对比度调节
+- 方便阅读扫描版 PDF
+
+#### 3. TTS 高亮粒度设置 (#4807)
+- TTS 朗读时按「单词」或「句子」高亮
+- 设置面板中切换
+
+#### 4. 最近阅读书架 (#4829)
+- 书库顶部新增「最近阅读」轮播架
+- 快速回到上次阅读位置
+- 视图菜单可开关
+
+#### 5. 自动翻页角落区域上限 (#4820)
+- 自动翻页的角落触发区域 50px 上限
+- 避免宽屏误触翻页
+
+#### 6. 清理空高亮 (#4804)
+- 取消高亮时如果笔记为空，自动清理占位记录
+
+#### 7. foliate-js 自动更新
+- Docker 构建时 `git clone --depth 1` 自动获取最新 foliate-js
+- 包含：PDF 滚动模式 pinch-zoom 平滑 (#4817)、PDF 渲染延迟修复 (#4813)、翻页背景重排性能优化 (#4814)
+
+### Not Merged — 双击选词 (#4846)
+- 依赖链太深（5+ 个文件 API 修改：useTextSelector、Annotator、SelectionRangeEditor、sel.ts 等）
+- cherry-pick 后类型不匹配，已回滚
+- 留待未来完整合并
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.11.0` / `8.11` / `latest`
+
+---
+
+## [v8.10.4] — 2026-06-26
+
+### Added — 恢复跨设备视图设置同步（可选）
+
+#### View Settings 跨设备同步开关
+- **背景**：v8.6.0 合并上游 PR #4672 时把 view settings 改成设备本地，导致 A 设备改的字体/主题不会同步到 B 设备
+- **实现**：
+  - `settings.ts`：新增 `syncViewSettings?: boolean` 字段（默认 `false`）
+  - `useProgressSync.ts`：`applyRemoteProgress` 检查 `settings.syncViewSettings`
+    - `true`：合并远端 config 到本地（恢复 v8.6 之前行为）
+    - `false`：保持 v8.6 设备本地行为（只同步 CFI）
+  - `SyncCategoriesSection.tsx`：sync categories 列表下方加 toggle
+- **用户操作**：用户中心 → Manage Sync → View Settings toggle
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.10.4` / `8.10` / `latest`
+
+---
+
+## [v8.10.3] — 2026-06-24
+
+### Fixed — 登出后书籍全部隐藏 + 移出分组不再踢出用户
+
+#### 1. 登出后书籍全部隐藏（修复 demo books 残留）
+- **问题**：登出后个别书还显示
+- **根因**：`demoBooks` effect 在 `libraryLoaded=true` 时重新添加 demo books。登出时 `handleLogout` 清了 library，但 `initLibrary` 的 `!user` 守卫把 `libraryLoaded` 设为 `true`，`demoBooks` state 还在 → effect 触发 → demo books 加回来
+- **修复**：`demoBooks` effect 加 `!token || !user` 守卫，登出后不添加 demo books
+
+#### 2. 移出分组不再踢出用户（修复 group-empty auto-navigate）
+- **问题**：用户在分组里把最后一本书移出 → `currentBookshelfItems.length === 0` → Bookshelf 的 effect 自动跳回全部书架，把用户踢出当前分组
+- **修复**：只有当 `currentBookshelfItems.length === 0 && selectedGroup` 同时满足且不是用户主动操作时才跳转；用户主动移书不触发跳转
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.10.3` / `8.10` / `latest`
+
+---
+
+## [v8.10.2] — 2026-06-24
+
+### Fixed — 笔记导出链接绝对 URL + 用户管理折叠
+
+#### 1. 笔记导出链接打不开（核心 bug）
+- **问题**：导出笔记后，点击笔记里引用原书的链接，浏览器报「无法打开此书籍」
+- **根因**：`buildAnnotationWebUrl` 用构建期常量 `READEST_WEB_BASE_URL`（在 Lite 里硬编码为 `''`），导出的链接是相对路径 `/o/book/{hash}/annotation/{id}`。用户在站外（GitHub/Obsidian/VS Code）点开相对路径，浏览器不知道指向哪个域名
+- **修复**：新增 `resolveWebBaseUrl()` 运行时解析：
+  1. 浏览器运行时：`runtimeConfig.apiBaseUrl`（`PUBLIC_BASE_URL` 注入的完整 URL，反代场景）
+  2. 浏览器回退：`window.location.origin`（用户直接 IP:端口访问，没设 `PUBLIC_BASE_URL`）
+  3. 服务端：构建期常量（SSR 场景，不会真正用于导出）
+- **影响文件**：`utils/webUrl.ts`、`apps/readest-app/src/app/o/page.tsx`、`apps/readest-app/src/app/o/book/[hash]/annotation/[id]/page.tsx`
+
+#### 2. Reader 书不在库里时自动重试加载
+- **问题**：从笔记链接点回 reader，如果书不在本地 library，会停留在空白页
+- **修复**：`useOpenAnnotationLink.ts` 检测到书不在 library 时，先 toast 提示「正在加载...」，然后导航到书库页让用户手动同步，而不是只 toast 就放弃
+
+#### 3. 用户管理折叠
+- **问题**：用户数量多时用户中心面板很长
+- **修复**：用户管理列表默认折叠，点击「展开 (N)」按钮才展开
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.10.2` / `8.10` / `latest`
+
+---
+
+## [v8.10.1] — 2026-06-23
+
+### Added — 批量下载 per-URL Cookie/Headers 语法
+
+#### 批量下载支持每行 URL 单独配 Cookie/Headers
+- **问题**：v8.9 的批量下载只支持一组全局 Cookie/Headers 应用到所有 URL。如果 URL 来自不同认证网站，用户要手动分多次提交
+- **解决**：扩展 textarea 语法，支持 per-URL 指令：
+
+```
+# 开头的行是注释
+https://example.com/free.epub
+
+https://site-a.com/book1.epub | cookie:sessionid=abc123
+
+https://site-b.com/book2.epub | cookie:PHPSESSID=def | header:Referer: https://site-b.com
+```
+
+#### 语法规则
+| 指令 | 格式 | 示例 |
+|---|---|---|
+| Cookie | `cookie:VALUE` | `cookie:sessionid=abc123; theme=dark` |
+| Header | `header:Key: VALUE` | `header:Referer: https://site-b.com` |
+| 多指令 | ` \| ` 分隔 | `cookie:abc \| header:Referer: https://x.com` |
+| 注释 | `#` 开头 | `# 这是注释` |
+| 空行 | 忽略 | — |
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.10.1` / `8.10` / `latest`
+
+---
+
 ## [v8.10.0] — 2026-06-23
 
 ### Added — 中文汉化 + 阅读统计 + 下载折叠
