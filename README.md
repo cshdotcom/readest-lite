@@ -31,7 +31,7 @@ https://github.com/cshdotcom/readest-lite
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.12.1-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.12.2-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -82,7 +82,7 @@ docker compose up -d
 | `DEEPL_PRO_API_KEYS` | 可选 | — | DeepL Pro API key，逗号分隔 |
 | `AI_GATEWAY_API_KEY` | 可选 | — | AI 聊天网关 key |
 
-指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.12.1`（每个版本都有对应 git tag）。
+指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.12.2`（每个版本都有对应 git tag）。
 
 完整说明见 [部署教程 - 环境变量](https://cshdotcom.github.io/readestl/deploy.html#env)。
 
@@ -109,6 +109,7 @@ docker compose up -d
 | v8.11 | 合并上游 v0.11.17（Markdown 渲染 · PDF/CBZ 对比度 · TTS 高亮粒度 · 最近阅读书架 · foliate-js 自动更新） |
 | **v8.12** | **上游 v0.11.17 全量同步（163 文件复制 + 21 新文件 + 58 Lite 自定义保留 · 排除 Google Drive/payment/tests · 手动同步 30+ 类型字段）** |
 | **v8.12.1** | **紧急修复 v8.12.0 误覆盖 Lite 自定义：恢复 `getRemoteBookFilename` 在 'local' 存储类型返回正确文件名（修复下载报 File not found）· 恢复 AboutWindow Lite 品牌（修复「关于」弹官方页面）** |
+| **v8.12.2** | **防御性文件名生成（即使 `getStorageType`/`book.format`/`book.title` 异常也永不返回空串）· 上传/下载失败响应体加 `hint`+`received` 字段方便诊断 · 放宽 download fallback `parts.length` 检查** |
 
 ## 数据持久化
 

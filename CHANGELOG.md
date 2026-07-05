@@ -3,6 +3,41 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.12.2] — 2026-07-06
+
+### Fixed — 防御性文件名生成 + 更好的上传/下载错误信息
+
+#### 背景
+v8.12.1 已修复 v8.12.0 上游同步误覆盖 Lite 自定义代码导致的 "Invalid fileName" 和 "File not found" bug。但修复仍依赖 `getStorageType()` 返回非空字符串，对未来同类回归没有防御。v8.12.2 增加防御性兜底和更好的错误诊断信息。
+
+#### 1. `utils/book.ts` — 防御性文件名生成
+- **`getRemoteBookFilename`**：移除对 `getStorageType()` 的分支依赖（Lite 单容器部署不区分 r2/s3/local，统一用可读文件名）；兜底：`book.format` 未知 → 用 `.epub`；兜底：`sourceTitle || title || hash` 全空 → 用 `book.hash` 作文件名；永不返回空串或包含空段的路径
+- **`getLocalBookFilename`**：同样的防御性兜底
+- 移除 `getStorageType` import（不再使用）
+
+#### 2. `pages/api/storage/upload.ts` — 更好的 "Invalid fileName" 错误
+- 拒绝时响应体新增 `hint`（校验规则说明）和 `received`（实际收到的值，截断 200 字符）
+- 服务端 `console.error` 记录被拒绝的 fileName
+
+#### 3. `pages/api/storage/download.ts` — 更好的 "File not found" 错误 + 放宽 fallback
+- 拒绝时响应体新增 `hint`（3 个可能原因）和 `receivedFileKey`（实际查询的 fileKey）
+- 服务端 `console.error` 记录未匹配的 fileKey
+- **fallback 放宽**：原来要求 `parts.length === 5`，现在按段名找 `Books` 段后读两段（hash + filename），兼容 4 段 cfp 和 5 段 fileKey 以及未来变体
+
+#### 诊断流程
+未来再出现 "Invalid fileName" 或 "File not found"：
+1. 打开浏览器 devtools → Network
+2. 找到失败的 `/api/storage/upload` 或 `/api/storage/download` 请求
+3. 查看 Response 里的 `hint` 和 `received`/`receivedFileKey` 字段
+4. 把这些信息贴到 GitHub issue
+
+### CI Status
+- ✅ Docker Image workflow — build-and-push success
+- ✅ CI workflow — Smoke test success
+- 镜像已推送：`ghcr.io/cshdotcom/readest-lite:8.12.2` / `8.12` / `latest`
+
+---
+
 ## [v8.12.1] — 2026-07-03
 
 ### Fixed — 紧急修复 v8.12.0 上游同步误覆盖 Lite 自定义代码
