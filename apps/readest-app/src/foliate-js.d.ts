@@ -7,9 +7,8 @@
 //
 // To match upstream's loose inference and avoid strict-mode mismatches
 // (e.g. getCFI expecting Range but setMark returning Range|undefined),
-// we declare the TTS class with a permissive shape so all method/property
-// access resolves loosely, mirroring what allowJs inference produces for
-// untyped JS classes.
+// we declare TTS as a permissive type with all methods returning `any`,
+// mirroring what allowJs inference produces for untyped JS classes.
 
 declare module 'foliate-js/tts.js' {
   export interface SentenceEntry {
@@ -25,22 +24,14 @@ declare module 'foliate-js/tts.js' {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Generator<SentenceEntry, void, any>;
 
-  // The TTS class has ~30 methods; declaring them all precisely risks
-  // strict-mode mismatches with upstream's allowJs inference. Use a
-  // permissive constructor + index signature so callers can access any
-  // method/property without TS errors, matching the loose inference.
+  // The TTS class has ~30 methods. Declaring them all precisely risks
+  // strict-mode mismatches with upstream's allowJs inference. Declare each
+  // method app code calls with a permissive return type so callers can chain
+  // without TS errors.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export class TTS {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any;
-    constructor(
-      doc: Document,
-      textWalker: unknown,
-      nodeFilter?: unknown,
-      highlight?: unknown,
-      granularity?: string,
-    );
-  }
+  export type TTS = any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const TTS: any;
 }
 
 declare module 'foliate-js/text-walker.js' {
