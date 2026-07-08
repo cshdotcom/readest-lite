@@ -89,6 +89,8 @@ import ImportFromFolderDialog, {
 } from './components/ImportFromFolderDialog';
 import ImportFromUrlDialog from './components/ImportFromUrlDialog';
 import RemoteDownloadDialog from './components/RemoteDownloadDialog';
+import NowPlayingBar from './components/NowPlayingBar';
+import { ttsSessionManager } from '@/services/tts';
 import { convertToEpubWithWorker } from '@/services/send/conversion/conversionWorker';
 import { getClipOptions } from '@/services/send/clipOptions';
 import { invoke } from '@tauri-apps/api/core';
@@ -927,6 +929,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             book.coverDownloadedAt = null;
           }
           await updateBook(envConfig, book);
+          if (ttsSessionManager.getSessionByHash(book.hash)) {
+            await ttsSessionManager.stopActive('deleted');
+          }
           clearBookData(book.hash);
           if (syncBooks) pushLibrary();
         }
@@ -1465,6 +1470,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
               style={{
                 paddingRight: `${insets.right}px`,
                 paddingLeft: `${insets.left}px`,
+                paddingBottom: 'var(--now-playing-inset, 0px)',
               }}
             >
               <DropIndicator />
@@ -1492,6 +1498,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             <LibraryEmptyState onImport={handleImportBooksFromFiles} />
           </div>
         ))}
+      <NowPlayingBar isSelectMode={isSelectMode} />
       {showDetailsBook && (
         <BookDetailModal
           isOpen={!!showDetailsBook}
