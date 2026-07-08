@@ -27,6 +27,7 @@ declare module 'foliate-js/tts.js' {
   // The full TTS class has ~30 methods; app code only uses a handful.
   // Keep the declaration permissive to avoid drift with foliate-js internals.
   export class TTS {
+    doc: Document;
     constructor(
       doc: Document,
       textWalker: unknown,
