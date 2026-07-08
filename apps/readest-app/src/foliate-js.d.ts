@@ -14,8 +14,9 @@
 
 declare module 'foliate-js/tts.js' {
   export interface SentenceEntry {
+    blockIndex: number;
+    markName: string;
     range: Range;
-    [key: string]: unknown;
   }
   export function* getSentences(
     doc: Document,
