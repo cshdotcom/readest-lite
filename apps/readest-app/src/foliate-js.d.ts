@@ -1,16 +1,15 @@
 // Type declarations for foliate-js (untyped JS module).
-// foliate-js ships no .d.ts files; without these declarations TypeScript
-// under moduleResolution:bundler cannot resolve the dynamic imports used by
-// TTSController.ensureTimeline() (getSentences, textWalker) and the build
-// fails with "Property 'getSentences' does not exist on type 'typeof
-// import("foliate-js/tts")'". The actual runtime resolution works because
-// next.config.mjs lists foliate-js in transpilePackages and pnpm links it
-// as a workspace package; this file only teaches tsc the shapes.
+// foliate-js ships no .d.ts files. Under moduleResolution:bundler + allowJs,
+// upstream Readest resolves foliate-js as a workspace package and TS infers
+// loose types (effectively `any` for method returns). Lite's Docker build
+// git-clones foliate-js into packages/ at build time; without these
+// declarations tsc fails to resolve the dynamic imports at all.
 //
-// The TTS class is large and its full method surface is only consumed
-// internally by foliate-js; app code only calls .start/.resume/.next/.prev/
-// .prevMark/.nextMark/.setMarkEnabled. Declaring it as a permissive class
-// keeps the surface minimal without breaking callers.
+// To match upstream's loose inference and avoid strict-mode mismatches
+// (e.g. getCFI expecting Range but setMark returning Range|undefined),
+// we declare the TTS class with a permissive shape so all method/property
+// access resolves loosely, mirroring what allowJs inference produces for
+// untyped JS classes.
 
 declare module 'foliate-js/tts.js' {
   export interface SentenceEntry {
@@ -23,12 +22,17 @@ declare module 'foliate-js/tts.js' {
     textWalker: unknown,
     nodeFilter?: unknown,
     granularity?: 'sentence' | 'word',
-  ): Generator<SentenceEntry, void, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Generator<SentenceEntry, void, any>;
 
-  // The full TTS class has ~30 methods; app code only uses a handful.
-  // Keep the declaration permissive to avoid drift with foliate-js internals.
+  // The TTS class has ~30 methods; declaring them all precisely risks
+  // strict-mode mismatches with upstream's allowJs inference. Use a
+  // permissive constructor + index signature so callers can access any
+  // method/property without TS errors, matching the loose inference.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export class TTS {
-    doc: Document;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any;
     constructor(
       doc: Document,
       textWalker: unknown,
@@ -36,16 +40,6 @@ declare module 'foliate-js/tts.js' {
       highlight?: unknown,
       granularity?: string,
     );
-    start(): string | undefined;
-    resume(): string | undefined;
-    prev(paused?: boolean): string | undefined;
-    next(paused?: boolean): string | undefined;
-    prevMark(paused?: boolean): string | undefined;
-    nextMark(paused?: boolean): string | undefined;
-    from(range: Range): string | undefined;
-    getLastRange(): Range;
-    setMark(mark: string): Range;
-    setMarkEnabled(name: string, enabled: boolean): void;
   }
 }
 
