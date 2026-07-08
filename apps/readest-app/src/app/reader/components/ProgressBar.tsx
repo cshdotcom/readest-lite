@@ -287,6 +287,9 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                 'remaining-info whitespace-nowrap text-start',
                 !stickyBarActive && 'flex-1',
                 showStatusInfo && 'overflow-hidden',
+                bookData?.isFixedLayout && !isEink
+                  ? 'text-white/75 mix-blend-difference'
+                  : 'text-base-content',
               )}
             >
               {viewSettings.showRemainingTime ? (
@@ -346,6 +349,9 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
           className={clsx(
             'progress-info items-center overflow-hidden whitespace-nowrap text-end tabular-nums',
             !stickyBarActive && 'flex-1',
+            bookData?.isFixedLayout && !isEink
+              ? 'text-white/75 mix-blend-difference'
+              : 'text-base-content',
           )}
         >
           {(progressBarMode === 'all' || progressBarMode.includes('progress')) && (

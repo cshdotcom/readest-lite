@@ -204,6 +204,7 @@ export interface BookLayout {
   allowScript: boolean;
   hideScrollbar: boolean;
   webtoonMode: boolean;
+  autoScrollSpeed: number;
 }
 
 export interface BookStyle {

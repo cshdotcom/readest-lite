@@ -261,6 +261,7 @@ export const DEFAULT_BOOK_LAYOUT: BookLayout = {
   allowScript: false,
   hideScrollbar: false,
   webtoonMode: false,
+  autoScrollSpeed: 100,
 };
 
 export const DEFAULT_BOOK_LANGUAGE: BookLanguage = {
@@ -848,6 +849,13 @@ export const ZOOM_STEP = 10;
 export const MAX_CONTRAST = 300;
 export const MIN_CONTRAST = 50;
 export const CONTRAST_STEP = 10;
+
+// Auto Scroll reading mode (#4998): teleprompter-style continuous scrolling
+// in scrolled mode. Speed is a percentage of AUTO_SCROLL_BASE_PX_PER_SEC.
+export const AUTO_SCROLL_BASE_PX_PER_SEC = 20;
+export const MAX_AUTO_SCROLL_SPEED = 500;
+export const MIN_AUTO_SCROLL_SPEED = 25;
+export const AUTO_SCROLL_SPEED_STEP = 25;
 
 export const SHOW_UNREAD_STATUS_BADGE = false;
 

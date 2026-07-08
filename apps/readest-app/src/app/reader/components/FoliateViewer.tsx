@@ -50,6 +50,8 @@ import {
   handleKeyup,
   handleMousedown,
   handleMouseup,
+  handleMousemove,
+  handleAuxclick,
   handleClick,
   handleWheel,
   handleTouchStart,
@@ -74,7 +76,11 @@ import { getLocale } from '@/utils/misc';
 import { isMetered } from '@/utils/network';
 import { eventDispatcher } from '@/utils/event';
 import { isFontType } from '@/utils/font';
+import { useMiddleClickAutoscroll } from '../hooks/useMiddleClickAutoscroll';
+import { useAutoScroll } from '../hooks/useAutoScroll';
 import { ParagraphControl } from './paragraph';
+import AutoscrollIndicator from './AutoscrollIndicator';
+import AutoScrollControl from './AutoScrollControl';
 import Spinner from '@/components/Spinner';
 import KOSyncConflictResolver from './KOSyncResolver';
 import ImageViewer from './ImageViewer';
@@ -381,6 +387,8 @@ const FoliateViewer: React.FC<{
         detail.doc.addEventListener('keyup', handleKeyup.bind(null, bookKey));
         detail.doc.addEventListener('mousedown', handleMousedown.bind(null, bookKey));
         detail.doc.addEventListener('mouseup', handleMouseup.bind(null, bookKey));
+        detail.doc.addEventListener('mousemove', handleMousemove.bind(null, bookKey));
+        detail.doc.addEventListener('auxclick', handleAuxclick.bind(null, bookKey));
         detail.doc.addEventListener(
           'click',
           handleClick.bind(null, bookKey, doubleClickDisabled, !!bookData?.isFixedLayout),
@@ -491,6 +499,8 @@ const FoliateViewer: React.FC<{
   const { handlePageFlip } = usePagination(bookKey, viewRef, containerRef);
   const mouseHandlers = useMouseEvent(bookKey, handlePageFlip);
   const touchHandlers = useTouchEvent(bookKey);
+  const autoscrollAnchor = useMiddleClickAutoscroll(bookKey, viewRef, containerRef);
+  const autoScroll = useAutoScroll(bookKey, viewRef);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedTableHtml, setSelectedTableHtml] = useState<string | null>(null);
@@ -745,6 +755,7 @@ const FoliateViewer: React.FC<{
   const applyMarginAndGap = () => {
     const viewSettings = getViewSettings(bookKey)!;
     const viewState = getViewState(bookKey);
+    const bookData = getBookData(bookKey);
     const viewInsets = getViewInsets(viewSettings);
     const showDoubleBorder = viewSettings.vertical && viewSettings.doubleBorder;
     const showDoubleBorderHeader = showDoubleBorder && viewSettings.showHeader;
@@ -775,7 +786,7 @@ const FoliateViewer: React.FC<{
       const footerBarHeight = safeBottomPadding + viewSettings.marginBottomPx;
       const scrollTop = headerVisible ? gridInsets.top + viewSettings.marginTopPx : 0;
       const scrollBottom = footerVisible ? Math.max(footerBarHeight, ttsBarHeight) : ttsBarHeight;
-      setScrollMargins({ top: scrollTop, bottom: scrollBottom });
+      setScrollMargins({ top: bookData?.isFixedLayout ? 0 : scrollTop, bottom: scrollBottom });
     } else {
       setScrollMargins({ top: 0, bottom: 0 });
     }
@@ -927,6 +938,18 @@ const FoliateViewer: React.FC<{
         {...mouseHandlers}
         {...touchHandlers}
       />
+      {autoscrollAnchor && <AutoscrollIndicator anchor={autoscrollAnchor} />}
+      {autoScroll.active && (
+        <AutoScrollControl
+          bookKey={bookKey}
+          paused={autoScroll.paused}
+          speed={autoScroll.speed}
+          onTogglePause={autoScroll.togglePause}
+          onAdjustSpeed={autoScroll.adjustSpeed}
+          onStop={autoScroll.stop}
+          gridInsets={gridInsets}
+        />
+      )}
       <BrightnessOverlay visible={overlayVisible} level={overlayLevel} />
       <ParagraphControl bookKey={bookKey} viewRef={viewRef} gridInsets={gridInsets} />
       {((!docLoaded.current && loading) || viewState?.loading) && (

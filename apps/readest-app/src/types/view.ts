@@ -21,6 +21,7 @@ export interface Renderer extends HTMLElement {
   atEnd: boolean;
   containerPosition: number;
   sideProp: 'width' | 'height';
+  scrollProp: 'scrollLeft' | 'scrollTop';
   pageColors?: {
     background: string;
     foreground: string;
