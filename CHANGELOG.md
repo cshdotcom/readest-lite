@@ -3,6 +3,72 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.13.0] — 2026-07-08
+
+### Added — 上游 Readest v0.11.18 非覆盖式合入
+
+#### 合入方法
+按用户要求采用**非覆盖式**合入：逐条研究上游 v0.11.18 的 50 个 commits，按 PR 号定位上游文件改动，分类为「安全合入 / 需适配 / 与 Lite 冲突 / 不适用」，然后一个一个文件改过来，绝不粗暴复制上游文件覆盖 Lite 自定义代码。
+
+#### 第一批：阅读器核心修复（7 PRs）
+- **PR #4910** — 打开注解深链时切换到目标书（`useOpenAnnotationLink` scope 到 bookKeys + `useBooksManager.openBookInReader` 接受可选 cfi + `goToCfiWhenReady` 等待视图 init）
+- **PR #4912** — 区分双指滚动与捏合缩放（`useIframeEvents` 延迟决策：24px 死区 + 12px 平移阈值，pinch 确认后重新基线距离）
+- **PR #4911** — 暗色模式下浅色 PDF 的页眉/页脚可读性（`SectionInfo`/`ProgressBar` 用 `text-white/75 mix-blend-difference`）
+- **PR #5001** — 页边距收缩到安全区内（fixed-layout 用 `text-base-content`，reflowable 保持 blend；`HintInfo` 移除早返回 + `line-clamp-1`；`LayoutPanel` 减去 `gridInsets`；`FoliateViewer.applyMarginAndGap` fixed-layout top=0）
+- **PR #4989** — View Transitions API 按运行时能力开关（新增 `utils/viewTransition.ts` + `supportsViewTransitionsAPI`/`supportsViewTransitionGroup` 字段 + `useAppRouter` 改用能力检查而非 `isLinuxApp`）
+- **PR #4955** — 中键自动滚动（新增 `useMiddleClickAutoscroll` hook + `AutoscrollIndicator` 组件 + `autoscroller.ts` 的 `Autoscroller` 类 + `iframeEventHandlers` 加 `handleMousemove`/`handleAuxclick` + `types/view` 加 `scrollProp`）
+- **PR #4998/#4999** — Auto Scroll 阅读模式（新增 `useAutoScroll` hook + `AutoScrollControl` 浮动控制条 + `PacedScroller` 类 + `constants` 加 `AUTO_SCROLL_*` + `types/book` 加 `autoScrollSpeed` + `readerStore` 加 `autoScrollEnabled` + `shortcuts` 加 Shift+A + `ViewMenu` 加 Auto Scroll MenuItem）
+
+#### 第二批：TTS 大改版（5 PRs，作为一组合入）
+- **PR #4931** — Edge TTS 无缝 Web Audio 播放引擎（新增 `WebAudioPlayer`/`pcm`/`timeStretch`/`ttsDuration`/`SectionTimeline`；`edgeTTS` 重构 `createAudioData`；`EdgeTTSClient` 改用 WebAudioPlayer；`TTSController` 加 timeline/seek/getPlaybackInfo API）
+- **PR #4941** — 关书后 TTS 继续播放（新增 `TTSSessionManager` + `ttsMediaBridge` + `NowPlayingBar`；`TTSController` 加 detachView/attachView；删除 `useTTSMediaSession`；`library/page.tsx` 4 处手术式插入）
+- **PR #4957** — 词典弹窗加「朗读」按钮（新增 `wordPronouncer` + `DictionaryPopup`/`DictionarySheet`/`DictionaryResultsView` 加 onSpeak/speaking props）
+- **PR #4994** — Android 后台 TTS 媒体控制（TS 侧 only：`mediaSession` 移除 `keepAppInForeground`；`constants`/`types/settings`/`SettingsMenu` 移除 `alwaysInForeground`；跳过原生代码）
+- **PR #4996** — TTS 控件重设计为 mini player（新增 `TTSMiniPlayer`/`TTSPlayerSheet`/`TTSScrubber`/`SpeedChips`/`useCountdownLabel`/`usePlaybackInfo`；删除 `TTSBar`/`TTSIcon`/`TTSPanel`；`FoliateViewer` ttsBarHeight→miniPlayerClearance；`types/book`/`constants` 移除 `showTTSBar`）
+
+#### 第三批：图书馆/UI/OPDS/元数据（7 PRs）
+- **PR #4947** — 清除已完成/失败/全部时持久化传输队列（`transferManager` 加 `clearCompleted`/`clearFailed`/`clearAll` 方法 + `useTransferQueue` 改用 transferManager）
+- **PR #4831/#4913** — 主题模式切换器重设计为分段控件（`ThemeModeSelector` 重写为 radiogroup）
+- **PR #4859** — 校对规则支持逐条启用/禁用开关 + 可编辑查找模式（`ProofreadRules` 重写）
+- **PR #4948** — OPDS 自动下载目录式目录时爬取子目录（`feedChecker` + `types` 加 `MAX_CRAWL_DEPTH`/`MAX_FEEDS_PER_CRAWL`）
+- **PR #5002** — OPDS 自托管目录认证协商 + 自动下载 SSL 修复（`opds/proxy/route` 加 `isPrivateHostAllowed` + `opdsReq` 加 400 重试 + `autoDownload` 加 `skipSslVerification`）
+- **PR #4939** — EPUB 元数据中的 Calibre 自定义列（`libs/document` 加 `CalibreCustomColumn` 接口 + `utils/book` 加 `formatCalibreColumnValue` + `libraryUtils` 加 `getCalibreColumnsText` 搜索匹配 + `BookDetailView` 渲染）
+- **PR #4427** — 图书馆新增「按阅读进度排序」选项（`types/settings` 加 `Progress` 枚举 + `ViewMenu` 加选项 + `libraryUtils` 加 `getBookReadRatio` 比较）
+
+#### foliate-js 类型声明
+- 新增 `src/foliate-js.d.ts` 声明 `getSentences`/`SentenceEntry`/`TTS`（声明为 `any` 类型以匹配上游 allowJs 的宽松推断）
+- 解决 Lite Docker 构建（git clone foliate-js）vs 上游（git submodule）的类型推断差异
+
+### Lite 自定义保留（未被覆盖）
+- `utils/book.ts` — 保留 v8.12.2 防御性文件名生成，仅新增 `formatCalibreColumnValue`
+- `utils/storage.ts` — 保留 'local' 存储类型
+- `store/readerStore.ts` — 仅新增 `autoScrollEnabled` + setter
+- `services/constants.ts` — 仅新增 `AUTO_SCROLL_*` + `autoScrollSpeed`；移除 `alwaysInForeground` + `showTTSBar`
+- `types/book.ts` — 仅新增 `autoScrollSpeed`；移除 `showTTSBar`
+- `types/settings.ts` — 仅新增 `Progress` + `autoImportFolders`；移除 `alwaysInForeground`
+- `library/page.tsx` — 4 处手术式插入，保留 v8.10 登出守卫 + RemoteDownloadDialog
+- `AboutWindow.tsx` — 保留 Lite 品牌（v8.12.1 修复）
+- 所有 `pages/api/*` 和 `app/api/*` — 保留 Prisma 版本
+
+### 排除的 PR（不适用 Lite）
+- Sentry 崩溃报告（#4914, #4929, #4952, #4958）
+- iOS/macOS 原生（#4917, #4891, #4896, #4890, #4909）
+- Nix（#4883, #4932）
+- Calibre 插件（#4918）
+- turso（#4927）
+- Android e2e test（#4921）
+- koplugin（#4954）
+- PR #4949（被 #4989 取代）
+- S3 兼容云同步及系列 sync PR（#4990, #4976, #4975, #4982, #4973, #4971, #4981, #4946, #4944, #4928）
+- watched folder 自动导入（#4902）— 留待 v8.14
+
+### CI Status
+- ✅ Docker Image workflow — build-and-push success
+- ✅ CI workflow — Smoke test success
+- 镜像已推送：`ghcr.io/cshdotcom/readest-lite:8.13.0` / `8.13` / `latest`
+
+---
+
 ## [v8.12.2] — 2026-07-06
 
 ### Fixed — 防御性文件名生成 + 更好的上传/下载错误信息
