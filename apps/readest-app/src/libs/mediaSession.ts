@@ -22,6 +22,11 @@ export interface MediaSessionState {
   notificationText?: string;
   foregroundServiceTitle?: string;
   foregroundServiceText?: string;
+  // Book identity persisted natively so Android Auto can offer a "Resume last
+  // book" entry when the process is cold (no active session).
+  bookHash?: string;
+  bookTitle?: string;
+  bookAuthor?: string;
 }
 
 interface Permissions {
