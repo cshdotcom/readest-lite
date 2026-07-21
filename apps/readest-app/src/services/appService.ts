@@ -33,6 +33,11 @@ import * as FontSvc from './fontService';
 import * as ImageSvc from './imageService';
 import * as LibrarySvc from './libraryService';
 import * as Settings from './settingsService';
+import {
+  loadFeeds as loadFeedsFromDisk,
+  saveFeeds as saveFeedsToDisk,
+} from '@/services/rss/feedPersistence';
+import type { RssFeed } from '@/types/rss';
 
 export abstract class BaseAppService implements AppService {
   osPlatform: OsPlatform = getOSPlatform();
@@ -440,6 +445,14 @@ export abstract class BaseAppService implements AppService {
 
   async saveBookNav(book: Book, nav: BookNav) {
     return BookSvc.saveBookNav(this.fs, book, nav);
+  }
+
+  async loadFeeds(): Promise<RssFeed[]> {
+    return loadFeedsFromDisk(this.fs);
+  }
+
+  async saveFeeds(feeds: RssFeed[]): Promise<void> {
+    return saveFeedsToDisk(this.fs, feeds);
   }
 
   async loadLibraryBooks(): Promise<Book[]> {

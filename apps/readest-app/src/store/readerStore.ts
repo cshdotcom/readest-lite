@@ -13,6 +13,9 @@ import { Insets } from '@/types/misc';
 import { EnvConfigType } from '@/services/environment';
 import { FoliateView } from '@/types/view';
 import { DocumentLoader, TOCItem } from '@/libs/document';
+import type { FileSystem } from '@/types/system';
+import { isFeedBookUrl, parseFeedBookUrl } from '@/services/rss/feedBookUrl';
+import { openFeedBookDoc } from '@/services/rss/feedReader';
 import {
   isPseStreamFileName,
   openPseStreamBook,
@@ -194,14 +197,21 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         throw new Error('Book not found');
       }
       const isPseStream = !!book.url && isPseStreamFileName(book.url);
+      const isFeed = !!book.url && isFeedBookUrl(book.url);
       let bookDoc = bookData?.bookDoc;
       let file: File | null = bookData?.file ?? null;
-      if (!bookDoc || (!isPseStream && !file) || reload) {
+      if (!bookDoc || (!isPseStream && !isFeed && !file) || reload) {
         console.log('Loading book', key);
         if (isPseStream) {
           const data = parsePseStreamFileName(book.url!);
           const doc = await openPseStreamBook(data);
           bookDoc = doc.book;
+          file = null;
+        } else if (isFeed) {
+          const { feedUrl } = parseFeedBookUrl(book.url!);
+          // AppService publicly exposes the readFile/writeFile/exists surface of FileSystem.
+          const fs = appService as unknown as FileSystem;
+          bookDoc = await openFeedBookDoc(fs, book.hash, feedUrl, book.title);
           file = null;
         } else {
           const content = (await appService.loadBookContent(book)) as BookContent;

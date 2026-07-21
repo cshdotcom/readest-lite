@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { MdLink, MdRssFeed, MdDownload } from 'react-icons/md';
 import { IoFileTray } from 'react-icons/io5';
+import { LuLibrary } from 'react-icons/lu';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import MenuItem from '@/components/MenuItem';
@@ -13,6 +14,7 @@ interface ImportMenuProps {
   onImportBookFromUrl?: () => void;
   onDownloadFromUrl?: () => void;
   onOpenCatalogManager: () => void;
+  onOpenFeeds: () => void;
 }
 
 const ImportMenu: React.FC<ImportMenuProps> = ({
@@ -22,6 +24,7 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
   onImportBookFromUrl,
   onDownloadFromUrl,
   onOpenCatalogManager,
+  onOpenFeeds,
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
@@ -48,6 +51,11 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
 
   const handleOpenCatalogManager = () => {
     onOpenCatalogManager();
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleOpenFeeds = () => {
+    onOpenFeeds();
     setIsDropdownOpen?.(false);
   };
 
@@ -83,8 +91,13 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
         />
       )}
       <MenuItem
-        label={appService?.isOnlineCatalogsAccessible ? _('Online Library') : _('OPDS Catalogs')}
+        label={_('From Feed URL')}
         Icon={<MdRssFeed className='h-5 w-5' />}
+        onClick={handleOpenFeeds}
+      />
+      <MenuItem
+        label={appService?.isOnlineCatalogsAccessible ? _('Online Library') : _('OPDS Catalogs')}
+        Icon={<LuLibrary className='h-5 w-5' />}
         onClick={handleOpenCatalogManager}
       />
     </Menu>
