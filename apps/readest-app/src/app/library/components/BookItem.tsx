@@ -30,6 +30,7 @@ interface BookItemProps {
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
+  showTimeRemaining?: boolean;
 }
 
 const BookItem: React.FC<BookItemProps> = ({
