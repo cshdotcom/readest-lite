@@ -35,6 +35,7 @@ https://github.com/cshdotcom/readest-lite
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
+💬 **交流社区**：https://nodebyte.cn
 
 ## 快速开始
 
@@ -164,6 +165,7 @@ data/
 
 - 🌐 [官网](https://cshdotcom.github.io/readestl/)
 - 📚 [部署教程](https://cshdotcom.github.io/readestl/deploy.html) — 完整部署指南
+- 💬 [交流社区](https://nodebyte.cn) — 用户讨论、问题反馈、功能建议
 - 🔧 [迭代提示词](https://cshdotcom.github.io/readestl/aph.html) — AI 维护交接（隐藏页面）
 - 📄 [DEPLOY.md](./DEPLOY.md) — 部署细节与验证
 - 📝 [FRONTEND_CHANGES.md](./FRONTEND_CHANGES.md) — 前端改造清单
