@@ -271,7 +271,13 @@ export const mergePartsForKey = async (fileKey: string, expectedTotal: number): 
   await fs.mkdir(targetDir, { recursive: true });
 
   // 流式合并：每个 part createReadStream → pipe 到 target writeStream
-  const { Readable } = await import('stream');
+  // Note:不能用 `await import('stream')` 然后 `const { Readable } = ns`，
+  // 因为 Next.js standalone 打包后 webpack 动态导入会把 stream 模块的
+  // namespace 转成 { default: stream } 而非 { Readable, ... }（stream 的
+  // module.exports 是函数而非 object，webpack 的 namespace 复制循环跳过
+  // 函数类型，导致 Readable 为 undefined）。改用顶层 require 同步获取。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Readable } = require('stream') as typeof import('stream');
   const { pipeline } = await import('stream/promises');
 
   const partStreams = partNames.map((name) => createReadStream(path.join(partsDir, name)));
