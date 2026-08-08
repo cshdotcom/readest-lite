@@ -31,7 +31,7 @@ https://github.com/cshdotcom/readest-lite
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.13.1-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.14.2-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -83,7 +83,7 @@ docker compose up -d
 | `DEEPL_PRO_API_KEYS` | 可选 | — | DeepL Pro API key，逗号分隔 |
 | `AI_GATEWAY_API_KEY` | 可选 | — | AI 聊天网关 key |
 
-指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.13.1`（每个版本都有对应 git tag）。
+指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.14.2`（每个版本都有对应 git tag）。
 
 完整说明见 [部署教程 - 环境变量](https://cshdotcom.github.io/readestl/deploy.html#env)。
 
