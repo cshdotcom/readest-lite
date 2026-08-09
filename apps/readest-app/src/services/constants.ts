@@ -368,8 +368,12 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   showStickyProgressBar: false,
 };
 
+export const DEFAULT_SENTENCE_GAP_SEC = 0.5;
+export const DEFAULT_PARAGRAPH_GAP_SEC = 2.0;
 export const DEFAULT_TTS_CONFIG: TTSConfig = {
   ttsRate: 1.3,
+  ttsSentenceGap: DEFAULT_SENTENCE_GAP_SEC,
+  ttsParagraphGap: DEFAULT_PARAGRAPH_GAP_SEC,
   ttsVoice: '',
   ttsLocation: '',
   ttsHighlightOptions: { style: 'highlight', color: '#808080' },
