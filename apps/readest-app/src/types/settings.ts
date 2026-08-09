@@ -7,7 +7,7 @@ import type { AISettings } from '@/services/ai/types';
 import type { NotebookTab } from '@/store/notebookStore';
 import type { DictionarySettings, ImportedDictionary } from '@/services/dictionaries/types';
 
-export type ThemeType = 'light' | 'dark' | 'auto';
+export type ThemeType = 'light' | 'dark' | 'auto' | 'ambient';
 export type LibraryViewModeType = 'grid' | 'list';
 export const LibrarySortByType = {
   Title: 'title',
