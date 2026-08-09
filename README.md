@@ -36,6 +36,7 @@ https://github.com/cshdotcom/readest-lite
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
 💬 **交流社区**：https://nodebyte.cn
+😎**项目反馈支持** : https://linux.do
 
 ## 快速开始
 
