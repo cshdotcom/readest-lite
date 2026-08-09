@@ -6,8 +6,10 @@ import { useReaderStore } from '@/store/readerStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { getOSPlatform } from '@/utils/misc';
 import { eventDispatcher } from '@/utils/event';
+import { setSelectionSuppressed } from '@/utils/bridge';
 import {
   focusCaretWindowPos,
+  getCaretPointFromPoint,
   getWordRangeFromPoint,
   isHyphenHandleBugProneRange,
   isPointerInsideSelection,
@@ -15,6 +17,7 @@ import {
   rangeFromAnchorToPoint,
   repairJumpedSelectionRange,
   TextSelection,
+  trimRangeWhitespaceAroundPoint,
 } from '@/utils/sel';
 import { Corner, useAutoPageTurn } from './useAutoPageTurn';
 import { useInstantAnnotation } from './useInstantAnnotation';
@@ -29,6 +32,9 @@ const INSTANT_HOLD_MS = 300;
 // Movement past this many CSS px during the hold means the user is swiping, not
 // settling in to highlight, so the pending engagement is cancelled.
 const INSTANT_HOLD_MOVE_PX = 10;
+// Ignore tiny pointer jitter, but preserve a deliberate double-click-drag even
+// when it only extends the selection into adjacent whitespace.
+const DOUBLE_CLICK_DRAG_MOVE_PX = 3;
 
 export const useTextSelector = (
   bookKey: string,
@@ -61,6 +67,11 @@ export const useTextSelector = (
   const isUpToPopup = useRef(false);
   const isTextSelected = useRef(false);
   const isTouchStarted = useRef(false);
+  // A touch selectionchange deferred until the gesture ends: iOS streams
+  // selectionchange while a finger drags the system selection handles, and
+  // the Annotator hides the popup on every touchmove — re-showing it per
+  // change made the annotation toolbar flash. Processed in handleTouchEnd.
+  const pendingTouchSelection = useRef(false);
   const selectionPosition = useRef<number | null>(null);
   const lastPointerType = useRef<string>('mouse');
   // Whether a pointer drag (mouse/touch selection) is currently in progress.
@@ -89,6 +100,7 @@ export const useTextSelector = (
   // native touchmove): an auto-turn engagement signal alongside the caret, and
   // the finger position the Android hyphen repair rebuilds from.
   const pointerPos = useRef<{ x: number; y: number } | null>(null);
+  const mouseDoubleClickRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   // Android hyphen selection-bounds bug (#1553): the selection anchor captured
   // at the first selectionchange of a touch gesture, plus whether that initial
@@ -101,6 +113,23 @@ export const useTextSelector = (
   // selectionchange dispatches a task after the mutation.
   const programmaticSelectionRef = useRef(false);
   const programmaticClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // #5427: whether the native layer is currently refusing the system
+  // selection toolbar (MainActivity hands out a no-op ActionMode while set).
+  const selectionMenuSuppressedRef = useRef(false);
+
+  // Chromium can (re)show the floating selection ActionMode through paths
+  // that never fire a cancelable contextmenu event (handle-drag release,
+  // window focus regain, TextClassifier callbacks), so handleContextmenu's
+  // preventDefault alone cannot keep it off Readest's own toolbar. Keep the
+  // native gate set exactly while reader text is selected — with no reader
+  // selection the flag is off, so system Cut/Copy/Paste menus in editable
+  // fields keep working.
+  const syncSelectionMenuSuppression = (suppressed: boolean) => {
+    if (selectionMenuSuppressedRef.current === suppressed) return;
+    selectionMenuSuppressedRef.current = suppressed;
+    setSelectionSuppressed({ target: 'menu', suppressed }).catch(() => {});
+  };
 
   const guardProgrammaticSelection = () => {
     if (programmaticClearTimer.current) clearTimeout(programmaticClearTimer.current);
@@ -117,6 +146,7 @@ export const useTextSelector = (
   const {
     isInstantAnnotationEnabled,
     handleInstantAnnotationPointerDown,
+    handleInstantAnnotationEngage,
     handleInstantAnnotationPointerMove,
     handleInstantAnnotationPointerCancel,
     handleInstantAnnotationPointerUp,
@@ -138,13 +168,19 @@ export const useTextSelector = (
     index: number,
     rebuildRange = false,
     handlesSuppressed = false,
+    trimPoint?: { node: Node; offset: number } | null,
   ) => {
     isTextSelected.current = true;
-    const range = sel.getRangeAt(0);
+    const liveRange = sel.getRangeAt(0);
     if (rebuildRange) {
       sel.removeAllRanges();
-      sel.addRange(range);
+      sel.addRange(liveRange);
     }
+    // Selection.getRangeAt() returns the live, associated Range by reference.
+    // Clone only for double-click normalization so native touch paths retain
+    // their established Range behavior and browser handles stay untouched.
+    const range = trimPoint ? liveRange.cloneRange() : liveRange;
+    if (trimPoint) trimRangeWhitespaceAroundPoint(range, trimPoint.node, trimPoint.offset);
     const progress = getProgress(bookKey);
     setSelection({
       key: bookKey,
@@ -196,7 +232,11 @@ export const useTextSelector = (
   // Begin the touch still-hold: engage the instant annotation only once the
   // finger has stayed put on the text for INSTANT_HOLD_MS. preventDefault is NOT
   // called here, so a tap or swipe that bows out keeps its native page-turn.
-  const armInstantHold = (doc: Document, ev: PointerEvent) => {
+  // The native long-press selection needs no suppression here: instant mode
+  // makes the content non-selectable at the stylesheet level (getStyles) —
+  // JS-applied user-select at pointer-down proved too late for iOS WebKit's
+  // long-press recognizer.
+  const armInstantHold = (doc: Document, index: number, ev: PointerEvent) => {
     const feRect = doc.defaultView?.frameElement?.getBoundingClientRect();
     instantHoldTarget.current = ev.target as HTMLElement;
     instantHoldStartClient.current = { x: ev.clientX, y: ev.clientY };
@@ -220,6 +260,10 @@ export const useTextSelector = (
         return;
       }
       startInstantAnnotating(target, startClient);
+      // Preview the word under the finger right away (the feedback the
+      // suppressed system long-press selection used to give); a release
+      // without a drag commits it and opens the range editor.
+      handleInstantAnnotationEngage(doc, index);
     }, INSTANT_HOLD_MS);
   };
 
@@ -245,7 +289,7 @@ export const useTextSelector = (
       const isTouch = ev.pointerType === 'touch' || ev.pointerType === 'pen';
       if (isTouch) {
         // Touch: gate behind a still hold so a tap or swipe still turns the page.
-        armInstantHold(doc, ev);
+        armInstantHold(doc, index, ev);
       } else {
         // Mouse: a press-drag is an unambiguous highlight intent; engage at once.
         ev.preventDefault();
@@ -254,7 +298,27 @@ export const useTextSelector = (
     }
   };
 
+  // UI Events exposes the current click count on mousedown (`detail`). Record
+  // the second primary-button press before pointerup publishes the native word
+  // selection, so any browser-added separator can be removed exactly once.
+  const handleMouseDown = (ev: MouseEvent) => {
+    const doubleClickEnabled = !getViewSettings(bookKey)?.disableDoubleClick;
+    mouseDoubleClickRef.current =
+      doubleClickEnabled && ev.button === 0 && ev.detail === 2
+        ? { x: ev.clientX, y: ev.clientY, moved: false }
+        : null;
+  };
+
   const handlePointerMove = (doc: Document, index: number, ev: PointerEvent) => {
+    const doubleClick = mouseDoubleClickRef.current;
+    if (
+      doubleClick &&
+      ev.pointerType === 'mouse' &&
+      Math.hypot(ev.clientX - doubleClick.x, ev.clientY - doubleClick.y) >=
+        DOUBLE_CLICK_DRAG_MOVE_PX
+    ) {
+      doubleClick.moved = true;
+    }
     // The listener lives on the book iframe's document, so ev.clientX/Y are in
     // the (very wide, multi-column) iframe viewport. Map to window coordinates
     // via the iframe element's on-screen rect, like the selection caret.
@@ -326,6 +390,7 @@ export const useTextSelector = (
 
   const handlePointerCancel = (_doc: Document, _index: number, _ev: PointerEvent) => {
     isPointerDown.current = false;
+    mouseDoubleClickRef.current = null;
     // A pending still-hold that never engaged: drop it so a swipe-takeover
     // (Android fires pointercancel when the browser starts scrolling) keeps its
     // native page-turn instead of being swallowed.
@@ -422,11 +487,9 @@ export const useTextSelector = (
 
   // A double-click / touch double-tap on a word: select the word (like a
   // long-press selection) and route it through the same selection state that
-  // drives the quick action / annotation toolbar. On desktop the browser already
-  // selects the word natively on a real double-click, and that selection flows
-  // through handlePointerUp; so we only synthesize the selection when nothing is
-  // selected yet — the touch double-tap case (Android has no native word-select
-  // gesture), where the dblclick is detected from two quick taps.
+  // drives the quick action / annotation toolbar. Desktop native selection is
+  // finalized in handlePointerUp; touch double-tap still needs this synthesized
+  // range when the platform has no native word-select gesture.
   const handleDoubleClick = async (doc: Document, index: number, x: number, y: number) => {
     if (isInstantAnnotating.current) return;
     const sel = doc.getSelection();
@@ -437,6 +500,9 @@ export const useTextSelector = (
     sel.removeAllRanges();
     sel.addRange(range);
     releaseProgrammaticSelection();
+    // With the instant-highlight stylesheet suppression active, WebKit may
+    // refuse the programmatic selection on non-selectable content.
+    if (sel.rangeCount === 0) return;
     // No isUpToPopup latch here: a double-tap is two taps both consumed by the
     // double-click detection, so no trailing single-click follows that would
     // dismiss the popup — the next deliberate tap should dismiss it normally.
@@ -445,12 +511,22 @@ export const useTextSelector = (
 
   const handlePointerUp = async (doc: Document, index: number, ev?: PointerEvent) => {
     isPointerDown.current = false;
+    const mouseDoubleClick = mouseDoubleClickRef.current;
+    mouseDoubleClickRef.current = null;
     // A tap (or a long-press shorter than the hold) that never engaged: drop the
     // pending still-hold so the tap falls through to a page turn.
     if (instantHoldTimer.current) cancelInstantHold();
     if (isInstantAnnotating.current && ev) {
       stopInstantAnnotating();
       const handled = await handleInstantAnnotationPointerUp(doc, index, ev);
+      if (handled === 'editor') {
+        // The hold committed a word highlight and left the range editor open.
+        // Consume the trailing click with the "this release leads to a popup"
+        // latch (same as the selection popup flow) — the 200ms isTextSelected
+        // latch below would let the click dismiss the fresh editor instead.
+        isUpToPopup.current = true;
+        return;
+      }
       if (handled) {
         isTextSelected.current = true;
         setTimeout(() => {
@@ -475,13 +551,22 @@ export const useTextSelector = (
     const sel = doc.getSelection() as Selection;
     if (isValidSelection(sel)) {
       const isPointerInside = ev && isPointerInsideSelection(sel, ev);
+      let trimPoint: { node: Node; offset: number } | null = null;
+      if (
+        isPointerInside &&
+        ev.pointerType === 'mouse' &&
+        mouseDoubleClick &&
+        !mouseDoubleClick.moved
+      ) {
+        trimPoint = getCaretPointFromPoint(doc, mouseDoubleClick.x, mouseDoubleClick.y);
+      }
 
       // iOS no longer needs a special path: the native plugin
       // (ContextMenuSuppressor) suppresses the system selection menu, so
       // iOS selections go through the same path as desktop.
       if (isPointerInside) {
         isUpToPopup.current = true;
-        makeSelection(sel, index, true);
+        makeSelection(sel, index, true, false, trimPoint);
       } else if (appService?.isAndroidApp) {
         isUpToPopup.current = false;
       }
@@ -493,6 +578,7 @@ export const useTextSelector = (
   };
   const handleTouchStart = () => {
     isTouchStarted.current = true;
+    pendingTouchSelection.current = false;
     gestureInitialRef.current = null;
     sanitizedGestureRef.current = false;
     // Pointer positions are per-gesture: a stale point from a previous touch
@@ -504,8 +590,25 @@ export const useTextSelector = (
       ev.preventDefault();
     }
   };
-  const handleTouchEnd = () => {
+  // Ends the touch gesture and processes a selectionchange that was deferred
+  // while the finger was down (see handleSelectionchange): the selection state
+  // updates once, so the annotation popup appears once, at the release. The
+  // Android native-touch bridge calls this without a doc (it never defers).
+  const handleTouchEnd = (doc?: Document, index?: number) => {
     isTouchStarted.current = false;
+    if (!pendingTouchSelection.current) return;
+    pendingTouchSelection.current = false;
+    if (!doc || index === undefined) return;
+    const sel = doc.getSelection();
+    if (sel && isValidSelection(sel)) {
+      if (selectionPosition.current === null) {
+        selectionPosition.current = view?.renderer?.containerPosition ?? null;
+      }
+      makeSelection(sel, index, false);
+    } else if (isTextSelected.current) {
+      handleDismissPopup();
+      isTextSelected.current = false;
+    }
   };
 
   // The corner the latest pointer (pointermove / native touchmove) position is in.
@@ -537,6 +640,8 @@ export const useTextSelector = (
     const sel = doc.getSelection() as Selection;
     const viewSettings = getViewSettings(bookKey);
 
+    if (isAndroid) syncSelectionMenuSuppression(isValidSelection(sel));
+
     // First selection of an Android touch gesture: remember the anchor and
     // whether it is prone to the hyphen bounds bug (#1553), before any
     // drag-extension can corrupt it.
@@ -562,6 +667,17 @@ export const useTextSelector = (
     // adjustment (#4728) has no pointerup — process it as long as a pointer drag
     // isn't in progress (mid-drag still defers to pointerup).
     if (!isAndroid && !isTouchInput && isPointerDown.current) return;
+    // Touch drags in paginated mode (iOS/web): the system handle drag streams
+    // selectionchange while the Annotator's touchmove handler hides the popup;
+    // processing each change re-showed it and made the toolbar flash. Defer to
+    // the gesture end (handleTouchEnd). Scroll mode keeps the immediate path —
+    // there the gesture can end in pointercancel with no processing after it.
+    // Android keeps it too: selectionchange is its primary selection signal
+    // and its popup-hiding touchmove never fires.
+    if (!isAndroid && isTouchInput && isTouchStarted.current && !viewSettings?.scrolled) {
+      pendingTouchSelection.current = true;
+      return;
+    }
     if (isValidSelection(sel)) {
       if (selectionPosition.current === null) {
         // Save the absolute container scroll, not `renderer.start` — the
@@ -667,6 +783,7 @@ export const useTextSelector = (
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleMouseDown,
     handlePointerDown,
     handlePointerMove,
     handleNativeTouchMove,
