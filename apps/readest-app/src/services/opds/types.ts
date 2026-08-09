@@ -1,4 +1,5 @@
 import type { Book } from '@/types/book';
+import type { OPDSBookMetadata } from './metadata';
 
 // --- Constants ---
 
@@ -23,6 +24,10 @@ export interface PendingItem {
   entryId: string;
   title: string;
   acquisitionHref: string;
+  /** Cover advertised by the entry, preferred over the one inside the file (#5270). */
+  coverHref?: string;
+  /** Metadata advertised by the entry, applied over the file's own (#5270). */
+  metadata?: OPDSBookMetadata;
   mimeType: string;
   updated?: string;
   baseURL: string;

@@ -5,8 +5,10 @@ import { downloadFile } from '@/libs/storage';
 import { getFileExtFromMimeType } from '@/libs/document';
 import { needsProxy, getProxiedURL, probeAuth, probeFilename } from '@/app/opds/utils/opdsReq';
 import { resolveURL, parseMediaType, getFileExtFromPath } from '@/app/opds/utils/opdsUtils';
-import { normalizeOPDSCustomHeaders } from '@/app/opds/utils/customHeaders';
+import { normalizeCustomHeaders } from '@/utils/customHeaders';
 import { READEST_OPDS_USER_AGENT } from '@/services/constants';
+import { applyOPDSCover } from './cover';
+import { applyOPDSMetadata } from './metadata';
 import { checkFeedForNewItems } from './feedChecker';
 import {
   loadSubscriptionState,
@@ -31,7 +33,7 @@ async function downloadAndImport(
   const url = resolveURL(item.acquisitionHref, item.baseURL);
   const username = catalog.username ?? '';
   const password = catalog.password ?? '';
-  const customHeaders = normalizeOPDSCustomHeaders(catalog.customHeaders);
+  const customHeaders = normalizeCustomHeaders(catalog.customHeaders);
   const useProxy = needsProxy(url);
 
   let downloadUrl = useProxy ? getProxiedURL(url, '', true, customHeaders) : url;
@@ -93,6 +95,27 @@ async function downloadAndImport(
 
   const book = await appService.importBook(dstFilePath, books);
   if (!book) throw new Error(`importBook returned null for ${item.title}`);
+  // The catalog's curated metadata wins over the file's embedded record
+  // (#5270). Retry items rebuilt from FailedEntry carry none and skip.
+  if (item.metadata) {
+    applyOPDSMetadata(book, item.metadata);
+  }
+  // The catalog's own artwork wins over the one embedded in the file (#5270).
+  // Best effort: a failure here must not fail an otherwise good import.
+  if (item.coverHref) {
+    try {
+      await applyOPDSCover({
+        appService,
+        book,
+        coverUrl: resolveURL(item.coverHref, item.baseURL),
+        username,
+        password,
+        customHeaders,
+      });
+    } catch (error) {
+      console.warn(`[OPDS] failed to apply the feed cover for "${item.title}":`, error);
+    }
+  }
   try {
     await upsertOPDSSourceMapping(appService, {
       catalogId: catalog.contentId || catalog.id,

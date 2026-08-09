@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
+import { MdOutlineSensors } from 'react-icons/md';
 import { useEnv } from '@/context/EnvContext';
 import { useThemeStore } from '@/store/themeStore';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -10,6 +11,7 @@ import { useDeviceControlStore } from '@/store/deviceStore';
 import { saveSysSettings } from '@/helpers/settings';
 import { themes } from '@/styles/themes';
 import { debounce } from '@/utils/debounce';
+import { nextThemeMode } from '@/utils/ambientLight';
 import Slider from '@/components/Slider';
 
 const SCREEN_BRIGHTNESS_LIMITS = {
@@ -54,11 +56,12 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({
   const debouncedSetScreenBrightness = useMemo(
     () =>
       debounce(async (value: number) => {
-        saveSysSettings(envConfig, 'screenBrightness', value);
-        saveSysSettings(envConfig, 'autoScreenBrightness', false);
+        if (!settings.autoScreenBrightness) {
+          saveSysSettings(envConfig, 'screenBrightness', value);
+        }
         await setScreenBrightness(value / 100);
       }, 100),
-    [envConfig, setScreenBrightness],
+    [envConfig, setScreenBrightness, settings.autoScreenBrightness],
   );
 
   const handleScreenBrightnessChange = useCallback(
@@ -72,17 +75,20 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({
   );
 
   const cycleThemeMode = () => {
-    const nextMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
-    setThemeMode(nextMode);
+    setThemeMode(nextThemeMode(themeMode, !!appService?.hasAmbientLightSensor));
   };
 
   const classes = clsx(
     'footerbar-color-mobile not-eink:bg-base-200 eink:bg-base-100 absolute flex w-full flex-col items-center gap-y-8 px-4 transition-all',
     'eink:border-base-content eink:border-t',
     !forceMobileLayout && 'sm:hidden',
+    // Paddings stay constant in both states (the slide is transform-only) so
+    // offsetHeight always reports the panel's settled height; the TTS mini
+    // player measures it to stack above the expanded panel.
+    'pb-4 pt-8',
     actionTab === 'color'
-      ? 'pointer-events-auto translate-y-0 pb-4 pt-8 ease-out'
-      : 'pointer-events-none invisible translate-y-full overflow-hidden pb-0 pt-0 ease-in',
+      ? 'pointer-events-auto translate-y-0 ease-out'
+      : 'pointer-events-none invisible translate-y-full overflow-hidden ease-in',
   );
 
   return (
@@ -171,6 +177,8 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({
               <PiSun size={20} />
             ) : themeMode === 'dark' ? (
               <PiMoon size={20} />
+            ) : themeMode === 'ambient' ? (
+              <MdOutlineSensors size={20} />
             ) : (
               <TbSunMoon size={20} />
             )}

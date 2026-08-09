@@ -4,9 +4,15 @@ import {
   LibrarySecondarySortByType,
   LibrarySortByType,
 } from '@/types/settings';
-import { formatAuthors, formatTitle, isCurrentlyReadingBook } from '@/utils/book';
+import {
+  formatAuthors,
+  formatTitle,
+  getContributorNames,
+  isCurrentlyReadingBook,
+} from '@/utils/book';
 import { md5Fingerprint } from '@/utils/md5';
 import { SIZE_PER_LOC, SIZE_PER_TIME_UNIT } from '@/services/constants';
+import { isFeedBook } from '@/services/rss/feedBookUrl';
 
 /** Valid sort types for the library */
 const VALID_SORT_TYPES: LibrarySortByType[] = Object.values(LibrarySortByType);
@@ -149,11 +155,47 @@ export const expandBookshelfSelection = (ids: string[], items: (Book | BooksGrou
   return [...hashes];
 };
 
+/**
+ * The books a bulk Download should actually fetch (#5244): the selection
+ * expanded through {@link expandBookshelfSelection}, narrowed to the books that
+ * live in the cloud but not on this device. The predicate matches the per-book
+ * "Download Book" affordance — a feed book has no file to fetch (#5307), and a
+ * book that was never uploaded or is already local has nothing to pull down.
+ */
+export const selectDownloadableBooks = (
+  ids: string[],
+  items: (Book | BooksGroup)[],
+  books: Book[],
+): Book[] => {
+  const hashes = new Set(expandBookshelfSelection(ids, items));
+  return books.filter(
+    (book) =>
+      hashes.has(book.hash) &&
+      !book.deletedAt &&
+      !isFeedBook(book) &&
+      !!book.uploadedAt &&
+      !book.downloadedAt,
+  );
+};
+
 // Calibre custom column names and values, flattened for searching (#4811).
 const getCalibreColumnsText = (item: Book) =>
   (item.metadata?.calibreColumns ?? [])
     .map(({ name, value }) => `${name} ${Array.isArray(value) ? value.join(' ') : value}`)
     .join(' ');
+
+const normalizeValues = (values: string[]): string[] => [
+  ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+];
+
+export const getBookSubjects = (book: Book): string[] => {
+  return getContributorNames(book.metadata?.subject);
+};
+
+const getBookTags = (book: Book): string[] => normalizeValues(book.tags ?? []);
+
+const getBookValuesText = (book: Book): string =>
+  [...getBookTags(book), ...getBookSubjects(book)].join(' ');
 
 export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
   if (!queryTerm) return true;
@@ -173,6 +215,7 @@ export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
       (item.groupName && item.groupName.toLowerCase().includes(lowerQuery)) ||
       (item.metadata?.description &&
         item.metadata.description.toLowerCase().includes(lowerQuery)) ||
+      getBookValuesText(item).toLowerCase().includes(lowerQuery) ||
       getCalibreColumnsText(item).toLowerCase().includes(lowerQuery)
     );
   }
@@ -184,6 +227,7 @@ export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
     searchTerm.test(item.format) ||
     (item.groupName && searchTerm.test(item.groupName)) ||
     (item.metadata?.description && searchTerm.test(item.metadata?.description)) ||
+    searchTerm.test(getBookValuesText(item)) ||
     searchTerm.test(getCalibreColumnsText(item))
   );
 };
@@ -332,13 +376,24 @@ const compareBookByKey = (a: Book, b: Book, sortBy: string, uiLanguage: string):
  * @param secondarySortBy - Optional tiebreaker key applied when the primary
  *   comparison returns 0. Pass `'none'` (or omit) to disable. A Series secondary
  *   orders by series name then index; ties on both fall through to the primary tie.
+ * @param sortAscending - Direction of the primary key (default ascending).
+ * @param secondaryAscending - Direction of the secondary key (default ascending).
+ *   Independent of the primary direction (issue #5119), so callers must NOT apply
+ *   their own direction multiplier on top of this comparator.
  */
 export const createBookSorter =
-  (sortBy: string, uiLanguage: string, secondarySortBy: LibrarySecondarySortByType = 'none') =>
+  (
+    sortBy: string,
+    uiLanguage: string,
+    secondarySortBy: LibrarySecondarySortByType = 'none',
+    sortAscending: boolean = true,
+    secondaryAscending: boolean = true,
+  ) =>
   (a: Book, b: Book): number => {
     const primary = compareBookByKey(a, b, sortBy, uiLanguage);
-    if (primary !== 0 || secondarySortBy === 'none') return primary;
-    return compareBookByKey(a, b, secondarySortBy, uiLanguage);
+    if (primary !== 0) return primary * (sortAscending ? 1 : -1);
+    if (secondarySortBy === 'none') return 0;
+    return compareBookByKey(a, b, secondarySortBy, uiLanguage) * (secondaryAscending ? 1 : -1);
   };
 
 /**
@@ -431,6 +486,14 @@ export const createBookGroups = (
     return createAuthorGroups(activeBooks);
   }
 
+  if (groupBy === LibraryGroupByType.Tag) {
+    return createValueGroups(activeBooks, 'tag', getBookTags);
+  }
+
+  if (groupBy === LibraryGroupByType.Subject) {
+    return createValueGroups(activeBooks, 'subject', getBookSubjects);
+  }
+
   // 'group' mode is handled separately by generateBookshelfItems
   return activeBooks;
 };
@@ -515,17 +578,70 @@ const createAuthorGroups = (books: Book[]): (Book | BooksGroup)[] => {
   return [...groups, ...ungroupedBooks];
 };
 
+const createValueGroups = (
+  books: Book[],
+  namespace: 'tag' | 'subject',
+  getValues: (book: Book) => string[],
+): (Book | BooksGroup)[] => {
+  const valueMap = new Map<string, Book[]>();
+  const ungroupedBooks: Book[] = [];
+  for (const book of books) {
+    const values = getValues(book);
+    if (!values.length) {
+      ungroupedBooks.push(book);
+      continue;
+    }
+    for (const value of values) {
+      const existing = valueMap.get(value);
+      if (existing) existing.push(book);
+      else valueMap.set(value, [book]);
+    }
+  }
+
+  const groups = Array.from(
+    valueMap,
+    ([name, groupBooks]): BooksGroup => ({
+      id: md5Fingerprint(`${namespace}:${name}`),
+      name,
+      displayName: name,
+      books: groupBooks,
+      updatedAt: Math.max(...groupBooks.map(({ updatedAt }) => updatedAt)),
+    }),
+  );
+  return [...groups, ...ungroupedBooks];
+};
+
+export const resolveCurrentShelfBooks = (
+  books: Book[],
+  groupBy: LibraryGroupByType,
+  groupId = '',
+  manualGroupName?: string,
+): Book[] => {
+  const activeBooks = books.filter((book) => !book.deletedAt);
+  if (!groupId) return activeBooks;
+  if (groupBy === LibraryGroupByType.None) return [];
+  if (groupBy === LibraryGroupByType.Group) {
+    if (!manualGroupName) return [];
+    const descendantPrefix = `${manualGroupName}/`;
+    return activeBooks.filter(
+      ({ groupName }) => groupName === manualGroupName || groupName?.startsWith(descendantPrefix),
+    );
+  }
+  return findGroupById(createBookGroups(activeBooks, groupBy), groupId)?.books ?? [];
+};
+
 /**
  * Create a sorter for books within a group.
  * For series groups: sort by seriesIndex first (always ascending), then by global sort for items without index.
- * For other groupings: when a secondary key is supplied, sort by secondary key first (always ascending),
- *   with the primary global sort as tiebreaker. Without secondary, follow global sort setting.
- * @param sortAscending - When true (default), sort direction is ascending. Series index and the
- *   secondary key are always ascending regardless of this flag; the flag affects the fallback /
- *   primary tiebreaker only.
+ * For other groupings: when a secondary key is supplied, sort by secondary key first (in its own
+ *   direction), with the primary global sort as tiebreaker. Without secondary, follow global sort setting.
+ * @param sortAscending - When true (default), sort direction is ascending. Series index is always
+ *   ascending regardless of this flag; the flag affects the fallback / primary tiebreaker only.
  * @param secondarySortBy - When non-'none', acts as the *primary* within-group ordering for
  *   non-series groupings (matches the user's mental model: "group by author, then sort by series"
  *   should land series order inside each author).
+ * @param secondaryAscending - Direction of the secondary key, independent of `sortAscending`
+ *   (issue #5119).
  */
 export const createWithinGroupSorter =
   (
@@ -534,6 +650,7 @@ export const createWithinGroupSorter =
     uiLanguage: string,
     sortAscending: boolean = true,
     secondarySortBy: LibrarySecondarySortByType = 'none',
+    secondaryAscending: boolean = true,
   ) =>
   (a: Book, b: Book): number => {
     const sortDirection = sortAscending ? 1 : -1;
@@ -559,7 +676,7 @@ export const createWithinGroupSorter =
     // use it as the within-group primary order with the global key as tiebreaker.
     if (secondarySortBy !== 'none') {
       const bySecondary = compareBookByKey(a, b, secondarySortBy, uiLanguage);
-      if (bySecondary !== 0) return bySecondary;
+      if (bySecondary !== 0) return bySecondary * (secondaryAscending ? 1 : -1);
       return createBookSorter(sortBy, uiLanguage)(a, b) * sortDirection;
     }
 
@@ -806,6 +923,35 @@ export const pickFresherCover = (local: CoverFields, synced: CoverFields): Cover
     ? { coverHash: synced.coverHash, coverUpdatedAt: synced.coverUpdatedAt }
     : { coverHash: local.coverHash, coverUpdatedAt: local.coverUpdatedAt };
 
+type MetadataFields = Pick<Book, 'title' | 'author' | 'tags' | 'metadata' | 'metadataUpdatedAt'>;
+
+/**
+ * Field-level last-writer-wins for the metadata group (title, author, tags,
+ * metadata), by `metadataUpdatedAt` (issue #5438). Mirrors
+ * {@link pickFresherReadingStatus} / {@link pickFresherCover}: the row's
+ * `updatedAt` is dominated by page-turn progress, so a metadata edit must be
+ * resolved by its own timestamp or reading the book on another device would
+ * clobber it. Returns null when neither side's stamp is strictly fresher —
+ * notably the unstamped legacy case — so the caller keeps the row-level
+ * winner's fields (legacy behavior) instead of grafting.
+ */
+export const pickFresherMetadata = (
+  local: MetadataFields,
+  synced: MetadataFields,
+): MetadataFields | null => {
+  const localMs = local.metadataUpdatedAt ?? 0;
+  const syncedMs = synced.metadataUpdatedAt ?? 0;
+  if (localMs === syncedMs) return null;
+  const winner = localMs > syncedMs ? local : synced;
+  return {
+    title: winner.title,
+    author: winner.author,
+    tags: winner.tags,
+    metadata: winner.metadata,
+    metadataUpdatedAt: winner.metadataUpdatedAt,
+  };
+};
+
 /**
  * Resolve the ordered list of context-menu item ids for a book from its state.
  *
@@ -827,11 +973,15 @@ export const getBookContextMenuItemIds = (book: Book): BookContextMenuItemId[] =
     ids.push('clearStatus');
   }
   ids.push('showDetails', 'showInFinder', 'searchGoodreads');
-  if (book.uploadedAt && !book.downloadedAt) ids.push('download');
-  if (!book.uploadedAt && book.downloadedAt) ids.push('upload');
-  // Share is offered for any local-or-uploaded book; the dialog uploads first
-  // if the book hasn't been pushed yet.
-  if (book.downloadedAt || book.uploadedAt) ids.push('share');
+  // A feed book has no file to move: every transfer action would fail, and the
+  // share dialog uploads before it can hand out a link (issue #5307).
+  if (!isFeedBook(book)) {
+    if (book.uploadedAt && !book.downloadedAt) ids.push('download');
+    if (!book.uploadedAt && book.downloadedAt) ids.push('upload');
+    // Share is offered for any local-or-uploaded book; the dialog uploads first
+    // if the book hasn't been pushed yet.
+    if (book.downloadedAt || book.uploadedAt) ids.push('share');
+  }
   ids.push('delete');
   return ids;
 };
