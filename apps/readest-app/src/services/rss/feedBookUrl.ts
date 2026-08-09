@@ -7,3 +7,6 @@ export const buildFeedBookUrl = (feedUrl: string): string =>
 
 export const parseFeedBookUrl = (url: string): { feedUrl: string } =>
   JSON.parse(decodeURIComponent(url.replace(FEED_SCHEME, '')));
+
+export const isFeedBook = (book: { url?: string }): boolean =>
+  !!book.url && isFeedBookUrl(book.url);
