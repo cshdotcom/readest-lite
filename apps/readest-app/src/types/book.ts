@@ -338,6 +338,7 @@ export interface NoteExportConfig {
   includeTimestamp: boolean;
   includeChapterSeparator: boolean;
   linkType: AnnotationLinkType;
+  includeCoverImage?: boolean;
   noteSeparator: string;
   useCustomTemplate: boolean;
   customTemplate: string;
