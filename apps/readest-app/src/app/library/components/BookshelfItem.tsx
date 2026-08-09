@@ -484,7 +484,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
               mode={mode}
               book={item}
               coverFit={coverFit}
-              isSelectMode={isSelectMode}
+              isSelectMode={isSelectMode ?? false}
               bookSelected={itemSelected}
               transferProgress={transferProgress}
               handleBookUpload={handleBookUpload}
@@ -496,7 +496,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
             <GroupItem
               mode={mode}
               group={item}
-              isSelectMode={isSelectMode}
+              isSelectMode={isSelectMode ?? false}
               groupSelected={itemSelected}
             />
           )}

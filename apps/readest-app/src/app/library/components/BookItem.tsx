@@ -24,7 +24,7 @@ interface BookItemProps {
   book: Book;
   mode: LibraryViewModeType;
   coverFit: LibraryCoverFitType;
-  isSelectMode: boolean;
+  isSelectMode?: boolean;
   bookSelected: boolean;
   transferProgress: number | null;
   handleBookUpload: (book: Book) => void;
