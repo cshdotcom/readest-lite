@@ -509,3 +509,5 @@ export interface BookContent {
   book: Book;
   file: File;
 }
+
+export type NoteExportFormat = 'markdown' | 'text' | 'json';
