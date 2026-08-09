@@ -298,6 +298,7 @@ export interface ViewConfig {
   animated: boolean;
   pageTurnStyle: PageTurnStyle;
   ttsPlayerStyle: TTSPlayerStyle;
+  ttsUseNarration: boolean;
   isEink: boolean;
   isColorEink: boolean;
 
