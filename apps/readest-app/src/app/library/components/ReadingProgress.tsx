@@ -9,7 +9,7 @@ import { useMedianPageDurationSecs } from '@/hooks/useMedianPageDurationSecs';
 
 interface ReadingProgressProps {
   book: Book;
-  showTimeRemaining: boolean;
+  showTimeRemaining?: boolean;
 }
 
 const getProgressPercentage = (book: Book) => {

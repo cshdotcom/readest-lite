@@ -137,7 +137,7 @@ interface BookshelfItemProps {
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
   handleUpdateReadingStatus: (book: Book, status: ReadingStatus | undefined) => void;
-  showTimeRemaining: boolean;
+  showTimeRemaining?: boolean;
 }
 
 const BookshelfItem: React.FC<BookshelfItemProps> = ({

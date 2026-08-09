@@ -27,7 +27,7 @@ interface RecentShelfProps {
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
-  showTimeRemaining: boolean;
+  showTimeRemaining?: boolean;
 }
 
 /**
