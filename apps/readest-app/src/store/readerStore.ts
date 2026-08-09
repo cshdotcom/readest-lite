@@ -127,6 +127,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
+  getViews: () => Object.values(get().viewStates).map((state) => state.view!),
+
   getViewsById: (id: string) => {
     const { viewStates } = get();
     return Object.values(viewStates)
@@ -509,4 +511,65 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
+  setIsLoading: (key: string, loading: boolean) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          loading,
+        },
+      },
+    })),
+
+  setIsSyncing: (key: string, syncing: boolean) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          syncing,
+        },
+      },
+    })),
+
+  getGridInsets: (key: string) =>
+    get().viewStates[key]?.gridInsets || { top: 0, right: 0, bottom: 0, left: 0 },
+  setGridInsets: (key: string, insets: Insets | null) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          gridInsets: insets,
+        },
+      },
+    })),
+
+  setViewInited: (key: string, inited: boolean) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          inited,
+        },
+      },
+    })),
+
+  setPreviewMode: (key: string, previewMode: boolean) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          previewMode,
+        },
+      },
+    })),
+
+  recreateViewer: (envConfig: EnvConfigType, key: string) => {
+    const id = key.split('-')[0]!;
+    void get().initViewState(envConfig, id, key, true, true);
+  },
 }));
