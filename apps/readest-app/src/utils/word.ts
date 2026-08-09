@@ -89,3 +89,15 @@ export const getWordCount = (text: string): number => {
   if (!text) return 0;
   return text.trim().split(/\s+/).filter(Boolean).length;
 };
+
+const MAX_CJK_LOOKUP_CHARS = 8;
+
+export const isSingleLookupTerm = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (/\s/u.test(trimmed)) return false;
+  const cjkPattern = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+  if (!cjkPattern.test(trimmed)) return true;
+  if (/[\p{P}\p{S}]/u.test(trimmed)) return false;
+  return [...trimmed].length <= MAX_CJK_LOOKUP_CHARS;
+};
