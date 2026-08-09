@@ -117,6 +117,14 @@ export const flattenContributors = (
       : formatLanguageMap(contributors?.name);
 };
 
+export const getContributorNames = (
+  contributors: string | string[] | Contributor | Contributor[] | undefined,
+): string[] => {
+  if (!contributors) return [];
+  const values = Array.isArray(contributors) ? contributors : [contributors];
+  return [...new Set(values.map((value) => flattenContributors(value).trim()).filter(Boolean))];
+};
+
 // biome-ignore format: keep the language codes compact on a single line
 const LASTNAME_AUTHOR_SORT_LANGS = [ 'ar', 'bo', 'de', 'en', 'es', 'fr', 'hi', 'it', 'nl', 'pl', 'pt', 'ru', 'th', 'tr', 'uk' ];
 
