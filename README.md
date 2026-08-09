@@ -31,7 +31,7 @@ https://github.com/cshdotcom/readest-lite
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.14.2-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.15.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -84,11 +84,11 @@ docker compose up -d
 | `DEEPL_PRO_API_KEYS` | 可选 | — | DeepL Pro API key，逗号分隔 |
 | `AI_GATEWAY_API_KEY` | 可选 | — | AI 聊天网关 key |
 
-指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.14.2`（每个版本都有对应 git tag）。
+指定特定版本：`ghcr.io/cshdotcom/readest-lite:8.15.0`（每个版本都有对应 git tag）。
 
 完整说明见 [部署教程 - 环境变量](https://cshdotcom.github.io/readestl/deploy.html#env)。
 
-## v8.0 → v8.13 功能列表
+## v8.0 → v8.15 功能列表
 
 | 版本 | 核心改动 |
 |---|---|
@@ -114,6 +114,10 @@ docker compose up -d
 | **v8.12.2** | **防御性文件名生成（即使 `getStorageType`/`book.format`/`book.title` 异常也永不返回空串）· 上传/下载失败响应体加 `hint`+`received` 字段方便诊断 · 放宽 download fallback `parts.length` 检查** |
 | **v8.13** | **上游 Readest v0.11.18 非覆盖式合入：Auto Scroll 阅读模式 · 中键自动滚动 · 翻页动画 · PDF 暗色模式页眉页脚 · 两指滚动 vs 捏合 · View Transitions API gating · TTS 大改版（无缝 Web Audio + 关书继续播放 + mini player + 词典朗读按钮）· 主题分段控件 · 校对规则开关 · OPDS 子目录爬取 + 自托管认证 · Calibre 自定义列 · 按阅读进度排序** |
 | **v8.13.1** | **翻页动画补全（幻灯片/卷页 JS-only port）· 修复「关于」页面版本号显示（package.json 0.11.4 → 8.13.1）· bookService 并发导入崩溃修复（createDir 幂等）** |
+| **v8.14** | **上游 Readest v0.11.18 → v0.11.20 非覆盖式合入：RSS/Atom/JSON feed 订阅 · useMedianPageDurationSecs hook · MediaSessionState 扩展 · FoliateViewer touchCancel · showTimeRemaining optional · toggle primitive + carPlaySession · library 组件同步** |
+| **v8.14.1** | **RSS/Atom/JSON feed 订阅落地（LibraryHeader.onOpenFeeds）· 上游 v0.11.20 reader 钩子同步** |
+| **v8.14.2** | **修复分块上传合并失败（Issue #5）· `await import('stream')` 在 Next.js standalone 中 Readable 为 undefined · 改用同步 `require('stream')` · 小文件不受影响** |
+| **v8.15** | **上游 Readest v0.12.1 非覆盖式合入（175 commits · ~100+ 文件）：TTS Media Overlays（EPUB 3 SMIL 录制朗读）· 离线音频下载 + 跨设备 pack 同步 · Ambient Mode（光感器驱动）· SpeedRuler · 主题目录 color/→theme/ 大改名（ThemeEditor/ColorInput/react-colorful）· 阅读器新增（自动隐藏光标/下拉书签/页面跳转/图片查看器/Reading Ruler）· 注解 JSON 导出 + Copy Link + 数学渲染（marked-katex-extension）· 翻译 Yandex/Azure 恢复 + 内联格式保留 · Markdown YAML frontmatter + 脚注（marked-footnote）· Command Palette · PDF 内存泄漏修复 · Cloud sync paused gate** |
 
 ## 数据持久化
 

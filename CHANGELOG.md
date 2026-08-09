@@ -3,6 +3,173 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.15.0] — 2026-08-09
+
+### Added — 上游 Readest v0.12.1 非覆盖式合入（175 commits · ~100+ files）
+
+#### TTS 大改版 — Media Overlays + 离线音频下载
+- **PR #5480 — Media Overlays**：EPUB 3 SMIL 录制朗读支持，章节级 `mediaOverlay` 字段（`SectionItem.mediaOverlay`），`ttsUseNarration` ViewConfig 开关，`MediaOverlaySection` 解析器，`NativeNarrationPlayer` 播放器
+- **PR #5394 — Ambient Mode**：硬件光感器驱动的环境模式，`hasAmbientLightSensor` 字段加入 `AppService` 接口，`'ambient'` 加入 `ThemeMode`/`ThemeType`
+- **PR #5144 — TTS mini player 定位**：`bottomBarTab` 从 per-view 上移到 `ReaderStore` 全局级别
+- **PR #5303 — SpeedRuler**：替换 SpeedChips，`ttsPlayerStyle` ViewConfig 字段
+- **离线音频下载**：`providers/bookCacheStore`、`cache/edge/opfsPackFs`、`ttsPackSync`（跨设备 TTS pack 同步）、`useTTSDownloads`、`DownloadBadge`、`TTSChaptersView`、`NativeAudioPlayer`、`BufferedTTSClient`、`TTSAudioPlayer`、7 个 TTS provider 文件（Azure/OpenAI/Edge/系统/Edgetx/Polly/Wikipedia）
+- **章节睡眠定时器**：`chapterSleepTimer` 工具
+- **日文 ruby 支持**：`<ruby>` 标签在 TTS 中正确读出
+- **TTS 统计**：播放时长、跳过率
+- **Media Overlays layout**：`SYNC_BOOK_TTS_DIR` + `buildBookTTSDirPath` + `buildBookTTSFilePath` 加入 `services/sync/file/layout.ts`
+- **BookDoc 接口扩展**：`resolveCFI?`（EPUB 真实 CFI 解析）、`destroy?`（PDF #5387 内存泄漏修复）、`loadText?`/`loadBlob?`（容器访问）、`media?`（narrator/duration 元数据）
+- **TTS 配置**：`ttsSentenceGap`/`ttsParagraphGap` 加入 `TTSConfig` + `DEFAULT_SENTENCE_GAP_SEC`/`DEFAULT_PARAGRAPH_GAP_SEC` 常量
+- **TTS cache 访问**：`utils/access.ts` 增加 TTS cache 访问函数（Lite 全部允许）
+
+#### 主题大改版 — color/ 目录改名为 theme/
+- **目录重命名**：`settings/color/` → `settings/theme/`，影响 `SettingsDialog.tsx`、`Providers.tsx`、`TTSPanel.tsx` 的导入路径
+- **新增组件**：`ThemeEditor`、`ColorInput`（基于 `react-colorful`，替换 `react-color`）、`BackgroundTextureSelector`、`HighlightColorsEditor`、`LibrarySettings`、`ReadingRulerSettings`、`TTSHighlightStyleEditor`、`ThemeColorSelector`、`ThemeModeSelector`、`CodeHighlightingSettings`、`SubPageHeader`、`WordLensPanel`（含 `glossPacks` 下载）
+- **`themes.ts`**：`isCustomizable` 属性
+- **`primitives/` 目录**：`BoxedList`、`NavigationRow`、`SectionTitle`、`SettingLabel`、`SettingsInput`、`SettingsRow`、`SettingsSelect`、`SettingsSwitchRow`、`Tips`、`index.ts`
+
+#### 阅读器新增
+- **PR #5483 — 自动隐藏光标**：阅读时鼠标静止后光标淡出
+- **PR #5395 — 下拉书签**：从顶部下拉出书签列表
+- **PR #5469 — 页面跳转**：精确跳转到指定页码
+- **PR #5340 — 图片查看器**：点击图片放大查看
+- **PR #5400 — Footer bar 组件**：`footerBand`、`ambientLight` 工具
+- **PR #5436 — Reading Ruler**：阅读标尺辅助
+- **PR #5447 — Code highlighting 设置**：自定义代码高亮主题
+
+#### 图书馆新增
+- **PR #5471 — OPDS metadata 改进**：`getContributorNames` 加入 `utils/book.ts`
+- **PR #5474 — Library then-sort**：`libraryThenSortBy` + `libraryThenSortAscending` 加入 `SystemSettings`
+- **`LibraryGroupByType` 扩展**：新增 `Tag`、`Subject` 分组维度
+- **小说导入 + 批量下载 + 页数显示 + RSS 同步**
+
+#### 注解大改版
+- **PR #5440 — JSON 导出/导入**：`NoteExportFormat` 类型（`'markdown'|'text'|'json'`）、`exportFormat` 加入 `NoteExportConfig`（默认 `'markdown'`）
+- **PR #5435 — 导出包含封面**：`includeCoverImage` 加入 `NoteExportConfig`
+- **PR #5464 — Copy Link 工具**：`'copylink'` 加入 `AnnotationToolType`，`annotationToolbar.ts` 支持 `supportsProofread` + `copylink`
+- **注解 hub**：`useTextSelector` + `useInstantAnnotation` + `Annotator` 从 v0.12.1 复刻（移除 Lite 不适用的 BookOrbit 导入）
+- **数学渲染**：`marked-katex-extension` 依赖，公式支持
+- **`Popup.tsx` + `AnnotationPopup.tsx`**：`triangleClassName` prop
+
+#### 翻译大改版
+- **PR #5455 — Yandex/Azure provider 恢复**：7 个翻译 provider 文件
+- **PR #5479 — 内联格式保留**：翻译时保留 markdown 格式
+- **`TranslatorPopup` + `ProofreadPopup`**：从 v0.12.1 复刻
+
+#### Markdown 大改版
+- **PR #5420 — YAML frontmatter**：`mdFrontmatter.ts` 解析器
+- **PR #5421 — 脚注**：`mdFootnotes.ts` + `marked-footnote` 依赖
+
+#### 命令面板
+- **PR #5409 — Command Palette**：`commandRegistry` + `CommandPaletteProvider` 复刻（含 `toggleAutoUpload`，Lite 中为 no-op）
+- **`keybinding.ts`**：`isPencilNativeKey` 等
+- **`deviceStore.ts`**：`lastScreenBrightness` 字段
+
+#### 其他
+- **PR #5387 — PDF 内存泄漏修复**：`BookDoc.destroy?()` 显式释放
+- **PR #4959 — Cloud sync paused**：`CloudSyncGate` 接口改为 `{ readest, backends, paused }` 形状
+- **`metadata_updated_at`**：`DBBook` 表新增列
+- **`librarySkeuomorphicCovers`**：`SystemSettings` 新增字段（拟物化封面开关）
+- **`scrolledDirection`**：`ViewConfig` 新增字段
+- **`isFeedBook`**：`feedBookUrl.ts` 工具
+- **`isSingleLookupTerm`**：`utils/word.ts` 工具
+- **`ttsPageFollow.ts`**：TTS 跟随页面
+- **`webtoon.ts`**：webtoon 模式
+- **`viewTransition.ts`**：视图过渡
+- **`searchConfig.ts` + `settingsSync.ts`**：搜索配置 + 设置同步
+
+#### Lite 适配
+- **cloudSyncProvider stub 更新**：`CloudSyncGate` 改为 v0.12.1 形状（`readest`/`backends`/`paused`），Lite 仍返回空/false
+- **ConversionError**：新增 `'login_wall'` code（URL 是登录墙时）
+- **subject 类型扩展**：`string | string[] | Contributor | Contributor[]`
+- **AppService 接口扩展**：`hasAmbientLightSensor` + `databaseExists` + `deleteDatabase` 默认实现（fs.exists / removeFile）
+- **ReaderStore 接口补全**：`getViews` / `setIsLoading` / `setIsSyncing` / `getGridInsets` / `setGridInsets` / `setViewInited` / `setPreviewMode` / `recreateViewer` 共 8 个方法补全（接口已声明但 create 中漏实现）
+- **showTimeRemaining / select-mode props**：在 BookshelfItem/RecentShelf/ReadingProgress 中设为 optional
+
+### CI Status
+- ✅ Docker Image workflow — build-and-push success（commit `74305a0`）
+- ✅ CI workflow — Smoke test success
+- ⚠️ CodeQL Advanced — 既有失败（Rust extractor 配置问题，不阻塞发布）
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.15.0` / `8.15` / `latest`
+
+### 升级方式
+```bash
+docker compose pull && docker compose up -d
+```
+
+---
+
+## [v8.14.2] — 2026-07-15
+
+### Fixed — 分块上传合并失败（Issue #5）
+
+#### 大文件上传 merge 必失败
+
+**报告者**：@SuPerCxyz（Issue #5）
+
+**现象**：大于 5MB 的文件上传后，所有 parts 传完，发起 merge 请求返回 500：
+```
+TypeError: Cannot read properties of undefined (reading 'from')
+    at mergePartsForKey
+```
+
+**根因**：`mergePartsForKey` 中 `await import('stream')` 在 Next.js standalone 打包后被 webpack 转成 namespace 对象。但 Node 的 `stream` 模块 `module.exports` 是**函数**（Stream 构造函数），不是 object，导致 webpack 的 namespace 复制循环一次都不执行，namespace 里只有 `{ default: stream }`，`Readable` 解构为 `undefined`，随后 `Readable.from(...)` 抛错。
+
+**修复**：将 `const { Readable } = await import('stream')` 改为 `const { Readable } = require('stream')`。同步 require 不受 webpack 的 namespace 转换影响。
+
+**影响面**：v8.8 引入分块上传时带入此 bug。小文件（≤5MB）走整文件路径不受影响。
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+- 镜像：`ghcr.io/cshdotcom/readest-lite:8.14.2` / `8.14` / `latest`
+
+---
+
+## [v8.14.1] — 2026-07-13
+
+### Added — RSS/Atom/JSON 订阅 + 上游 v0.11.20 reader 钩子同步
+
+#### PR #5039 — RSS/Atom/JSON Feed 订阅
+- 新增 `LibraryHeader` 的 `onOpenFeeds` prop
+- 用户可在图书馆订阅 RSS/Atom/JSON feed，新书自动同步
+- 留待后续 ttaplayer 试着弄一下
+
+#### 上游 v0.11.20 reader 钩子同步
+- `FoliateViewer` 中 `addLongPressListeners` 替换为 `handleTouchCancel`
+- `MediaSessionState` 增加 `bookHash`/`bookTitle`/`bookAuthor` 字段
+- `utils/book.ts` 增加 `isCurrentlyReadingBook`（PR #5201）
+- 新增 `useMedianPageDurationSecs` hook + `getMedianPageDurationSecs` 方法
+- `showTimeRemaining` 在 ReadingProgressProps/RecentShelfProps/BookItemProps 中设为 optional
+- 复制 library 组件 + `toggle` primitive + `carPlaySession` module
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+
+---
+
+## [v8.14.0] — 2026-07-12
+
+### Added — 上游 Readest v0.11.18 → v0.11.20 非覆盖式合入（batch 1）
+
+#### 合入策略
+本次合入采用**非覆盖式**：先克隆上游 v0.11.20 源码，逐 PR 研究后只复制 Lite 未自定义的文件；Lite 自定义文件（Providers.tsx、PHContext.tsx、auth pages、library/page.tsx、appService/cloudService/libraryService/settingsService 等）只做外科手术式补丁。
+
+#### 主要 PR
+- **PR #5201** — `isCurrentlyReadingBook` 工具
+- **PR #5190** — `useMedianPageDurationSecs` hook
+- **PR #5175** — `MediaSessionState` 扩展
+- **PR #5163** — `FoliateViewer` touchCancel
+- **PR #5150** — `showTimeRemaining` optional
+- **PR #5144** — `toggle` primitive + `carPlaySession`
+- **PR #5039** — RSS/Atom/JSON feed 订阅（v8.14.1 完成落地）
+
+### CI Status
+- ✅ Docker Image workflow — success
+- ✅ CI workflow — Smoke test success
+
+---
+
 ## [v8.13.1] — 2026-07-09
 
 ### Added — 翻页动画补全 + 关于页面版本号修复 + bookService 崩溃修复
