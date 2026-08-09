@@ -70,8 +70,8 @@ const RecentSlide: React.FC<RecentSlideProps> = ({
   // select mode and selects; while in select mode a tap toggles instead of
   // opening the book.
   const handleSelect = () => {
-    if (!isSelectMode) handleSetSelectMode(true);
-    toggleSelection(book.hash);
+    if (!isSelectMode) handleSetSelectMode?.(true);
+    toggleSelection?.(book.hash);
   };
 
   const handleActivate = () => {
