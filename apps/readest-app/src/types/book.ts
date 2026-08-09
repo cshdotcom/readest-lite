@@ -103,6 +103,7 @@ export interface Book {
 
   createdAt: number;
   updatedAt: number;
+  metadataUpdatedAt?: number | null;
   deletedAt?: number | null;
 
   uploadedAt?: number | null;
