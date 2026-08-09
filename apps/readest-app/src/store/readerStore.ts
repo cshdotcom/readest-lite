@@ -509,3 +509,4 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
+}));
