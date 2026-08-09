@@ -328,6 +328,7 @@ export interface SystemSettings {
   biometricUnlockEnabled?: boolean;
   libraryViewMode: LibraryViewModeType;
   librarySortBy: LibrarySortByType;
+  libraryThenSortBy?: LibrarySecondarySortByType;
   librarySortAscending: boolean;
   /**
    * Whether the primary sort uses a smart default derived from `libraryGroupBy`.
