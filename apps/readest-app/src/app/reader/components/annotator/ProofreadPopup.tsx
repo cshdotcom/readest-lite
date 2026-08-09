@@ -12,6 +12,16 @@ import { Position, TextSelection } from '@/utils/sel';
 import { isPunctuationOnly, isWholeWord } from '@/utils/word';
 import Select from '@/components/Select';
 import Popup from '@/components/Popup';
+import { Toggle } from '@/components/primitives/toggle';
+import { useThemeStore } from '@/store/themeStore';
+
+// Light themes need the knob track inverted against the popup's base-300
+// surface; dark themes already read correctly with the primitive's defaults.
+const toggleClassName = (isDarkMode: boolean) =>
+  clsx(
+    'toggle-sm',
+    !isDarkMode && 'checked:![--tglbg:theme(colors.base-100)] [--tglbg:theme(colors.base-300)]',
+  );
 
 interface ProofreadPopupProps {
   bookKey: string;
@@ -41,6 +51,7 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
   const { getProgress, getView, recreateViewer } = useReaderStore();
   const { addRule } = useProofreadStore();
   const progress = getProgress(bookKey)!;
+  const { isDarkMode } = useThemeStore();
 
   const [replacementText, setReplacementText] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(true);
@@ -125,144 +136,127 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
         width={popupWidth}
         minHeight={popupHeight}
         position={position}
-        className='not-eink:text-gray-400 flex flex-col justify-between rounded-lg bg-gray-700'
-        triangleClassName='text-gray-700'
+        // `Popup` caps the height at the room above the selection, which can be
+        // shorter than this form. Clip here and let the body scroll so nothing
+        // paints past the rounded box.
+        className='flex flex-col overflow-hidden rounded-lg'
         onDismiss={onDismiss}
       >
-        <div className='flex flex-col gap-6 p-4'>
-          <div className='not-eink:text-gray-400 flex items-center gap-1 text-xs'>
-            <span className='text-nowrap'>{_('Selected text:')}</span>
-            <span className='not-eink:text-yellow-300 line-clamp-1 flex-1 select-text break-words font-medium'>
-              &quot;{selection?.text || ''}&quot;
-            </span>
-            {onManage && (
-              <button
-                type='button'
-                onClick={onManage}
-                aria-label={_('Proofread Replacement Rules')}
-                title={_('Proofread Replacement Rules')}
-                className='not-eink:text-gray-400 not-eink:hover:bg-gray-600 not-eink:hover:text-white shrink-0 rounded p-1'
+        <div className='min-h-0 flex-1 overflow-y-auto'>
+          <div className='flex flex-col gap-4 p-4'>
+            <div className='flex items-center gap-2 text-xs text-base-content/70'>
+              <span className='text-nowrap font-medium'>{_('Selected text:')}</span>
+              <span className='line-clamp-1 flex-1 select-text break-words font-bold text-primary'>
+                &quot;{selection?.text || ''}&quot;
+              </span>
+              {onManage && (
+                <button
+                  type='button'
+                  onClick={onManage}
+                  aria-label={_('Proofread Replacement Rules')}
+                  title={_('Proofread Replacement Rules')}
+                  className='shrink-0 rounded p-1 hover:bg-base-200 text-base-content/70 hover:text-base-content transition-colors'
+                >
+                  <RiListSettingsLine size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className='flex items-center justify-between gap-2'>
+              <label
+                htmlFor='replacement-input'
+                className='shrink-0 text-xs font-medium text-base-content/80'
               >
-                <RiListSettingsLine size={16} />
+                {_('Replace with:')}
+              </label>
+              <input
+                ref={inputRef}
+                type='text'
+                value={replacementText}
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && replacementText) {
+                    handleApply();
+                  }
+                }}
+                placeholder={_('Enter text...')}
+                className='bg-base-200 text-base-content placeholder:text-base-content/40 border-base-300 focus:border-primary focus:ring-primary eink-bordered w-full flex-1 rounded-md border p-2 text-sm transition-all focus:outline-none focus:ring-1'
+              />
+              <button
+                onClick={handleApply}
+                disabled={!replacementText}
+                className='btn btn-sm btn-contrast shrink-0 font-medium px-2'
+              >
+                {_('Apply')}
               </button>
-            )}
+            </div>
           </div>
 
-          <div className='flex items-center justify-between gap-2'>
-            <label htmlFor='replacement-input' className='text-xs'>
-              {_('Replace with:')}
+          <div className='flex flex-wrap items-center gap-4 p-4'>
+            <label className='flex cursor-pointer items-center gap-2'>
+              <span className='line-clamp-1 text-xs' title={_('Case sensitive:')}>
+                {_('Case sensitive:')}
+              </span>
+              <Toggle
+                checked={caseSensitive}
+                onChange={(e) => setCaseSensitive(e.target.checked)}
+                className={toggleClassName(isDarkMode)}
+              />
             </label>
-            <input
-              ref={inputRef}
-              type='text'
-              value={replacementText}
-              onChange={handleInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && replacementText) {
-                  handleApply();
-                }
-              }}
-              placeholder={_('Enter text...')}
+
+            <label
               className={clsx(
-                'w-full flex-1 rounded-md p-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-0',
-                'not-eink:bg-gray-600 not-eink:text-white eink:border eink:border-base-content',
-              )}
-            />
-            <button
-              onClick={handleApply}
-              disabled={!replacementText}
-              className={clsx(
-                'btn btn-sm btn-ghost btn-primary disabled:text-base-content/75 text-blue-600 disabled:opacity-75',
-                'bg-transparent hover:bg-transparent disabled:bg-transparent',
+                'flex items-center gap-2',
+                isRegex ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
               )}
             >
-              {_('Apply')}
-            </button>
+              <span className='line-clamp-1 text-xs' title={_('Whole word:')}>
+                {_('Whole word:')}
+              </span>
+              <Toggle
+                className={toggleClassName(isDarkMode)}
+                disabled={isRegex}
+                checked={isRegex ? false : wholeWord}
+                onChange={(e) => setWholeWord(e.target.checked)}
+              />
+            </label>
+
+            <label className='flex cursor-pointer items-center gap-2'>
+              <span className='line-clamp-1 text-xs' title={_('Regex:')}>
+                {_('Regex:')}
+              </span>
+
+              <Toggle
+                className={toggleClassName(isDarkMode)}
+                checked={isRegex}
+                onChange={(e) => setIsRegex(e.target.checked)}
+              />
+            </label>
+
+            <label className='flex cursor-pointer items-center gap-2'>
+              <span className='line-clamp-1 text-xs' title={_('Only for TTS:')}>
+                {_('Only for TTS:')}
+              </span>
+              <Toggle
+                className={toggleClassName(isDarkMode)}
+                disabled={scope === 'selection'}
+                checked={onlyForTTS}
+                onChange={(e) => setOnlyForTTS(e.target.checked)}
+              />
+            </label>
           </div>
         </div>
-
-        <div className='flex flex-wrap items-center gap-4 p-4'>
-          <label className='flex cursor-pointer items-center gap-2'>
-            <span className='line-clamp-1 text-xs' title={_('Case sensitive:')}>
-              {_('Case sensitive:')}
-            </span>
-            <input
-              type='checkbox'
-              className='toggle toggle-sm bg-gray-500 checked:bg-black hover:bg-gray-500 hover:checked:bg-black'
-              style={
-                {
-                  '--tglbg': '#4B5563',
-                } as React.CSSProperties
-              }
-              checked={caseSensitive}
-              onChange={(e) => setCaseSensitive(e.target.checked)}
-            />
-          </label>
-
+        {/* Pinned: the scope select stays reachable however tight the popup is. */}
+        <div className='flex shrink-0 items-center justify-between gap-2 p-4'>
           <label
-            className={clsx(
-              'flex items-center gap-2',
-              isRegex ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-            )}
+            htmlFor='scope-select'
+            className='line-clamp-1 text-xs font-medium text-base-content/80'
+            title={_('Scope:')}
           >
-            <span className='line-clamp-1 text-xs' title={_('Whole word:')}>
-              {_('Whole word:')}
-            </span>
-            <input
-              type='checkbox'
-              disabled={isRegex}
-              className='toggle toggle-sm bg-gray-500 checked:bg-black hover:bg-gray-500 hover:checked:bg-black'
-              style={
-                {
-                  '--tglbg': '#4B5563',
-                } as React.CSSProperties
-              }
-              checked={isRegex ? false : wholeWord}
-              onChange={(e) => setWholeWord(e.target.checked)}
-            />
-          </label>
-
-          <label className='flex cursor-pointer items-center gap-2'>
-            <span className='line-clamp-1 text-xs' title={_('Regex:')}>
-              {_('Regex:')}
-            </span>
-            <input
-              type='checkbox'
-              className='toggle toggle-sm bg-gray-500 checked:bg-black hover:bg-gray-500 hover:checked:bg-black'
-              style={
-                {
-                  '--tglbg': '#4B5563',
-                } as React.CSSProperties
-              }
-              checked={isRegex}
-              onChange={(e) => setIsRegex(e.target.checked)}
-            />
-          </label>
-
-          <label className='flex cursor-pointer items-center gap-2'>
-            <span className='line-clamp-1 text-xs' title={_('Only for TTS:')}>
-              {_('Only for TTS:')}
-            </span>
-            <input
-              type='checkbox'
-              disabled={scope === 'selection'}
-              className='toggle toggle-sm bg-gray-500 checked:bg-black hover:bg-gray-500 hover:checked:bg-black'
-              style={
-                {
-                  '--tglbg': '#4B5563',
-                } as React.CSSProperties
-              }
-              checked={onlyForTTS}
-              onChange={(e) => setOnlyForTTS(e.target.checked)}
-            />
-          </label>
-        </div>
-        <div className='flex flex-1 items-center justify-between gap-2 p-4'>
-          <label htmlFor='scope-select' className='line-clamp-1 text-xs' title={_('Scope:')}>
             {_('Scope:')}
           </label>
           <Select
-            className='not-eink:bg-gray-600 eink:bg-base-100 not-eink:text-white max-w-[85%]'
+            className='max-w-[85%]'
             value={scope}
             onChange={handleScopeChange}
             options={scopeOptions}
