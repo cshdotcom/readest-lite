@@ -27,7 +27,7 @@ import {
 } from '@/services/wordlens/glossPacks';
 import SubPageHeader from './SubPageHeader';
 import ColorInput from './ColorInput';
-import { BoxedList, SettingsRow, SettingsSelect, SettingsSwitchRow } from './primitives';
+import { BoxedList, SettingsRow, SettingsSelect, SettingsSwitchRow } from '../../primitives';
 
 // Swatch shown for the "default" (muted, theme-adaptive) gloss color, which has
 // no fixed hex of its own. Picking any color overrides; "Default" clears back.
