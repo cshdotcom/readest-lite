@@ -125,17 +125,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
-  setBottomBarTab: (key: string, tab: string) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          bottomBarTab: tab,
-        },
-      },
-    })),
-  getViews: () => Object.values(get().viewStates).map((state) => state.view!),
   getViewsById: (id: string) => {
     const { viewStates } = get();
     return Object.values(viewStates)
