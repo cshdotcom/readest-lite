@@ -48,7 +48,6 @@ interface ViewState {
   /* True while an Auto Scroll session (#4998) is engaged for this view;
      session-only, never persisted. Drives the View menu checkmark. */
   autoScrollEnabled: boolean;
-  bottomBarTab: string;
   syncing: boolean;
   gridInsets: Insets | null;
   /* True while the reader is showing a position requested by an external
@@ -68,12 +67,13 @@ interface ReaderStore {
   viewStates: { [key: string]: ViewState };
   bookKeys: string[];
   hoveredBookKey: string | null;
+  bottomBarTab: string;
   setBookKeys: (keys: string[]) => void;
   setHoveredBookKey: (key: string | null) => void;
+  setBottomBarTab: (tab: string) => void;
   setBookmarkRibbonVisibility: (key: string, visible: boolean) => void;
   setTTSEnabled: (key: string, enabled: boolean) => void;
   setAutoScrollEnabled: (key: string, enabled: boolean) => void;
-  setBottomBarTab: (key: string, tab: string) => void;
   setIsLoading: (key: string, loading: boolean) => void;
   setIsSyncing: (key: string, syncing: boolean) => void;
   setProgress: (
@@ -114,8 +114,10 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   viewStates: {},
   bookKeys: [],
   hoveredBookKey: null,
+  bottomBarTab: '',
   setBookKeys: (keys: string[]) => set({ bookKeys: keys }),
   setHoveredBookKey: (key: string | null) => set({ hoveredBookKey: key }),
+  setBottomBarTab: (tab: string) => set({ bottomBarTab: tab }),
   getView: (key: string | null) => (key && get().viewStates[key]?.view) || null,
   setView: (key: string, view) =>
     set((state) => ({
@@ -166,7 +168,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           ribbonVisible: false,
           ttsEnabled: false,
           autoScrollEnabled: false,
-          bottomBarTab: '',
           syncing: false,
           gridInsets: null,
           previewMode: false,
@@ -328,7 +329,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
           autoScrollEnabled: false,
-          bottomBarTab: '',
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -353,7 +353,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
           autoScrollEnabled: false,
-          bottomBarTab: '',
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -510,88 +509,3 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
-  setBottomBarTab: (key: string, tab: string) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          bottomBarTab: tab,
-        },
-      },
-    })),
-
-  setIsLoading: (key: string, loading: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          loading,
-        },
-      },
-    })),
-
-  setIsSyncing: (key: string, syncing: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          syncing,
-        },
-      },
-    })),
-
-  getGridInsets: (key: string) =>
-    get().viewStates[key]?.gridInsets || { top: 0, right: 0, bottom: 0, left: 0 },
-  setGridInsets: (key: string, insets: Insets | null) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          gridInsets: insets,
-        },
-      },
-    })),
-
-  setViewInited: (key: string, inited: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          inited,
-        },
-      },
-    })),
-
-  setPreviewMode: (key: string, previewMode: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          previewMode,
-        },
-      },
-    })),
-
-  recreateViewer: (envConfig: EnvConfigType, key: string) => {
-    const id = key.split('-')[0]!;
-    get()
-      .initViewState(envConfig, id, key, true, true)
-      .then(() => {
-        set((state) => ({
-          viewStates: {
-            ...state.viewStates,
-            [key]: {
-              ...state.viewStates[key]!,
-              viewerKey: `${key}-${uniqueId()}`,
-            },
-          },
-        }));
-      });
-  },
-}));
