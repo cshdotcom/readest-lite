@@ -121,7 +121,7 @@ interface BookshelfItemProps {
   mode: LibraryViewModeType;
   item: Book | BooksGroup;
   coverFit: LibraryCoverFitType;
-  isSelectMode: boolean;
+  isSelectMode?: boolean;
   itemSelected: boolean;
   transferProgress: number | null;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;

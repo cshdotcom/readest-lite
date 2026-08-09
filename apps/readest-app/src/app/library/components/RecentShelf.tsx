@@ -19,11 +19,11 @@ interface RecentShelfProps {
   // Mirror the bookshelf grid's column model so covers are the same size.
   autoColumns: boolean;
   fixedColumns: number;
-  isSelectMode: boolean;
+  isSelectMode?: boolean;
   selectedBooks: ReadonlySet<string>;
   onOpenBook: (book: Book) => void;
-  toggleSelection: (hash: string) => void;
-  handleSetSelectMode: (selectMode: boolean) => void;
+  toggleSelection?: (hash: string) => void;
+  handleSetSelectMode?: (selectMode: boolean) => void;
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
