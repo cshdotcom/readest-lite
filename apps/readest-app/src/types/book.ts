@@ -339,7 +339,7 @@ export interface NoteExportConfig {
   includeChapterSeparator: boolean;
   linkType: AnnotationLinkType;
   includeCoverImage?: boolean;
-  exportFormat?: NoteExportFormat;
+  exportFormat: NoteExportFormat;
   noteSeparator: string;
   useCustomTemplate: boolean;
   customTemplate: string;
