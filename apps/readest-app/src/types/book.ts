@@ -297,6 +297,7 @@ export interface ViewConfig {
 
   animated: boolean;
   pageTurnStyle: PageTurnStyle;
+  ttsPlayerStyle: TTSPlayerStyle;
   isEink: boolean;
   isColorEink: boolean;
 
@@ -513,3 +514,4 @@ export interface BookContent {
 }
 
 export type NoteExportFormat = 'markdown' | 'text' | 'json';
+export type TTSPlayerStyle = 'full' | 'minimal';

@@ -354,6 +354,7 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
 
   animated: false,
   pageTurnStyle: 'push',
+  ttsPlayerStyle: 'full',
   isEink: false,
   isColorEink: false,
 
