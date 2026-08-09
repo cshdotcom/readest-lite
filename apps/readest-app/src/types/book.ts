@@ -299,6 +299,7 @@ export interface ViewConfig {
   pageTurnStyle: PageTurnStyle;
   ttsPlayerStyle: TTSPlayerStyle;
   ttsUseNarration: boolean;
+  scrolledDirection: 'auto' | 'horizontal' | 'vertical';
   isEink: boolean;
   isColorEink: boolean;
 
