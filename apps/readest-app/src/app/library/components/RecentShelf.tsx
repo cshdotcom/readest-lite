@@ -235,10 +235,10 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 book={book}
                 coverFit={coverFit}
                 isSelectMode={isSelectMode}
-                bookSelected={selectedBooks?.has(book.hash)}
+                bookSelected={selectedBooks?.has(book.hash) ?? false}
                 onOpenBook={onOpenBook}
-                toggleSelection={toggleSelection}
-                handleSetSelectMode={handleSetSelectMode}
+                toggleSelection={toggleSelection ?? (() => {})}
+                handleSetSelectMode={handleSetSelectMode ?? (() => {})}
                 handleBookUpload={handleBookUpload}
                 handleBookDownload={handleBookDownload}
                 showBookDetailsModal={showBookDetailsModal}
