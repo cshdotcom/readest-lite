@@ -26,7 +26,7 @@ import {
   type WordLensPack,
 } from '@/services/wordlens/glossPacks';
 import SubPageHeader from './SubPageHeader';
-import ColorInput from './theme/ColorInput';
+import ColorInput from './ColorInput';
 import { BoxedList, SettingsRow, SettingsSelect, SettingsSwitchRow } from './primitives';
 
 // Swatch shown for the "default" (muted, theme-adaptive) gloss color, which has
