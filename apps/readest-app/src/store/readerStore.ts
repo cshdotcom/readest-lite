@@ -48,6 +48,7 @@ interface ViewState {
   /* True while an Auto Scroll session (#4998) is engaged for this view;
      session-only, never persisted. Drives the View menu checkmark. */
   autoScrollEnabled: boolean;
+  bottomBarTab: string;
   syncing: boolean;
   gridInsets: Insets | null;
   /* True while the reader is showing a position requested by an external
@@ -72,6 +73,7 @@ interface ReaderStore {
   setBookmarkRibbonVisibility: (key: string, visible: boolean) => void;
   setTTSEnabled: (key: string, enabled: boolean) => void;
   setAutoScrollEnabled: (key: string, enabled: boolean) => void;
+  setBottomBarTab: (key: string, tab: string) => void;
   setIsLoading: (key: string, loading: boolean) => void;
   setIsSyncing: (key: string, syncing: boolean) => void;
   setProgress: (
@@ -122,6 +124,17 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         [key]: { ...state.viewStates[key]!, view },
       },
     })),
+
+  setBottomBarTab: (key: string, tab: string) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          bottomBarTab: tab,
+        },
+      },
+    })),
   getViews: () => Object.values(get().viewStates).map((state) => state.view!),
   getViewsById: (id: string) => {
     const { viewStates } = get();
@@ -164,6 +177,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           ribbonVisible: false,
           ttsEnabled: false,
           autoScrollEnabled: false,
+          bottomBarTab: '',
           syncing: false,
           gridInsets: null,
           previewMode: false,
@@ -325,6 +339,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
           autoScrollEnabled: false,
+          bottomBarTab: '',
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -349,6 +364,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
           autoScrollEnabled: false,
+          bottomBarTab: '',
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -501,6 +517,17 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         [key]: {
           ...state.viewStates[key]!,
           autoScrollEnabled: enabled,
+        },
+      },
+    })),
+
+  setBottomBarTab: (key: string, tab: string) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          bottomBarTab: tab,
         },
       },
     })),
