@@ -301,6 +301,7 @@ export interface SystemSettings {
    * imported automatically. Device-local, excluded from cloud backup.
    */
   autoImportFolders?: string[];
+  librarySkeuomorphicCovers?: boolean;
 
   keepLogin: boolean;
   autoUpload: boolean;
