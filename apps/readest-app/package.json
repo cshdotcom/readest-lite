@@ -82,9 +82,9 @@
     "update-metadata": "bash ./scripts/sync-release-notes.sh release-notes.json ../../data/metainfo/appdata.xml",
     "wordlens:manifest": "node scripts/build-wordlens-data.mjs manifest",
     "wordlens:sync": "node scripts/sync-wordlens-r2.mjs",
-    "check:optional-chaining": "count=$(grep -rno '\\?\\.[a-zA-Z_$]' .next/static/chunks/* out/_next/static/chunks/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '❌ Optional chaining found in output!'; exit 1; else echo '✅ No optional chaining found.'; fi",
-    "check:translations": "count=$(grep -rno '__STRING_NOT_TRANSLATED__' public/locales/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '❌ Untranslated strings found!'; exit 1; else echo '✅ All strings translated.'; fi",
-    "check:lookbehind-regex": "count=$(grep -rnoE '\\(\\?<[!=]' .next/static/chunks/* out/_next/static/chunks/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '❌ Lookbehind regex found in output!'; exit 1; else echo '✅ No lookbehind regex found.'; fi",
+    "check:optional-chaining": "count=$(grep -rno '\\?\\.[a-zA-Z_$]' .next/static/chunks/* out/_next/static/chunks/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '\u274c Optional chaining found in output!'; exit 1; else echo '\u2705 No optional chaining found.'; fi",
+    "check:translations": "count=$(grep -rno '__STRING_NOT_TRANSLATED__' public/locales/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '\u274c Untranslated strings found!'; exit 1; else echo '\u2705 All strings translated.'; fi",
+    "check:lookbehind-regex": "count=$(grep -rnoE '\\(\\?<[!=]' .next/static/chunks/* out/_next/static/chunks/* | wc -l); if [ \"$count\" -gt 0 ]; then echo '\u274c Lookbehind regex found in output!'; exit 1; else echo '\u2705 No lookbehind regex found.'; fi",
     "check:all": "pnpm check:translations && pnpm check:lookbehind-regex",
     "build-check": "pnpm build && pnpm build-web && pnpm check:all",
     "worktree:new": "pnpm exec tsx scripts/worktree-new.ts",
@@ -213,7 +213,8 @@
     "virtua": "^0.49.1",
     "ws": "^8.18.3",
     "zod": "^4.0.8",
-    "zustand": "5.0.10"
+    "zustand": "5.0.10",
+    "marked-katex-extension": "^5.1.10"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.4.2",
