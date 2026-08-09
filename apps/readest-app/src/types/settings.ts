@@ -330,6 +330,7 @@ export interface SystemSettings {
   librarySortBy: LibrarySortByType;
   libraryThenSortBy?: LibrarySecondarySortByType;
   librarySortAscending: boolean;
+  libraryThenSortAscending?: boolean;
   /**
    * Whether the primary sort uses a smart default derived from `libraryGroupBy`.
    * When `true` and grouping by Series, the effective primary sort becomes
