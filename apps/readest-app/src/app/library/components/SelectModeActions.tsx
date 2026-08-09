@@ -31,7 +31,7 @@ interface SelectModeActionsProps {
   onDetails: () => void;
   onStatus: () => void;
   // Queues every cloud-only book in the selection, groups included (#5244).
-  onDownload: () => void;
+  onDownload?: () => void;
   // The macOS / iPad share popover is anchored to the selected book's
   // cover (located via its data-book-hash attribute), not to this
   // button — the user's visual focus is on the cover they just tapped.
