@@ -20,7 +20,7 @@ interface RecentShelfProps {
   autoColumns: boolean;
   fixedColumns: number;
   isSelectMode?: boolean;
-  selectedBooks: ReadonlySet<string>;
+  selectedBooks?: ReadonlySet<string>;
   onOpenBook: (book: Book) => void;
   toggleSelection?: (hash: string) => void;
   handleSetSelectMode?: (selectMode: boolean) => void;
@@ -235,7 +235,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 book={book}
                 coverFit={coverFit}
                 isSelectMode={isSelectMode}
-                bookSelected={selectedBooks.has(book.hash)}
+                bookSelected={selectedBooks?.has(book.hash)}
                 onOpenBook={onOpenBook}
                 toggleSelection={toggleSelection}
                 handleSetSelectMode={handleSetSelectMode}
