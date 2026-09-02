@@ -154,3 +154,6 @@ export const estimateSentenceSeconds = (text: string, lang: string, voiceId: str
   const cps = calibrated ? calibrated.chars / calibrated.secs : defaultCharsPerSecond(lang);
   return Math.max(MIN_SENTENCE_SEC, chars / cps);
 };
+
+// v8.17.0: stub for v0.12.1 PR #5480
+export const hydrateProvisionalDurations = (): void => {};

@@ -108,3 +108,10 @@ export const ancestorsOf = (absolutePath: string): string[] => {
   }
   return out;
 };
+
+// v8.17.0: TTS pack path builders (v0.12.1 PR #5480)
+export const SYNC_BOOK_TTS_DIR = 'tts';
+export const buildBookTTSDirPath = (rootPath: string, bookHash: string): string =>
+  `${rootPath}/Readest/books/${bookHash}/tts`;
+export const buildBookTTSFilePath = (rootPath: string, bookHash: string, name: string): string =>
+  `${rootPath}/Readest/books/${bookHash}/tts/${name}`;
