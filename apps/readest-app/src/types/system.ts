@@ -92,6 +92,8 @@ export interface AppService {
   hasUpdater: boolean;
   hasOrientationLock: boolean;
   hasScreenBrightness: boolean;
+  /** v0.12.1: Ambient light sensor for Ambient Mode */
+  hasAmbientLightSensor: boolean;
   hasIAP: boolean;
   isMobile: boolean;
   isAppDataSandbox: boolean;

@@ -65,6 +65,8 @@ export abstract class BaseAppService implements AppService {
   hasUpdater = false;
   hasOrientationLock = false;
   hasScreenBrightness = false;
+  /** v0.12.1: Ambient light sensor for Ambient Mode */
+  hasAmbientLightSensor = false;
   hasIAP = false;
   canCustomizeRootDir = false;
   canReadExternalDir = false;
