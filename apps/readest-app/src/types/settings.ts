@@ -344,6 +344,10 @@ export interface SystemSettings {
   libraryCoverFit: LibraryCoverFitType;
   libraryAutoColumns: boolean;
   libraryColumns: number;
+  /** v0.12.1: Skeuomorphic book spine covers */
+  librarySkeuomorphicCovers: boolean;
+  /** v0.12.1: Hide cover images for privacy */
+  libraryHideCovers: boolean;
   /** Show the recently-read carousel at the top of the library (issue #3797). */
   libraryRecentShelfEnabled: boolean;
   /**
