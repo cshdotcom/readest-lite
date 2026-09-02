@@ -204,7 +204,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         text: itemSelected ? _('Deselect Book') : _('Select Book'),
         action: async () => {
           if (!isSelectMode) handleSetSelectMode?.(true);
-          toggleSelection(book.hash);
+          toggleSelection?.(book.hash);
         },
       },
       group: {
@@ -212,7 +212,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         action: async () => {
           if (!isSelectMode) handleSetSelectMode?.(true);
           if (!itemSelected) {
-            toggleSelection(book.hash);
+            toggleSelection?.(book.hash);
           }
           handleGroupBooks();
         },
@@ -298,7 +298,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         text: itemSelected ? _('Deselect Group') : _('Select Group'),
         action: async () => {
           if (!isSelectMode) handleSetSelectMode?.(true);
-          toggleSelection(group.id);
+          toggleSelection?.(group.id);
         },
       },
       {
@@ -306,7 +306,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         action: async () => {
           if (!isSelectMode) handleSetSelectMode?.(true);
           if (!itemSelected) {
-            toggleSelection(group.id);
+            toggleSelection?.(group.id);
           }
           handleGroupBooks();
         },
@@ -372,9 +372,9 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         handleSetSelectMode?.(true);
       }
       if ('format' in item) {
-        toggleSelection((item as Book).hash);
+        toggleSelection?.((item as Book).hash);
       } else {
-        toggleSelection((item as BooksGroup).id);
+        toggleSelection?.((item as BooksGroup).id);
       }
     }, 100),
     [isSelectMode],
