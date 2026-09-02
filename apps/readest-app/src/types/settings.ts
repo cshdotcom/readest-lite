@@ -393,7 +393,19 @@ export interface SystemSettings {
   readwise: ReadwiseSettings;
   hardcover: HardcoverSettings;
   /** v0.12.1: BookOrbit settings (Lite stub — not available) */
-  bookorbit: { enabled: boolean; syncProgress?: boolean; syncNotes?: boolean; syncStats?: boolean };
+  bookorbit: {
+    enabled: boolean;
+    serverUrl: string;
+    username: string;
+    userkey: string;
+    password?: string;
+    deviceId: string;
+    deviceName: string;
+    syncProgress: boolean;
+    syncNotes: boolean;
+    syncStats: boolean;
+    syncBookStates: boolean;
+  };
   webdav: WebDAVSettings;
   /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */
   googleDrive: { enabled: boolean; lastSyncedAt?: number };
