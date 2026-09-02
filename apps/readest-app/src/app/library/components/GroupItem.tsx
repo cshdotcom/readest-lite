@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 interface GroupItemProps {
   mode: LibraryViewModeType;
   group: BooksGroup;
-  isSelectMode: boolean;
+  isSelectMode?: boolean;
   groupSelected: boolean;
 }
 
