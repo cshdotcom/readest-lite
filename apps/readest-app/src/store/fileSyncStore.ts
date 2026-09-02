@@ -47,6 +47,8 @@ interface FileSyncState {
   byKind: Partial<Record<FileSyncBackendKind, ProviderSyncProgress>>;
   /** The backend currently holding the library-sync lock, or null when free. */
   activeKind: FileSyncBackendKind | null;
+  /** v0.12.1: Per-kind last sync error message, or null when last sync was clean. */
+  lastErrorByKind: Partial<Record<FileSyncBackendKind, string | null>>;
 
   /**
    * Acquire the library-sync mutex for `kind` and mark it syncing. Returns
@@ -61,6 +63,7 @@ interface FileSyncState {
 export const useFileSyncStore = create<FileSyncState>((set, get) => ({
   byKind: {},
   activeKind: null,
+  lastErrorByKind: {},
 
   beginSync: (kind, initialLabel) => {
     // Global mutex: only one backend's library sync at a time, since they all
