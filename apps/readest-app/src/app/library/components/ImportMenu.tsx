@@ -65,6 +65,16 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
     setIsDropdownOpen?.(false);
   };
 
+  const handleImportFromWebBrowser = () => {
+    onImportFromWebBrowser?.();
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleImportFromNovelUrl = () => {
+    onImportBookFromNovelUrl?.();
+    setIsDropdownOpen?.(false);
+  };
+
   return (
     <Menu
       className={clsx('dropdown-content bg-base-100 rounded-box !relative z-[1] mt-3 p-2 shadow', menuClassName)}
@@ -94,6 +104,20 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
           label={_('Download from URL')}
           Icon={<MdDownload className='h-5 w-5' />}
           onClick={handleDownloadFromUrl}
+        />
+      )}
+      {onImportFromWebBrowser && (
+        <MenuItem
+          label={_('From Web Browser')}
+          Icon={<MdLanguage className='h-5 w-5' />}
+          onClick={handleImportFromWebBrowser}
+        />
+      )}
+      {onImportBookFromNovelUrl && (
+        <MenuItem
+          label={_('From Web Novel')}
+          Icon={<MdMenuBook className='h-5 w-5' />}
+          onClick={handleImportFromNovelUrl}
         />
       )}
       <MenuItem
