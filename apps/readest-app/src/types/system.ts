@@ -237,4 +237,7 @@ export interface AppService {
     base: BaseDir,
     opts?: DatabaseOpts,
   ): Promise<DatabaseService>;
+  // v0.12.1: Database existence + deletion for library search index
+  databaseExists(path: string, base: BaseDir): Promise<boolean>;
+  deleteDatabase(path: string, base: BaseDir): Promise<void>;
 }

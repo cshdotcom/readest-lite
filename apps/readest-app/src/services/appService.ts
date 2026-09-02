@@ -107,6 +107,16 @@ export abstract class BaseAppService implements AppService {
     opts?: DatabaseOpts,
   ): Promise<DatabaseService>;
 
+  // v0.12.1: Database existence + deletion for library search index
+  async databaseExists(path: string, base: BaseDir): Promise<boolean> {
+    return this.fs.exists(path, base);
+  }
+
+  async deleteDatabase(path: string, base: BaseDir): Promise<void> {
+    await this.fs.removeFile(path, base).catch(() => {});
+    await this.fs.removeFile(`${path}-wal`, base).catch(() => {});
+  }
+
   protected async runMigrations(lastMigrationVersion: number): Promise<void> {
     if (lastMigrationVersion < 20251124) {
       try {
