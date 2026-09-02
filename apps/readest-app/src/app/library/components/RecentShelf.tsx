@@ -19,15 +19,15 @@ interface RecentShelfProps {
   // Mirror the bookshelf grid's column model so covers are the same size.
   autoColumns: boolean;
   fixedColumns: number;
-  isSelectMode: boolean;
-  selectedBooks: ReadonlySet<string>;
+  isSelectMode?: boolean;
+  selectedBooks?: ReadonlySet<string>;
   onOpenBook: (book: Book) => void;
-  toggleSelection: (hash: string) => void;
-  handleSetSelectMode: (selectMode: boolean) => void;
+  toggleSelection?: (hash: string) => void;
+  handleSetSelectMode?: (selectMode: boolean) => void;
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
-  showTimeRemaining: boolean;
+  showTimeRemaining?: boolean;
 }
 
 /**
@@ -70,8 +70,8 @@ const RecentSlide: React.FC<RecentSlideProps> = ({
   // select mode and selects; while in select mode a tap toggles instead of
   // opening the book.
   const handleSelect = () => {
-    if (!isSelectMode) handleSetSelectMode(true);
-    toggleSelection(book.hash);
+    if (!isSelectMode) handleSetSelectMode?.(true);
+    toggleSelection?.(book.hash);
   };
 
   const handleActivate = () => {
@@ -235,7 +235,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 book={book}
                 coverFit={coverFit}
                 isSelectMode={isSelectMode}
-                bookSelected={selectedBooks.has(book.hash)}
+                bookSelected={selectedBooks?.has(book.hash) ?? false}
                 onOpenBook={onOpenBook}
                 toggleSelection={toggleSelection}
                 handleSetSelectMode={handleSetSelectMode}
