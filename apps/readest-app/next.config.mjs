@@ -57,6 +57,7 @@ const nextConfig = {
       fflate: path.resolve(__dirname, 'node_modules/fflate'),
       'marked-katex-extension': path.resolve(__dirname, 'src/utils/marked-katex-stub/index.ts'),
       'tauri-plugin-turso': path.resolve(__dirname, 'src/utils/stub-turso.ts'),
+      'react-colorful': path.resolve(__dirname, 'src/utils/react-colorful-stub/index.tsx'),
       ...(appPlatform !== 'web' ? { '@tursodatabase/database-wasm': false } : {}),
     };
     // 客户端构建时把 server-only 模块设为空（避免 'fs' not found）
