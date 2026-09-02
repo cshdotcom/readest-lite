@@ -124,6 +124,12 @@ export interface Book {
   // v0.12.1: TTS narration + Media Overlays support
   hasNarration?: boolean;
   duration?: number;
+  /** v0.12.1: Field-level LWW timestamp for metadata (title, author, tags) */
+  metadataUpdatedAt?: number | null;
+  /** v0.12.1: Field-level LWW timestamp for group membership */
+  groupUpdatedAt?: number | null;
+  /** v0.12.1: Positive auth to delete bytes from file-sync providers */
+  fileSyncDeletionRequestedAt?: number | null;
 
   metadata?: BookMetadata;
 }
