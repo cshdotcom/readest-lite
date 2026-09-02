@@ -90,28 +90,28 @@ export default function UserManagement() {
       <div className='space-y-2'>
         {/* v8.10.2: 默认只显示前 3 个用户，避免长列表撑爆用户中心 */}
         {users.slice(0, 3).map((u) => (
-          <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3'>
-            <div className='flex items-center gap-3'>
-              <IoPersonOutline className='w-5 h-5 opacity-50' />
-              <div>
-                <div className='font-medium'>
+          <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
+            <div className='flex items-center gap-3 min-w-0 flex-1'>
+              <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+              <div className='min-w-0'>
+                <div className='font-medium truncate'>
                   {u.displayName || u.email}
                   {u.role === 'admin' && (
                     <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>
                   )}
                 </div>
-                <div className='text-xs opacity-60'>{u.email}</div>
+                <div className='text-xs opacity-60 truncate'>{u.email}</div>
               </div>
             </div>
-            <div className='flex items-center gap-2'>
-              <div className='text-xs opacity-60 text-right'>
+            <div className='flex items-center gap-2 flex-shrink-0 flex-wrap justify-end'>
+              <div className='text-xs opacity-60 text-right whitespace-nowrap'>
                 <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
                 <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
               </div>
               {u.id !== currentUser?.id && (
                 <button
                   onClick={() => setEditingUser(u)}
-                  className='btn btn-ghost btn-xs'
+                  className='btn btn-ghost btn-xs flex-shrink-0'
                 >
                   {_('Edit')}
                 </button>
@@ -119,7 +119,7 @@ export default function UserManagement() {
               {u.id !== currentUser?.id && u.role !== 'admin' && (
                 <button
                   onClick={() => handleDelete(u.id, u.email)}
-                  className='btn btn-ghost btn-xs text-error'
+                  className='btn btn-ghost btn-xs text-error flex-shrink-0'
                 >
                   <IoTrashOutline className='w-4 h-4' />
                 </button>
@@ -190,33 +190,33 @@ function AllUsersModal({
         </div>
         <div className='flex-1 overflow-y-auto p-3 space-y-2'>
           {users.map((u) => (
-            <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3'>
-              <div className='flex items-center gap-3'>
-                <IoPersonOutline className='w-5 h-5 opacity-50' />
-                <div>
-                  <div className='font-medium'>
+            <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
+              <div className='flex items-center gap-3 min-w-0 flex-1'>
+                <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+                <div className='min-w-0'>
+                  <div className='font-medium truncate'>
                     {u.displayName || u.email}
                     {u.role === 'admin' && (
                       <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>
                     )}
                   </div>
-                  <div className='text-xs opacity-60'>{u.email}</div>
+                  <div className='text-xs opacity-60 truncate'>{u.email}</div>
                 </div>
               </div>
-              <div className='flex items-center gap-2'>
-                <div className='text-xs opacity-60 text-right'>
+              <div className='flex items-center gap-2 flex-shrink-0 flex-wrap justify-end'>
+                <div className='text-xs opacity-60 text-right whitespace-nowrap'>
                   <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
                   <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
                 </div>
                 {u.id !== currentUser?.id && (
-                  <button onClick={() => onEdit(u)} className='btn btn-ghost btn-xs'>
+                  <button onClick={() => onEdit(u)} className='btn btn-ghost btn-xs flex-shrink-0'>
                     {_('Edit')}
                   </button>
                 )}
                 {u.id !== currentUser?.id && u.role !== 'admin' && (
                   <button
                     onClick={() => onDelete(u.id, u.email)}
-                    className='btn btn-ghost btn-xs text-error'
+                    className='btn btn-ghost btn-xs text-error flex-shrink-0'
                   >
                     <IoTrashOutline className='w-4 h-4' />
                   </button>
