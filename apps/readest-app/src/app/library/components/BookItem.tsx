@@ -27,13 +27,13 @@ interface BookItemProps {
   book: Book;
   mode: LibraryViewModeType;
   coverFit: LibraryCoverFitType;
-  isSelectMode: boolean;
+  isSelectMode?: boolean;
   bookSelected: boolean;
   transferProgress: number | null;
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
-  showTimeRemaining: boolean;
+  showTimeRemaining?: boolean;
 }
 
 const BookItem: React.FC<BookItemProps> = ({
