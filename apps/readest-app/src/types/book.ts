@@ -119,6 +119,10 @@ export interface Book {
   readingStatusUpdatedAt?: number; // ms; bumped only when readingStatus changes
   primaryLanguage?: string;
 
+  // v0.12.1: TTS narration + Media Overlays support
+  hasNarration?: boolean;
+  duration?: number;
+
   metadata?: BookMetadata;
 }
 
