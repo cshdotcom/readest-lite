@@ -435,6 +435,12 @@ export interface BookProgress {
 
 export type SearchMode = 'contains' | 'whole-words' | 'regex' | 'nearby-words';
 
+export type LibrarySearchConfig = Omit<BookSearchConfig, 'mode'> & {
+  mode: SearchMode | 'fuzzy';
+};
+
+export type LibrarySearchTarget = 'books' | 'text';
+
 export interface BookSearchConfig {
   scope: 'book' | 'section';
   mode: SearchMode;
