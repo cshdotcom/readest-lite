@@ -309,6 +309,8 @@ export interface SystemSettings {
   autoCheckUpdates: boolean;
   updateChannel: 'stable' | 'nightly';
   screenWakeLock: boolean;
+  /** v0.12.1: Auto-hide mouse cursor while reading (#5404) */
+  autohideCursor: boolean;
   screenBrightness: number;
   autoScreenBrightness: boolean;
   swipeBrightnessGesture: boolean;
