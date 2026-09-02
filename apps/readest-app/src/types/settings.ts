@@ -391,6 +391,11 @@ export interface SystemSettings {
   readwise: ReadwiseSettings;
   hardcover: HardcoverSettings;
   webdav: WebDAVSettings;
+  /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */
+  googleDrive: { enabled: boolean; lastSyncedAt?: number };
+  s3: { enabled: boolean; lastSyncedAt?: number };
+  onedrive: { enabled: boolean; lastSyncedAt?: number };
+  icloud: { enabled: boolean; lastSyncedAt?: number };
 
   aiSettings: AISettings;
   /**

@@ -157,6 +157,10 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
   webdav: DEFAULT_WEBDAV_SETTINGS,
+  googleDrive: { enabled: false },
+  s3: { enabled: false },
+  onedrive: { enabled: false },
+  icloud: { enabled: false },
   aiSettings: DEFAULT_AI_SETTINGS,
 
   lastSyncedAtBooks: 0,
