@@ -4,10 +4,13 @@ import { useThemeStore } from '@/store/themeStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTTSControl } from '@/app/reader/hooks/useTTSControl';
+import { useTTSDownloads } from '@/app/reader/hooks/useTTSDownloads';
+import { useBookProgress } from '@/store/readerProgressStore';
 import { Insets } from '@/types/misc';
 import { eventDispatcher } from '@/utils/event';
 import TTSMiniPlayer from './TTSMiniPlayer';
 import TTSPlayerSheet from './TTSPlayerSheet';
+import { useMiniPlayerAutoHide } from './useMiniPlayerAutoHide';
 
 interface TTSControlProps {
   bookKey: string;
@@ -29,8 +32,15 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
     onRequestHidePanel: () => setShowPlayerSheet(false),
   });
 
-  const isEink = getViewSettings(bookKey)?.isEink ?? false;
+  const downloads = useTTSDownloads(bookKey, tts.getController, showPlayerSheet);
+  const activeSectionIndex = useBookProgress(bookKey)?.index ?? null;
+
+  const viewSettings = getViewSettings(bookKey);
+  const isEink = viewSettings?.isEink ?? false;
+  const playerStyle = viewSettings?.ttsPlayerStyle ?? 'full';
   const hasTimeline = tts.ttsClientsInited && tts.handleSupportsPlaybackInfo();
+  const miniPlayerMounted = tts.showIndicator && !showPlayerSheet;
+  const miniPlayerVisible = useMiniPlayerAutoHide(bookKey, playerStyle, miniPlayerMounted);
 
   useEffect(() => {
     if (tts.showBackToCurrentTTSLocation) {
@@ -52,6 +62,9 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
   }, [tts.showBackToCurrentTTSLocation]);
 
   const handleExpand = () => {
+    // The mini player mounts as soon as the session starts; the full sheet
+    // needs initialized clients (voices, timeline), so ignore taps until then.
+    if (!tts.ttsClientsInited) return;
     tts.refreshTtsLang();
     setShowPlayerSheet(true);
   };
@@ -81,16 +94,19 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
               safeAreaInsets?.top ? 'h-11' : 'h-9',
             )}
           >
-            {_('Back to TTS Location')}
+            {_('Back to Read Aloud')}
           </button>
         </div>
       )}
-      {/* One surface at a time: the sheet replaces the mini player while open. */}
-      {tts.showIndicator && tts.ttsClientsInited && !showPlayerSheet && (
+      {/* One surface at a time: the sheet replaces the mini player while open.
+          Mounts on showIndicator alone so the card appears the moment the
+          session starts, before the TTS clients finish initializing. */}
+      {miniPlayerMounted && (
         <TTSMiniPlayer
           bookKey={bookKey}
           isPlaying={tts.isPlaying}
           isEink={isEink}
+          visible={miniPlayerVisible}
           hasTimeline={hasTimeline}
           timeoutTimestamp={tts.timeoutTimestamp}
           chapterRemainingSec={tts.chapterRemainingSec}
@@ -118,12 +134,17 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
           onBackward={tts.handleBackward}
           onForward={tts.handleForward}
           onSetRate={tts.handleSetRate}
+          onSetSentenceGap={tts.handleSetSentenceGap}
+          onSetParagraphGap={tts.handleSetParagraphGap}
           onGetVoices={tts.handleGetVoices}
           onSetVoice={tts.handleSetVoice}
           onGetVoiceId={tts.handleGetVoiceId}
           onSelectTimeout={tts.handleSelectTimeout}
           onSeek={tts.handleSeekTo}
+          onSeekPreview={tts.handleSeekPreview}
           onGetPlaybackInfo={tts.handleGetPlaybackInfo}
+          downloads={downloads}
+          activeSectionIndex={activeSectionIndex}
         />
       )}
     </>

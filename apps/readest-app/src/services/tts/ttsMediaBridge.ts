@@ -97,8 +97,15 @@ export class TTSMediaBridge {
   // Cover fetched once per bind as a data URL. iOS navigator.mediaSession only
   // renders lock-screen / CarPlay artwork from a fetchable URL, and the book
   // cover is often a blob/tauri URL the media session can't load; a data URL
-  // always resolves. Re-sent on every metadata update (each is a full replace).
+  // always resolves. The web path re-sends it on every update (each is a full
+  // replace); the native path pushes it once — see #pushArtwork.
   #coverArtwork = '/icon.png';
+  // Push artwork on the first native metadata write after a bind. Later mark
+  // updates omit it: Swift merges into the existing nowPlayingInfo, so the
+  // cover survives, and re-decoding a multi-MB base64 image per sentence does
+  // not. Sending artwork: '' instead is what used to wipe the cover — empty
+  // string is truthy for the WebKit mirror and non-nil for Swift's optional.
+  #pushArtwork = true;
   #lastSectionLabel: string | undefined;
   #previousSectionLabel: string | undefined;
   #onSpeakMark: ((e: Event) => void) | null = null;
@@ -150,6 +157,7 @@ export class TTSMediaBridge {
         this.#coverArtwork = '';
       }
     }
+    this.#pushArtwork = true;
 
     if (mediaSession instanceof TauriMediaSession) {
       await mediaSession.setActive({
@@ -166,6 +174,7 @@ export class TTSMediaBridge {
         album: meta.title,
         artwork: this.#coverArtwork,
       });
+      this.#pushArtwork = false;
     }
 
     if (this.#mediaSession !== mediaSession) return;
@@ -246,6 +255,7 @@ export class TTSMediaBridge {
     this.#onStateChange = null;
     this.#lastSectionLabel = undefined;
     this.#previousSectionLabel = undefined;
+    this.#pushArtwork = true;
   }
 
   #registerActionHandlers(): void {
@@ -336,12 +346,24 @@ export class TTSMediaBridge {
     if (!metadata.shouldUpdate) return;
 
     if (mediaSession instanceof TauriMediaSession) {
-      await mediaSession.updateMetadata({
+      // Never send artwork: '' — that wiped the cover on every speak-mark
+      // (empty string is truthy for the web mirror and for Swift's optional).
+      // Push the cover once after bind; later updates keep title/artist only.
+      const payload: {
+        title: string;
+        artist: string;
+        album: string;
+        artwork?: string;
+      } = {
         title: metadata.title,
         artist: metadata.artist,
         album: metadata.album,
-        artwork: '',
-      });
+      };
+      if (this.#pushArtwork && this.#coverArtwork) {
+        payload.artwork = this.#coverArtwork;
+        this.#pushArtwork = false;
+      }
+      await mediaSession.updateMetadata(payload);
     } else {
       // Declare the artwork's REAL mime type: fetchImageAsBase64 emits a JPEG
       // data URL by default, and WebKit silently drops mediaSession artwork

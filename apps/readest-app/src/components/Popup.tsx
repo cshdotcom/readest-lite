@@ -56,7 +56,6 @@ const Popup = ({
   trianglePosition,
   children,
   className = '',
-  triangleClassName = '',
   additionalStyle = {},
   isOpen = true,
   onDismiss,
@@ -70,7 +69,6 @@ const Popup = ({
   trianglePosition?: Position;
   children: React.ReactNode;
   className?: string;
-  triangleClassName?: string;
   additionalStyle?: React.CSSProperties;
   onDismiss?: () => void;
 }) => {
@@ -93,7 +91,13 @@ const Popup = ({
     if (!containerRef.current) return;
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const newHeight = entry.contentRect.height;
+        // Measure the border box: contentRect is the content box, which
+        // under-reports by 2px when e-ink mode adds the 1px container border.
+        // The height positions the popup against the triangle attachment
+        // point, so a short measurement drops the popup onto the triangle and
+        // flips triangleHidden, hiding the white inner triangle behind the
+        // black outer one (solid black triangle on e-ink).
+        const newHeight = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
         if (newHeight !== childrenHeight) {
           setChildrenHeight(newHeight);
           return;
@@ -125,8 +129,9 @@ const Popup = ({
     setAdjustedPosition(newPosition);
   }, [position, trianglePosition, popupPadding, childrenHeight]);
 
-  const outerTriangleStyles = getTriangleStyles(trianglePosition, 7, 0);
-  const innerTriangleStyles = getTriangleStyles(trianglePosition, 7, -1);
+  const triangleSize = 7;
+  const outerTriangleStyles = getTriangleStyles(trianglePosition, triangleSize, 0);
+  const innerTriangleStyles = getTriangleStyles(trianglePosition, triangleSize, -1);
 
   const popupHeight = height ?? childrenHeight;
   const triangleHidden = !!(
@@ -141,18 +146,29 @@ const Popup = ({
   );
 
   return (
+    // No `filter` (drop-shadow) on this wrapper: it would become the containing
+    // block and stacking context for the absolutely positioned popup below,
+    // re-anchoring it off the viewport and demoting its z-50 under later reader
+    // chrome. The triangle shadow lives on the triangle itself.
     <div>
       <div
-        className={clsx('popup-triangle-outer text-base-300 absolute z-50', triangleClassName)}
+        className={clsx(
+          'popup-triangle-outer text-base-content/20 not-eink:drop-shadow-xl absolute z-50',
+          triangleHidden ? 'invisible' : 'visible',
+        )}
         style={outerTriangleStyles}
       />
       <div
         id='popup-container'
         ref={containerRef}
+        aria-hidden={!isOpen}
+        data-capture-blocking-overlay={isOpen ? 'true' : undefined}
+        // `[data-eink] .popup-container` in globals.css already forces the 1px
+        // base-content border and base-100 background, so no eink-bordered here.
         className={clsx(
-          'popup-container bg-base-300 absolute z-50 rounded-lg font-sans',
-          'eink:border eink:border-base-content',
-          trianglePosition?.dir !== 'up' && 'not-eink:shadow-xl',
+          'popup-container text-base-content absolute z-50 rounded-lg border font-sans',
+          'not-eink:border-base-content/20 not-eink:shadow-2xl',
+          'bg-base-300 theme-dark:bg-base-100',
           className,
         )}
         style={{
@@ -169,9 +185,8 @@ const Popup = ({
       </div>
       <div
         className={clsx(
-          'popup-triangle-inner text-base-300 absolute',
-          triangleHidden ? 'z-10' : 'z-50',
-          triangleClassName,
+          'popup-triangle-inner text-base-300 theme-dark:text-base-100 absolute z-50',
+          triangleHidden ? 'invisible' : 'visible',
         )}
         style={innerTriangleStyles}
       />

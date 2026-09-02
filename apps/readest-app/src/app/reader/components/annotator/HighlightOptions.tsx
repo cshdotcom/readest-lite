@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import React, { useEffect, useRef, useState } from 'react';
-import { FaCheckCircle } from 'react-icons/fa';
+import { FaCheck } from 'react-icons/fa';
 import { MdLibraryAddCheck } from 'react-icons/md';
 import { DEFAULT_HIGHLIGHT_COLORS, HighlightColor, HighlightStyle } from '@/types/book';
 import { useEnv } from '@/context/EnvContext';
@@ -18,14 +18,6 @@ import { stubTranslation as _ } from '@/utils/misc';
 // component via `useTranslation` below.
 const styles = [_('highlight'), _('underline'), _('squiggly')] as HighlightStyle[];
 void [_('red'), _('yellow'), _('green'), _('blue'), _('violet')];
-
-const getColorHex = (
-  customColors: Record<HighlightColor, string>,
-  color: HighlightColor,
-): string => {
-  if (color.startsWith('#')) return color;
-  return customColors[color] ?? color;
-};
 
 interface HighlightOptionsProps {
   isVertical: boolean;
@@ -79,8 +71,9 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressTapRef = useRef(false);
   const colorStripRef = useRef<HTMLDivElement | null>(null);
+  const size10 = useResponsiveSize(10);
   const size16 = useResponsiveSize(16);
-  const size28 = useResponsiveSize(28);
+  const size30 = useResponsiveSize(30);
   const highlightOptionsHeightPx = useResponsiveSize(OPTIONS_HEIGHT_PIX);
   const highlightOptionsPaddingPx = useResponsiveSize(OPTIONS_PADDING_PIX);
 
@@ -158,6 +151,18 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
     };
   }, []);
 
+  /**
+   * The color a style would be drawn in, resolved to a hex the same way the
+   * color strip resolves its dots. The selected style's live color lives in
+   * local state -- the store lags a tick behind the tap -- so read that first
+   * and fall back to the style's stored binding.
+   */
+  const resolveStyleColor = (style: HighlightStyle): string => {
+    const color =
+      selectedStyle === style ? selectedColor : globalReadSettings.highlightStyles[style];
+    return customColors[color] || color;
+  };
+
   const handleSelectStyle = (style: HighlightStyle) => {
     const newGlobalReadSettings = { ...globalReadSettings, highlightStyle: style };
     saveSysSettings(envConfig, 'globalReadSettings', newGlobalReadSettings);
@@ -203,49 +208,59 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
     >
       <div
         className={clsx('flex gap-2', isVertical ? 'flex-col' : 'flex-row')}
-        style={isVertical ? { width: size28 } : { height: size28 }}
+        style={isVertical ? { width: size30 } : { height: size30 }}
       >
         {styles.map((style) => (
           <button
             key={style}
             aria-label={_('Select {{style}} style', { style: _(style) })}
             onClick={() => handleSelectStyle(style)}
-            className='not-eink:bg-gray-700 eink-bordered flex items-center justify-center rounded-full p-0'
-            style={{ width: size28, height: size28, minHeight: size28 }}
+            className={clsx(
+              'eink-bordered not-eink:shadow-sm flex items-center justify-center rounded-full p-0',
+              'bg-base-300 theme-dark:bg-base-100',
+              selectedStyle === style
+                ? 'border-current border-2'
+                : 'not-eink:border-base-content/20 border',
+            )}
+            style={{ width: size30, height: size30, minHeight: size30 }}
           >
             <div
               style={{
                 width: size16,
                 height: size16,
-                ...(style === 'highlight' &&
-                  selectedStyle === 'highlight' && {
-                    backgroundColor: isBwEink
-                      ? einkFgColor
-                      : getColorHex(customColors, selectedColor),
-                    color: isBwEink ? einkBgColor : '#d1d5db',
-                    paddingTop: '2px',
-                  }),
-                ...(style === 'highlight' &&
-                  selectedStyle !== 'highlight' && {
-                    backgroundColor: '#d1d5db',
-                    paddingTop: '2px',
-                  }),
+                // The marker swatch is a block of the highlighter color, so its
+                // glyph needs a fixed dark ink -- base-content would be white on
+                // a light marker in dark themes. The highlight palette is all
+                // light tones, so dark ink stays legible on every color. B&W
+                // e-ink has no color to show.
+                ...(style === 'highlight' && {
+                  backgroundColor: isBwEink ? einkFgColor : resolveStyleColor(style),
+                  color: isBwEink ? einkBgColor : '#1f2937',
+                }),
+                // Only the rule carries the color, like the overlayer, which
+                // strokes the line in the annotation color over untouched text.
                 ...((style === 'underline' || style === 'squiggly') && {
-                  color: isBwEink ? einkFgColor : '#d1d5db',
                   textDecoration: 'underline',
                   textDecorationThickness: '2px',
-                  textDecorationColor:
-                    selectedStyle === style
-                      ? isBwEink
-                        ? einkFgColor
-                        : getColorHex(customColors, selectedColor)
-                      : '#d1d5db',
-                  ...(style === 'squiggly' && { textDecorationStyle: 'wavy' }),
+                  textUnderlineOffset: style === 'squiggly' ? '2px' : '2px',
+                  textDecorationColor: isBwEink ? einkFgColor : resolveStyleColor(style),
                 }),
+                ...(style === 'squiggly' && { textDecorationStyle: 'wavy' }),
               }}
-              className='w-4 p-0 text-center leading-none'
+              className={clsx(
+                'text-base-content decoration-inherit rounded-sm p-0 leading-none',
+                style === 'highlight' ? 'flex items-center justify-center' : 'text-center',
+                style === 'underline' || style === 'squiggly' ? 'sm:mt-[-2px]' : '',
+              )}
             >
-              A
+              {style === 'highlight' ? (
+                // text-box trims the em box to cap height / baseline so the
+                // flex centering centers the glyph ink, not the em box (which
+                // has empty descender space below a capital A).
+                <span style={{ textBox: 'trim-both cap alphabetic' }}>A</span>
+              ) : (
+                'A'
+              )}
             </div>
           </button>
         ))}
@@ -259,12 +274,13 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
           title={_('Apply to every occurrence in the book')}
           onClick={() => onToggleGlobal?.()}
           className={clsx(
-            'not-eink:bg-gray-700 eink-bordered flex items-center justify-center rounded-full p-0 transition-colors',
+            'not-eink:border-base-content/20 eink-bordered not-eink:shadow-sm flex flex-shrink-0 items-center justify-center rounded-full border p-0 transition-colors',
+            'bg-base-300 theme-dark:bg-base-100',
             globalToggleActive
-              ? 'not-eink:text-blue-400'
-              : 'not-eink:text-gray-400 hover:not-eink:text-gray-200',
+              ? 'not-eink:text-primary'
+              : 'not-eink:text-base-content/80 hover:not-eink:text-base-content',
           )}
-          style={{ width: size28, height: size28, minHeight: size28 }}
+          style={{ width: size30, height: size30 }}
         >
           <MdLibraryAddCheck size={size16} />
         </button>
@@ -274,13 +290,14 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
         ref={colorStripRef}
         {...stripPointerHandlers}
         className={clsx(
-          'not-eink:bg-gray-700 eink-bordered flex items-center gap-2 rounded-3xl',
+          'not-eink:border-base-content/20 eink-bordered not-eink:shadow-sm flex items-center gap-2 rounded-3xl border',
+          'bg-base-300 theme-dark:bg-base-100',
           isVertical ? 'flex-col overflow-y-auto py-2' : 'min-w-0 flex-row overflow-x-auto px-2',
           !isVertical && 'cursor-grab',
           !isVertical && isDraggingColorStrip && 'cursor-grabbing',
         )}
         style={{
-          ...(isVertical ? { width: size28 } : { height: size28 }),
+          ...(isVertical ? { width: size30 } : { height: size30 }),
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
           WebkitUserSelect: isDraggingColorStrip ? 'none' : undefined,
@@ -313,14 +330,15 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
                   style={{
                     width: size16,
                     height: size16,
-                    backgroundColor: selectedColor !== color ? swatchColor : 'transparent',
+                    backgroundColor: isBwEink ? einkFgColor : swatchColor,
                   }}
-                  className='rounded-full p-0'
+                  className='flex items-center justify-center rounded-full p-0'
                 >
                   {selectedColor === color && (
-                    <FaCheckCircle
-                      size={size16}
-                      style={{ fill: isBwEink ? einkFgColor : swatchColor }}
+                    <FaCheck
+                      size={size10}
+                      className='text-base-content'
+                      style={isBwEink ? { color: einkBgColor } : undefined}
                     />
                   )}
                 </button>

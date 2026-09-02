@@ -3,7 +3,7 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import 'overlayscrollbars/overlayscrollbars.css';
 import * as CFI from 'foliate-js/epubcfi.js';
-import { PiNotePencil } from 'react-icons/pi';
+import { PiMagnifyingGlass, PiNotePencil } from 'react-icons/pi';
 import { RiBookmark3Line, RiBookmarkLine } from 'react-icons/ri';
 
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -12,9 +12,22 @@ import { useSidebarStore } from '@/store/sidebarStore';
 import { findTocItemBS } from '@/services/nav';
 import { findNearestCfi } from '@/utils/cfi';
 import { TOCItem } from '@/libs/document';
-import { BookNote, BooknoteGroup, BookNoteType } from '@/types/book';
+import {
+  BookNote,
+  BooknoteGroup,
+  BookNoteType,
+  HighlightColor,
+  HighlightStyle,
+} from '@/types/book';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
+import {
+  filterBooknotes,
+  collectAnnotationFacets,
+  summarizeAnnotations,
+  AnnotationFilterKind,
+} from '../../utils/annotatorUtil';
+import AnnotationsToolbar from './AnnotationsToolbar';
 import BooknoteItem from './BooknoteItem';
 import EmptyState from '../EmptyState';
 
@@ -36,18 +49,83 @@ const BooknoteView: React.FC<{
   const _ = useTranslation();
   const { getConfig } = useBookDataStore();
   const { getProgress } = useReaderStore();
-  const { setActiveBooknoteType, setBooknoteResults } = useSidebarStore();
+  const { setActiveBooknoteType, setBooknoteResults, isSearchBarVisible, setSearchBarVisible } =
+    useSidebarStore();
   const config = getConfig(bookKey)!;
   const progress = getProgress(bookKey);
   const allNotes = config.booknotes ?? [];
 
-  // Filter active notes of this type. useMemo so referential stability flows
+  const [filterKind, setFilterKind] = useState<AnnotationFilterKind>('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [excludedColors, setExcludedColors] = useState<HighlightColor[]>([]);
+  const [excludedStyles, setExcludedStyles] = useState<HighlightStyle[]>([]);
+
+  // Debounce the query the same 300 ms the Notebook SearchBar uses, so
+  // typing doesn't regroup/re-sort hundreds of notes per keystroke.
+  useEffect(() => {
+    const timeout = setTimeout(() => setQuery(searchInput), 300);
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
+
+  // The sidebar header's search icon owns the annotation search visibility;
+  // whenever the search closes (icon toggle, Escape, tab switch), the query
+  // is cleared so a hidden filter can't keep narrowing the list.
+  useEffect(() => {
+    if (!isSearchBarVisible) {
+      setSearchInput('');
+    }
+  }, [isSearchBarVisible]);
+
+  const isFiltering =
+    type === 'annotation' &&
+    (filterKind !== 'all' ||
+      query.trim().length > 0 ||
+      excludedColors.length > 0 ||
+      excludedStyles.length > 0);
+
+  const toggleColor = useCallback((color: HighlightColor) => {
+    setExcludedColors((prev) =>
+      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color],
+    );
+  }, []);
+
+  const toggleStyle = useCallback((style: HighlightStyle) => {
+    setExcludedStyles((prev) =>
+      prev.includes(style) ? prev.filter((s) => s !== style) : [...prev, style],
+    );
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilterKind('all');
+    setExcludedColors([]);
+    setExcludedStyles([]);
+  }, []);
+
+  // Live annotations drive both the facet row (distinct colors/styles) and
+  // the greyed-out state of "Clear Annotations" (mirrors BookMenu).
+  const liveAnnotations = useMemo(
+    () => allNotes.filter((note) => note.type === 'annotation' && !note.deletedAt),
+    [allNotes],
+  );
+  const facets = useMemo(() => collectAnnotationFacets(liveAnnotations), [liveAnnotations]);
+  const counts = useMemo(() => summarizeAnnotations(liveAnnotations), [liveAnnotations]);
+
+  // Filter active notes of this type, then apply the hub's kind/query/facet
+  // filter (annotation tab only). useMemo so referential stability flows
   // through derived data and prevents needless recomputation when unrelated
   // config fields change (e.g. viewSettings, lastUpdated).
-  const filteredNotes = useMemo(
-    () => allNotes.filter((note) => note.type === type && !note.deletedAt),
-    [allNotes, type],
-  );
+  const filteredNotes = useMemo(() => {
+    if (type !== 'annotation') {
+      return allNotes.filter((note) => note.type === type && !note.deletedAt);
+    }
+    return filterBooknotes(liveAnnotations, {
+      kind: filterKind,
+      query,
+      excludedColors,
+      excludedStyles,
+    });
+  }, [allNotes, liveAnnotations, type, filterKind, query, excludedColors, excludedStyles]);
 
   // Build groups + sort by toc id and intra-group cfi.
   const sortedGroups = useMemo<BooknoteGroup[]>(() => {
@@ -115,7 +193,7 @@ const BooknoteView: React.FC<{
   }, [filteredNotes, bookKey, type, setActiveBooknoteType, setBooknoteResults]);
 
   // ---- Virtualization wiring (mirrors TOCView pattern) ----
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const listHostRef = useRef<HTMLDivElement | null>(null);
   const osRootRef = useRef<HTMLDivElement | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
@@ -187,9 +265,9 @@ const BooknoteView: React.FC<{
   // bounded viewport. Same pattern as TOCView.
   useEffect(() => {
     const updateHeight = () => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const parentContainer = containerRef.current.closest('.scroll-container');
+      if (!listHostRef.current) return;
+      const rect = listHostRef.current.getBoundingClientRect();
+      const parentContainer = listHostRef.current.closest('.scroll-container');
       if (parentContainer) {
         const parentRect = parentContainer.getBoundingClientRect();
         const availableHeight = parentRect.height - (rect.top - parentRect.top);
@@ -199,8 +277,8 @@ const BooknoteView: React.FC<{
     updateHeight();
     window.addEventListener('resize', updateHeight);
     let resizeObserver: ResizeObserver | null = null;
-    if (containerRef.current) {
-      const parentContainer = containerRef.current.closest('.scroll-container');
+    if (listHostRef.current) {
+      const parentContainer = listHostRef.current.closest('.scroll-container');
       if (parentContainer) {
         resizeObserver = new ResizeObserver(updateHeight);
         resizeObserver.observe(parentContainer);
@@ -217,6 +295,16 @@ const BooknoteView: React.FC<{
   // per-item useScrollToItem (which forced 1000 layout reads) with a single
   // virtuosoRef.scrollToIndex call.
   useEffect(() => {
+    // While the user is filtering/searching, the list is a result set, not a
+    // mirror of the reading position; jumping to the nearest note would yank
+    // their scroll position on every keystroke.
+    if (isFiltering) {
+      // Forget the last auto-scroll target while filtering so that clearing
+      // the filter re-centers on the reading position instead of being
+      // skipped by the ref-equality guard below.
+      lastScrolledCfiRef.current = null;
+      return;
+    }
     if (nearestIndex < 0) return;
     if (nearestCfi === lastScrolledCfiRef.current) return;
     lastScrolledCfiRef.current = nearestCfi;
@@ -245,7 +333,7 @@ const BooknoteView: React.FC<{
         });
       });
     }
-  }, [nearestCfi, nearestIndex]);
+  }, [nearestCfi, nearestIndex, isFiltering]);
 
   const renderItem = useCallback(
     (index: number) => {
@@ -267,14 +355,15 @@ const BooknoteView: React.FC<{
             item={row.item}
             isNearest={row.item.cfi === nearestCfi}
             onClick={handleBrowseBookNotes}
+            inlineNoteEditing={type === 'annotation'}
           />
         </ul>
       );
     },
-    [flatItems, bookKey, nearestCfi, handleBrowseBookNotes],
+    [flatItems, bookKey, nearestCfi, handleBrowseBookNotes, type],
   );
 
-  // Always mount the containerRef host so the height-measurement effect (and
+  // Always mount the listHostRef host so the height-measurement effect (and
   // its ResizeObserver) can attach on first mount, even when starting from the
   // empty state. Otherwise transitioning empty -> populated (e.g. after
   // importing notes) would leave Virtuoso stuck at the initial 400px until a
@@ -282,53 +371,83 @@ const BooknoteView: React.FC<{
   const isEmpty = sortedGroups.length === 0;
 
   return (
-    <div ref={containerRef} className='booknote-list rounded pt-2' role='tree'>
-      {isEmpty ? (
-        <div
-          className='flex items-center justify-center overflow-hidden'
-          style={{ height: containerHeight }}
-        >
-          <EmptyState
-            Icon={type === 'annotation' ? PiNotePencil : RiBookmark3Line}
-            label={type === 'annotation' ? _('No Annotations') : _('No Bookmarks')}
-            hint={type === 'annotation' ? _('Select some text to highlight') : undefined}
-            action={
-              type === 'bookmark' ? (
-                <button
-                  type='button'
-                  className='btn btn-contrast h-9 min-h-0 max-w-full flex-nowrap gap-1.5 rounded-lg px-4 text-sm font-medium'
-                  onClick={() => eventDispatcher.dispatch('toggle-bookmark', { bookKey })}
-                >
-                  <RiBookmarkLine className='shrink-0 text-base' />
-                  <span className='min-w-0 truncate'>{_('Bookmark This Page')}</span>
-                </button>
-              ) : undefined
-            }
-          />
-        </div>
-      ) : (
-        <div
-          ref={osRootRef}
-          data-overlayscrollbars-initialize=''
-          style={{ height: containerHeight }}
-        >
-          <Virtuoso
-            ref={virtuosoRef}
-            scrollerRef={handleScrollerRef}
-            initialTopMostItemIndex={
-              initialTopIndex > 0 ? { index: initialTopIndex, align: 'center' } : 0
-            }
-            rangeChanged={({ startIndex, endIndex }) => {
-              visibleCenterRef.current = Math.floor((startIndex + endIndex) / 2);
-            }}
-            style={{ height: containerHeight }}
-            totalCount={flatItems.length}
-            computeItemKey={(index) => flatItems[index]?.key ?? index}
-            itemContent={renderItem}
-            overscan={500}
-          />
-        </div>
+    <div className='booknote-list rounded' role='tree'>
+      {type === 'annotation' && (
+        <AnnotationsToolbar
+          filterKind={filterKind}
+          searchInput={searchInput}
+          isSearchVisible={isSearchBarVisible}
+          highlightCount={counts.highlights}
+          noteCount={counts.notes}
+          matchCount={filteredNotes.length}
+          isFiltering={isFiltering}
+          onCloseSearch={() => setSearchBarVisible(false)}
+          colors={facets.colors}
+          styles={facets.styles}
+          excludedColors={excludedColors}
+          excludedStyles={excludedStyles}
+          onFilterKindChange={setFilterKind}
+          onSearchInputChange={setSearchInput}
+          onToggleColor={toggleColor}
+          onToggleStyle={toggleStyle}
+          onResetFilters={resetFilters}
+        />
       )}
+      <div ref={listHostRef}>
+        {isEmpty && isFiltering ? (
+          <div
+            className='flex items-center justify-center overflow-hidden'
+            style={{ height: containerHeight }}
+          >
+            <EmptyState Icon={PiMagnifyingGlass} label={_('No Matching Annotations')} />
+          </div>
+        ) : isEmpty ? (
+          <div
+            className='flex items-center justify-center overflow-hidden'
+            style={{ height: containerHeight }}
+          >
+            <EmptyState
+              Icon={type === 'annotation' ? PiNotePencil : RiBookmark3Line}
+              label={type === 'annotation' ? _('No Annotations') : _('No Bookmarks')}
+              hint={type === 'annotation' ? _('Select some text to highlight') : undefined}
+              action={
+                type === 'bookmark' ? (
+                  <button
+                    type='button'
+                    className='btn btn-contrast h-9 min-h-0 max-w-full flex-nowrap gap-1.5 rounded-lg px-4 text-sm font-medium'
+                    onClick={() => eventDispatcher.dispatch('toggle-bookmark', { bookKey })}
+                  >
+                    <RiBookmarkLine className='shrink-0 text-base' />
+                    <span className='min-w-0 truncate'>{_('Bookmark This Page')}</span>
+                  </button>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : (
+          <div
+            ref={osRootRef}
+            data-overlayscrollbars-initialize=''
+            style={{ height: containerHeight }}
+          >
+            <Virtuoso
+              ref={virtuosoRef}
+              scrollerRef={handleScrollerRef}
+              initialTopMostItemIndex={
+                initialTopIndex > 0 ? { index: initialTopIndex, align: 'center' } : 0
+              }
+              rangeChanged={({ startIndex, endIndex }) => {
+                visibleCenterRef.current = Math.floor((startIndex + endIndex) / 2);
+              }}
+              style={{ height: containerHeight }}
+              totalCount={flatItems.length}
+              computeItemKey={(index) => flatItems[index]?.key ?? index}
+              itemContent={renderItem}
+              overscan={500}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

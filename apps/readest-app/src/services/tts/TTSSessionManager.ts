@@ -13,12 +13,18 @@ import { TtsStatsRecorder } from '@/services/statistics/ttsStatsRecorder';
 import { stubTranslation as _ } from '@/utils/misc';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
-import { invokeUseBackgroundAudio } from '@/utils/bridge';
 import { eventDispatcher } from '@/utils/event';
 import { releaseUnblockAudio, ttsMediaBridge, TTSMediaBridgeMeta } from './ttsMediaBridge';
 import type { TTSController } from './TTSController';
 
 export type TTSSessionMeta = TTSMediaBridgeMeta;
+
+// Sentinel passed to setSleepTimer()'s call sites / used as the TTSPlayerSheet
+// timeout option value to mean "stop when the current chapter ends" instead
+// of a fixed duration. Kept alongside the real (positive) second counts so
+// the existing timeout-option picker can carry this mode without a parallel
+// UI element.
+export const TTS_STOP_AT_CHAPTER_END = -1;
 
 export interface TTSSession {
   bookHash: string;
@@ -52,6 +58,16 @@ export class TTSSessionManager extends EventTarget {
   #sleepTimer: ReturnType<typeof setTimeout> | null = null;
   #sleepTimeoutSec = 0;
   #sleepFiresAt = 0;
+  // "Stop at end of chapter" mode - mutually exclusive with the numeric
+  // sleep timer above. A STANDING preference (unlike the numeric timer,
+  // which self-clears once it fires): it keeps stopping at every chapter
+  // boundary, across repeated play/stop cycles, until the user explicitly
+  // switches the sleep timer to something else. Propagated onto whichever
+  // TTSController is currently claimed (and onto every controller claimed
+  // afterwards, including the fresh one created each time playback restarts
+  // after a stop) so it survives both book switches and this stop/resume
+  // cycle.
+  #stopAtChapterEnd = false;
   #lastPersistAt = 0;
   #pendingLocation: string | null = null;
   #stopping = false;
@@ -72,6 +88,7 @@ export class TTSSessionManager extends EventTarget {
     this.#session = { bookHash, bookKey, controller };
     this.#meta = meta;
     this.#lastRelayedState = null;
+    controller.stopAtChapterEnd = this.#stopAtChapterEnd;
     this.#subscribe(controller);
     void ttsMediaBridge.bind(controller, meta);
     this.#emitSessionChanged('claimed');
@@ -161,10 +178,9 @@ export class TTSSessionManager extends EventTarget {
 
     ttsMediaBridge.unbind();
     releaseUnblockAudio();
-    await Promise.all([
-      session.controller.shutdown().catch((err) => console.warn('TTS shutdown failed:', err)),
-      invokeUseBackgroundAudio({ enabled: false }).catch(() => {}),
-    ]);
+    // No use_background_audio(false) here: bridge.unbind() deactivates the
+    // native media session, which releases the iOS audio session itself.
+    await session.controller.shutdown().catch((err) => console.warn('TTS shutdown failed:', err));
     this.#stopping = false;
   }
 
@@ -186,6 +202,7 @@ export class TTSSessionManager extends EventTarget {
   setSleepTimer(seconds: number): void {
     this.#clearSleepTimer();
     if (seconds > 0) {
+      this.#setStopAtChapterEnd(false);
       this.#sleepTimeoutSec = seconds;
       this.#sleepFiresAt = Date.now() + seconds * 1000;
       this.#sleepTimer = setTimeout(() => {
@@ -199,6 +216,27 @@ export class TTSSessionManager extends EventTarget {
     return this.#sleepTimer
       ? { timeoutSec: this.#sleepTimeoutSec, firesAt: this.#sleepFiresAt }
       : null;
+  }
+
+  // "Stop at end of chapter" mode: the currently-playing chapter/section is
+  // allowed to finish, then playback stops instead of continuing into the
+  // next one - same terminal behaviour as the duration timer above, just
+  // triggered by a chapter boundary instead of a clock. Mutually exclusive
+  // with the numeric timer (enabling one clears the other).
+  setStopAtChapterEnd(enabled: boolean): void {
+    if (enabled) this.#clearSleepTimer();
+    this.#setStopAtChapterEnd(enabled);
+  }
+
+  getStopAtChapterEnd(): boolean {
+    return this.#stopAtChapterEnd;
+  }
+
+  #setStopAtChapterEnd(enabled: boolean): void {
+    this.#stopAtChapterEnd = enabled;
+    if (this.#session) {
+      this.#session.controller.stopAtChapterEnd = enabled;
+    }
   }
 
   #clearSleepTimer(): void {

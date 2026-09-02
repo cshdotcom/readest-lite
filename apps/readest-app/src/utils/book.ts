@@ -8,6 +8,7 @@ import {
 } from '@/types/book';
 import { SUPPORTED_LANGS } from '@/services/constants';
 import { getLocale, getUserLang, makeSafeFilename } from './misc';
+import { getStorageType } from './storage';
 import { getDirFromLanguage } from './rtl';
 import { code6392to6391, isValidLang, normalizedLangCode } from './lang';
 import { md5 } from './md5';
@@ -22,22 +23,17 @@ export const getLibraryBackupFilename = () => {
   return 'library_backup.json';
 };
 export const getRemoteBookFilename = (book: Book) => {
-  // Readest Lite — 'local' 与 'r2' 走相同的可读文件名规则
-  // v8.12.0 上游同步时不慎覆盖为上游版本（'local' 分支返回 ''），导致 fileKey 缺文件名
-  // 段、下载报 "File not found"。此处恢复 Lite 自定义：'local' 与 'r2' 等价。
-  // v8.12.2 防御性兜底：即使未来 storageType 异常，也用 hash 兜底文件名，
-  // 避免返回空串导致 cfp='Readest/Books/' → isSafeObjectKeyName=false → "Invalid fileName"。
-  const ext = EXTS[book.format] || 'epub';
-  const safeTitle = makeSafeFilename(book.sourceTitle || book.title || book.hash);
-  const filename = safeTitle || book.hash;
-  return `${book.hash}/${filename}.${ext}`;
+  // S3 storage: https://docs.aws.amazon.com/zh_cn/AmazonS3/latest/userguide/object-keys.html
+  if (getStorageType() === 'r2') {
+    return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
+  } else if (getStorageType() === 's3') {
+    return `${book.hash}/${book.hash}.${EXTS[book.format]}`;
+  } else {
+    return '';
+  }
 };
 export const getLocalBookFilename = (book: Book) => {
-  // v8.12.2: 防御性兜底，避免空标题/未知格式导致文件名异常
-  const ext = EXTS[book.format] || 'epub';
-  const safeTitle = makeSafeFilename(book.sourceTitle || book.title || book.hash);
-  const filename = safeTitle || book.hash;
-  return `${book.hash}/${filename}.${ext}`;
+  return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
 };
 export const getCoverFilename = (book: Book) => {
   return `${book.hash}/cover.png`;
@@ -115,6 +111,14 @@ export const flattenContributors = (
     : typeof contributors === 'string'
       ? contributors
       : formatLanguageMap(contributors?.name);
+};
+
+export const getContributorNames = (
+  contributors: string | string[] | Contributor | Contributor[] | undefined,
+): string[] => {
+  if (!contributors) return [];
+  const values = Array.isArray(contributors) ? contributors : [contributors];
+  return [...new Set(values.map((value) => flattenContributors(value).trim()).filter(Boolean))];
 };
 
 // biome-ignore format: keep the language codes compact on a single line
@@ -198,14 +202,23 @@ export const getPrimaryLanguage = (lang: string | string[] | undefined) => {
 // Callers must not mutate the existing book in place: <BookCover> is memoized
 // and compares fields off the book, so an in-place mutation makes the memo's
 // previous snapshot point to the same object and skips re-rendering the cover.
-export const getBookWithUpdatedMetadata = (book: Book, metadata: BookMetadata): Book => {
+export const getBookWithUpdatedMetadata = (
+  book: Book,
+  metadata: BookMetadata,
+  tags?: string[],
+): Book => {
+  const now = Date.now();
   const updatedBook: Book = {
     ...book,
     metadata,
+    ...(tags ? { tags: [...tags] } : {}),
     title: formatTitle(metadata.title),
     author: formatAuthors(metadata.author),
     primaryLanguage: getPrimaryLanguage(metadata.language),
-    updatedAt: Date.now(),
+    updatedAt: now,
+    // The metadata group merges on its own clock so a page turn elsewhere
+    // (which dominates updatedAt) cannot clobber this edit (issue #5438).
+    metadataUpdatedAt: now,
   };
   const newCoverImageUrl = metadata.coverImageBlobUrl || metadata.coverImageUrl;
   if (newCoverImageUrl) {
@@ -285,6 +298,16 @@ export const getCurrentPage = (book: Book, progress: BookProgress) => {
       : 0;
 };
 
+/**
+ * A book is "currently reading" iff it has real reading progress and has not
+ * been parked. Importing a book sets timestamps but never `progress` (only
+ * opening it does), so the progress gate drops freshly-added-but-unopened
+ * books; the status gate drops finished, abandoned (on hold) and
+ * manually-marked-unread books. A book actively being read has `readingStatus`
+ * either `undefined` (cleared from 'unread' on first open) or `'reading'`, both
+ * of which pass. Shared by the library's recently-read shelf and the
+ * home-screen reading widget so the two surfaces stay in sync.
+ */
 export const isCurrentlyReadingBook = (book: Book): boolean =>
   !book.deletedAt &&
   book.progress != null &&
@@ -388,13 +411,17 @@ export interface MetadataHashInfo {
   metaHash: string;
 }
 
-export const getMetadataHashInfo = (metadata: BookMetadata): MetadataHashInfo | undefined => {
+export const getMetadataHashInfo = (
+  metadata: BookMetadata,
+  filename?: string,
+): MetadataHashInfo | undefined => {
   if (!metadata) return;
   try {
     const title = getTitleForHash(metadata.title);
     const authors = getAuthorsList(metadata.author);
     const identifiers = getIdentifiersList(metadata.altIdentifier || metadata.identifier);
-    const hashSource = `${title}|${authors.join(',')}|${identifiers.join(',')}`;
+    let hashSource = `${title}|${authors.join(',')}|${identifiers.join(',')}`;
+    if (filename) hashSource += `|${filename}`;
     const metaHash = md5(hashSource.normalize('NFC'));
     return { title, authors, identifiers, hashSource, metaHash };
   } catch (error) {
@@ -403,6 +430,6 @@ export const getMetadataHashInfo = (metadata: BookMetadata): MetadataHashInfo | 
   return;
 };
 
-export const getMetadataHash = (metadata: BookMetadata) => {
-  return getMetadataHashInfo(metadata)?.metaHash;
+export const getMetadataHash = (metadata: BookMetadata, filename?: string) => {
+  return getMetadataHashInfo(metadata, filename)?.metaHash;
 };

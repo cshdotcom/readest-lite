@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   MdOutlineCloudDownload,
   MdOutlineCloudUpload,
@@ -25,7 +25,9 @@ import {
   formatLanguage,
   formatPublisher,
   formatTitle,
+  getContributorNames,
 } from '@/utils/book';
+import { isFeedBook } from '@/services/rss/feedBookUrl';
 import { saveSysSettings } from '@/helpers/settings';
 import BookCover from '@/components/BookCover';
 import Dropdown from '../Dropdown';
@@ -44,6 +46,7 @@ interface BookDetailViewProps {
   onUpload?: () => void;
   onShare?: () => void;
   onExport?: () => void;
+  onMetadataValueClick?: (type: 'tag' | 'subject', value: string) => void;
 }
 
 const BookDetailView: React.FC<BookDetailViewProps> = ({
@@ -59,10 +62,32 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   onUpload,
   onShare,
   onExport,
+  onMetadataValueClick,
 }) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const { settings } = useSettingsStore();
+  const [subjectsExpanded, setSubjectsExpanded] = useState(false);
+  const subjects = getContributorNames(metadata?.subject);
+  const visibleSubjects = subjectsExpanded ? subjects : subjects.slice(0, 3);
+
+  const renderMetadataChip = (type: 'tag' | 'subject', value: string) => {
+    const className = 'badge badge-outline h-auto min-h-6 whitespace-normal px-2 py-1 text-xs';
+    return onMetadataValueClick ? (
+      <button
+        key={value}
+        type='button'
+        className={`${className} hover:bg-base-200`}
+        onClick={() => onMetadataValueClick(type, value.trim())}
+      >
+        {value}
+      </button>
+    ) : (
+      <span key={value} className={className}>
+        {value}
+      </span>
+    );
+  };
 
   // Export and Share both read the book file off disk; `fileSize` is only
   // non-null when getBookFileSize could actually open the local copy.
@@ -88,7 +113,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
     <div className='relative w-full rounded-lg'>
       <div className='mb-6 me-4 flex h-32 items-start'>
         <div className='me-6 aspect-[28/41] h-32 shadow-lg sm:me-10'>
-          <BookCover mode='list' book={book} />
+          <BookCover mode='list' book={book} showSpine={settings.librarySkeuomorphicCovers} />
         </div>
         <div className='title-author flex h-32 flex-col justify-between'>
           <div>
@@ -114,7 +139,8 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                 <MdOutlineCloudDownload className='fill-base-content' />
               </button>
             )}
-            {book.downloadedAt && onUpload && (
+            {/* A feed book is fileless — there is nothing to push (#5307). */}
+            {book.downloadedAt && !isFeedBook(book) && onUpload && (
               <button onClick={onUpload} title={_('Upload to Cloud')}>
                 <MdOutlineCloudUpload className='fill-base-content' />
               </button>
@@ -138,13 +164,18 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     label={_('Remove from Cloud & Device')}
                     onClick={onDelete}
                   />
-                  <MenuItem
-                    noIcon
-                    transient
-                    label={_('Remove from Cloud Only')}
-                    onClick={onDeleteCloudBackup}
-                    disabled={!book.uploadedAt}
-                  />
+                  {/* Offered only where a cloud-only removal means something: a
+                      third-party provider mirrors the library, so it would just
+                      re-upload the still-local book on its next sync (#5084). */}
+                  {onDeleteCloudBackup && (
+                    <MenuItem
+                      noIcon
+                      transient
+                      label={_('Remove from Cloud Only')}
+                      onClick={onDeleteCloudBackup}
+                      disabled={!book.uploadedAt}
+                    />
+                  )}
                   <MenuItem
                     noIcon
                     transient
@@ -253,19 +284,26 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   </p>
                 </div>
                 <div className='overflow-hidden pe-1 text-end sm:text-start'>
-                  <span className='font-bold'>{_('Subjects')}</span>
-                  <p className='text-neutral-content line-clamp-3 text-sm'>
-                    {formatAuthors(metadata?.subject || '') || _('Unknown')}
-                  </p>
-                </div>
-                <div className='overflow-hidden'>
                   <span className='font-bold'>{_('Format')}</span>
                   <p className='text-neutral-content text-sm'>{book.format || _('Unknown')}</p>
                 </div>
-                <div className='overflow-hidden pe-1 text-end sm:text-start'>
+                <div className='overflow-hidden'>
                   <span className='font-bold'>{_('File Size')}</span>
                   <p className='text-neutral-content text-sm'>
                     {formatBytes(fileSize) || _('Unknown')}
+                  </p>
+                </div>
+                {/*
+                  The same total the footer bar counts against: foliate's
+                  SectionProgress derives it from the spine's byte sizes when the
+                  book is opened (reflowable), or from the spine length for fixed
+                  layout. Nothing computes it at import time, so it lands in
+                  book.progress ([current, total]) on the first open (#5516).
+                */}
+                <div className='overflow-hidden pe-1 text-end sm:text-start'>
+                  <span className='font-bold'>{_('Pages')}</span>
+                  <p className='text-neutral-content text-sm'>
+                    {book.progress?.[1] || _('Unknown')}
                   </p>
                 </div>
                 <div className='col-span-2 overflow-hidden sm:col-span-1'>
@@ -309,6 +347,39 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     </p>
                   </div>
                 )}
+                {/*
+                  Subjects and Tags are full-width chip lists, so they close out
+                  the section: leaving them mid-grid pushed every following cell
+                  onto a fresh row and left holes in the two-column layout.
+                */}
+                <div className='col-span-2 overflow-hidden sm:col-span-3'>
+                  <div className='flex items-center gap-1'>
+                    <span className='font-bold'>{_('Subjects')}</span>
+                    {subjects.length > 3 && (
+                      <button
+                        type='button'
+                        aria-label={_('Subjects')}
+                        aria-expanded={subjectsExpanded}
+                        onClick={() => setSubjectsExpanded((expanded) => !expanded)}
+                      >
+                        {subjectsExpanded ? <MdExpandLess /> : <MdExpandMore />}
+                      </button>
+                    )}
+                  </div>
+                  <div className='mt-1 flex flex-wrap gap-1'>
+                    {visibleSubjects.length
+                      ? visibleSubjects.map((subject) => renderMetadataChip('subject', subject))
+                      : _('Unknown')}
+                  </div>
+                </div>
+                <div className='col-span-2 overflow-hidden sm:col-span-3'>
+                  <span className='font-bold'>{_('Tags')}</span>
+                  <div className='mt-1 flex flex-wrap gap-1'>
+                    {book.tags?.length
+                      ? book.tags.map((tag) => renderMetadataChip('tag', tag))
+                      : _('Unknown')}
+                  </div>
+                </div>
               </div>
             </div>
           )}

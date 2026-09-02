@@ -4,6 +4,7 @@ import { KOSyncSettings } from '@/types/settings';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { KoSyncProxyPayload } from '@/types/kosync';
 import { isLanAddress } from '@/utils/network';
+import { normalizeCustomHeaders } from '@/utils/customHeaders';
 import { getAPIBaseUrl, isTauriAppPlatform } from '../environment';
 
 /**
@@ -41,7 +42,8 @@ export class KOSyncClient {
     const { method = 'GET', body, headers: additionalHeaders, useAuth = true } = options;
 
     const buildHeaders = (): Headers => {
-      const headers = new Headers(additionalHeaders || {});
+      const headers = new Headers(normalizeCustomHeaders(this.config.customHeaders));
+      new Headers(additionalHeaders || {}).forEach((value, key) => headers.set(key, value));
       if (useAuth) {
         if (this.usesHttpAuth && this.config.password) {
           const credentials = btoa(`${this.config.username}:${this.config.password}`);
@@ -192,8 +194,18 @@ export class KOSyncClient {
         return null;
       }
 
-      const data = await response.json();
-      return data.document ? data : null;
+      const data: KoSyncProgress = await response.json();
+      if (!data || typeof data !== 'object') return null;
+      // Key validity on an actual position, not on `document`: KOSync-compatible
+      // servers don't all echo the document hash back on GET (koreader-sync only
+      // returns progress/percentage/device/device_id/timestamp), and dropping
+      // those replies left the reader on its stale local position — which it
+      // then pushed back over the newer remote one.
+      const hasPosition =
+        (typeof data.progress === 'string' && data.progress.length > 0) ||
+        (typeof data.percentage === 'number' && Number.isFinite(data.percentage));
+      if (!hasPosition) return null;
+      return { ...data, document: data.document || documentHash };
     } catch (e) {
       console.error('KOSync getProgress failed', e);
       return null;

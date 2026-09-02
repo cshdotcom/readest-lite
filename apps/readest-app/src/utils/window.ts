@@ -4,6 +4,23 @@ import { exit } from '@tauri-apps/plugin-process';
 import { type as osType } from '@tauri-apps/plugin-os';
 import { eventDispatcher } from './event';
 
+const APP_NAME = 'Readest';
+
+/**
+ * The OS window title, e.g. `Readest - The Hobbit`. It is never drawn in the
+ * UI — desktop windows are either decorationless (Windows/Linux) or hide their
+ * title text (the macOS overlay title bar) — but window switchers and screen
+ * readers announce it, so it has to name the open book to tell windows apart.
+ */
+export const formatAppWindowTitle = (bookTitle?: string) => {
+  const title = bookTitle?.trim();
+  return title ? `${APP_NAME} - ${title}` : APP_NAME;
+};
+
+export const tauriSetWindowTitle = async (bookTitle?: string) => {
+  await getCurrentWindow().setTitle(formatAppWindowTitle(bookTitle));
+};
+
 export const tauriGetWindowLogicalPosition = async () => {
   const currentWindow = getCurrentWindow();
   const factor = await currentWindow.scaleFactor();
@@ -68,14 +85,36 @@ export const tauriHandleOnCloseWindow = async (callback: () => void) => {
   });
 };
 
+// Whether the window was maximized when it last entered fullscreen, so the
+// maximized state survives a fullscreen round-trip on Windows.
+let wasMaximizedBeforeFullscreen = false;
+
 export const tauriHandleToggleFullScreen = async () => {
   const currentWindow = getCurrentWindow();
   const isFullscreen = await currentWindow.isFullscreen();
-  const isMaximized = await currentWindow.isMaximized();
-  if (isMaximized) {
-    await currentWindow.unmaximize();
+  // Toggle fullscreen regardless of the maximized state. Previously a maximized
+  // window was only unmaximized here, so the fullscreen button did nothing when
+  // the window was maximized, which is always the case on mobile shells like
+  // Phosh and common on Windows (issue #4034).
+  if (isFullscreen) {
+    await currentWindow.setFullscreen(false);
+    if (wasMaximizedBeforeFullscreen) {
+      wasMaximizedBeforeFullscreen = false;
+      await currentWindow.maximize();
+    }
   } else {
-    await currentWindow.setFullscreen(!isFullscreen);
+    // On Windows, tao keeps the WS_MAXIMIZE style when a maximized window
+    // enters borderless fullscreen, so Windows clamps the window to the work
+    // area and the taskbar stays visible but unclickable (issue #5295).
+    // Unmaximize first and restore the maximized state on exit. Other
+    // platforms must keep entering fullscreen straight from the maximized
+    // state (Phosh windows are always maximized).
+    wasMaximizedBeforeFullscreen =
+      (await osType()) === 'windows' && (await currentWindow.isMaximized());
+    if (wasMaximizedBeforeFullscreen) {
+      await currentWindow.unmaximize();
+    }
+    await currentWindow.setFullscreen(true);
   }
   if ((await osType()) === 'linux') {
     linuxWindowRestoreTransparentBg();

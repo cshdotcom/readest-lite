@@ -16,6 +16,7 @@ import { useParallelViewStore } from '@/store/parallelViewStore';
 import { useMouseEvent, useTouchEvent, useOpenMediaEvent } from '../hooks/useIframeEvents';
 import { useCapturedTurn, applyPageTurnAttributes } from '../hooks/useCapturedTurn';
 import { useBrightnessGesture } from '../hooks/useBrightnessGesture';
+import { registerBookmarkPullDoc } from '../utils/bookmarkPullGesture';
 import BrightnessOverlay from './BrightnessOverlay';
 import { usePagination, viewPagination } from '../hooks/usePagination';
 import { useFoliateEvents } from '../hooks/useFoliateEvents';
@@ -25,8 +26,9 @@ import { useBackgroundTexture } from '@/hooks/useBackgroundTexture';
 import { useAutoFocus } from '@/hooks/useAutoFocus';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useEinkMode } from '@/hooks/useEinkMode';
+import { bookOrbitProgressProvider } from '../hooks/bookOrbitProgressProvider';
 import { useKOSync } from '../hooks/useKOSync';
-import { useWebDAVSync } from '../hooks/useWebDAVSync';
+import { useFileSync } from '../hooks/useFileSync';
 import {
   applyFixedlayoutStyles,
   applyImageStyle,
@@ -54,6 +56,7 @@ import {
   handleMousemove,
   handleAuxclick,
   handleClick,
+  handleClickCapture,
   handleWheel,
   handleTouchStart,
   handleTouchMove,
@@ -65,29 +68,34 @@ import { getDirFromUILanguage } from '@/utils/rtl';
 import { isTauriAppPlatform } from '@/services/environment';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
-import { lockScreenOrientation } from '@/utils/bridge';
+import { lockScreenOrientation, setSelectionSuppressed } from '@/utils/bridge';
 import { useTextTranslation } from '../hooks/useTextTranslation';
 import { useBookCoverAutoSave } from '../hooks/useAutoSaveBookCover';
 import { useDiscordPresence } from '@/hooks/useDiscordPresence';
 import { manageSyntaxHighlighting } from '@/utils/highlightjs';
 import { getViewInsets } from '@/utils/insets';
 import { collectDocumentImages, DocumentImage } from '../utils/documentImages';
+import { footerReservesBand } from '../utils/footerBand';
+import { showTransientSearchHighlight } from '../utils/searchHighlight';
 import { handleA11yNavigation } from '@/utils/a11y';
 import { isCJKLang } from '@/utils/lang';
 import { getLocale } from '@/utils/misc';
 import { isMetered } from '@/utils/network';
 import { eventDispatcher } from '@/utils/event';
 import { isFontType } from '@/utils/font';
+import { getScrollGapAttr } from '@/utils/webtoon';
 import { useMiddleClickAutoscroll } from '../hooks/useMiddleClickAutoscroll';
 import { useAutoScroll } from '../hooks/useAutoScroll';
+import { useAutoScrollSpeedGesture } from '../hooks/useAutoScrollSpeedGesture';
 import { ParagraphControl } from './paragraph';
 import AutoscrollIndicator from './AutoscrollIndicator';
 import AutoScrollControl from './AutoScrollControl';
+import AutoScrollSpeedOverlay from './AutoScrollSpeedOverlay';
 import Spinner from '@/components/Spinner';
 import KOSyncConflictResolver from './KOSyncResolver';
 import ImageViewer from './ImageViewer';
 import TableViewer from './TableViewer';
-import { TTS_MINI_PLAYER_CLEARANCE } from './tts/TTSMiniPlayer';
+import { getTTSMiniPlayerClearance } from '../utils/ttsMiniPlayerPosition';
 
 declare global {
   interface Window {
@@ -135,15 +143,23 @@ const FoliateViewer: React.FC<{
   const doubleClickDisabled = useRef(!!viewSettings?.disableDoubleClick);
   const [toastMessage, setToastMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [scrollMargins, setScrollMargins] = useState({ top: 0, bottom: 0 });
-  const docLoaded = useRef(false);
   const [navigating, setNavigating] = useState(false);
   const navSpinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const librarySearchHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [scrollMargins, setScrollMargins] = useState({ top: 0, bottom: 0 });
+  const docLoaded = useRef(false);
+
+  const autoScroll = useAutoScroll(bookKey, viewRef);
+  const { registerSpeedListeners, overlayVisible: speedOverlayVisible } =
+    useAutoScrollSpeedGesture(autoScroll);
 
   // A pending anti-flash timer must not fire setNavigating on an unmounted component.
   useEffect(() => {
     return () => {
       if (navSpinnerTimerRef.current) clearTimeout(navSpinnerTimerRef.current);
+      if (librarySearchHighlightTimerRef.current) {
+        clearTimeout(librarySearchHighlightTimerRef.current);
+      }
     };
   }, []);
 
@@ -165,7 +181,8 @@ const FoliateViewer: React.FC<{
   useProgressAutoSave(bookKey);
   useBookCoverAutoSave(bookKey);
   const { syncState, conflictDetails, resolveWithLocal, resolveWithRemote } = useKOSync(bookKey);
-  useWebDAVSync(bookKey);
+  const bookOrbitSync = useKOSync(bookKey, bookOrbitProgressProvider);
+  useFileSync(bookKey);
   useTextTranslation(bookKey, viewRef.current);
 
   // Coalesce setProgress writes within a single animation frame.
@@ -212,6 +229,7 @@ const FoliateViewer: React.FC<{
       pageInfo,
       detail.time,
       detail.range,
+      detail.fraction,
     );
   }, [bookKey, setProgress]);
 
@@ -219,6 +237,20 @@ const FoliateViewer: React.FC<{
     // Always stash the latest detail; if another rAF is already pending
     // it'll pick this up and the intermediate states are skipped.
     pendingRelocateRef.current = event as CustomEvent;
+    // requestAnimationFrame is paused while the WebView is backgrounded, so the
+    // rAF-coalesced commit below would never run during background TTS - which
+    // freezes book.progress (and readerProgressStore, and the home-screen
+    // widget that reads them). Commit synchronously when hidden so progress
+    // stays current. The page-follow relocate still fires; only the commit was
+    // being deferred.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      if (relocateRafRef.current != null) {
+        cancelAnimationFrame(relocateRafRef.current);
+        relocateRafRef.current = null;
+      }
+      commitRelocate();
+      return;
+    }
     if (relocateRafRef.current != null) return;
     relocateRafRef.current = requestAnimationFrame(commitRelocate);
   };
@@ -270,6 +302,7 @@ const FoliateViewer: React.FC<{
                 'language',
                 'sanitizer',
                 'simplecc',
+                'nbsp',
                 'proofread',
                 'warichu',
               ],
@@ -401,16 +434,25 @@ const FoliateViewer: React.FC<{
         detail.doc.addEventListener('mouseup', handleMouseup.bind(null, bookKey));
         detail.doc.addEventListener('mousemove', handleMousemove.bind(null, bookKey));
         detail.doc.addEventListener('auxclick', handleAuxclick.bind(null, bookKey));
+        detail.doc.addEventListener('click', handleClickCapture.bind(null, bookKey), {
+          capture: true,
+        });
         detail.doc.addEventListener(
           'click',
           handleClick.bind(null, bookKey, doubleClickDisabled, !!bookData?.isFixedLayout),
         );
         detail.doc.addEventListener('wheel', handleWheel.bind(null, bookKey));
         detail.doc.addEventListener('touchstart', handleTouchStart.bind(null, bookKey));
-        detail.doc.addEventListener('touchmove', handleTouchMove.bind(null, bookKey));
-        detail.doc.addEventListener('touchend', handleTouchEnd.bind(null, bookKey));
+        detail.doc.addEventListener('touchmove', handleTouchMove.bind(null, bookKey), {
+          passive: false,
+        });
+        detail.doc.addEventListener('touchend', handleTouchEnd.bind(null, bookKey), {
+          passive: false,
+        });
         detail.doc.addEventListener('touchcancel', handleTouchCancel.bind(null, bookKey));
         registerBrightnessListeners(detail.doc);
+        registerSpeedListeners(detail.doc);
+        registerBookmarkPullDoc(bookKey, detail.doc);
       }
     }
   };
@@ -526,7 +568,6 @@ const FoliateViewer: React.FC<{
   const mouseHandlers = useMouseEvent(bookKey, handlePageFlip);
   const touchHandlers = useTouchEvent(bookKey);
   const autoscrollAnchor = useMiddleClickAutoscroll(bookKey, viewRef, containerRef);
-  const autoScroll = useAutoScroll(bookKey, viewRef);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   // The description of the image on screen, kept next to `selectedImage` so the
@@ -538,6 +579,7 @@ const FoliateViewer: React.FC<{
 
   const handleImagePress = useCallback(async (src: string) => {
     try {
+      // Get all images from the current document
       const allImages = collectDocumentImages(
         viewRef.current?.renderer.getContents() ?? [],
         (index, range) => viewRef.current?.getCFI(index, range) || null,
@@ -705,7 +747,22 @@ const FoliateViewer: React.FC<{
       } else {
         view.renderer.removeAttribute('animated');
       }
+      // Arms the foliate CursorAutohider — goes on the view element itself,
+      // not the renderer, and is re-checked on every mousemove so the
+      // ControlPanel toggle takes effect without recreating the view.
+      view.toggleAttribute(
+        'autohide-cursor',
+        !appService?.isMobile && !!useSettingsStore.getState().settings.autohideCursor,
+      );
       applyPageTurnAttributes(view, viewSettings, bookDoc.rendition?.layout === 'pre-paginated');
+      // iOS WebKit composites large/persistent page layers without the Android
+      // high-DPR Blink freeze, so opt this renderer into the GPU-accelerated
+      // page-turn path (persistent compositor layers + no main-thread
+      // rafAnimateScroll fallback) to keep 120Hz ProMotion turns smooth
+      // (readest#4768).
+      if (appService?.isIOSApp) {
+        view.renderer.setAttribute('gpu-composite', '');
+      }
       if (appService?.isAndroidApp) {
         if (eink) {
           view.renderer.setAttribute('eink', '');
@@ -718,6 +775,7 @@ const FoliateViewer: React.FC<{
         view.renderer.setAttribute('zoom', viewSettings.zoomMode);
         view.renderer.setAttribute('spread', viewSettings.spreadMode);
         view.renderer.setAttribute('scale-factor', viewSettings.zoomLevel);
+        view.renderer.setAttribute('scroll-gap', getScrollGapAttr(viewSettings.webtoonMode));
       } else {
         view.renderer.setAttribute('max-column-count', maxColumnCount);
         view.renderer.setAttribute('max-inline-size', `${maxInlineSize}px`);
@@ -752,6 +810,12 @@ const FoliateViewer: React.FC<{
       if (overrideLocation) {
         setPreviewMode(bookKey, true);
       }
+      if (overrideLocation && searchParams?.get('highlight') === 'search') {
+        librarySearchHighlightTimerRef.current = await showTransientSearchHighlight(
+          view,
+          overrideLocation,
+        );
+      }
     };
 
     openBook();
@@ -759,6 +823,10 @@ const FoliateViewer: React.FC<{
   }, []);
 
   const applyMarginAndGap = () => {
+    // Invoked from effects/observers that can fire after the book is torn down,
+    // when getViewSettings(bookKey) returns null. The `!` assertion hid that, so
+    // the reads below (getViewInsets, viewSettings.showHeader) crashed on null
+    // (READEST-2V). Bail: there is no view left to lay out.
     const viewSettings = getViewSettings(bookKey);
     if (!viewSettings) return;
     const viewState = getViewState(bookKey);
@@ -768,10 +836,16 @@ const FoliateViewer: React.FC<{
     const showDoubleBorderHeader = showDoubleBorder && viewSettings.showHeader;
     const showDoubleBorderFooter = showDoubleBorder && viewSettings.showFooter;
     const showTopHeader = viewSettings.showHeader && !viewSettings.vertical;
-    const showBottomFooter = viewSettings.showFooter && !viewSettings.vertical;
+    // The bottom band is reserved only while the footer displays something
+    // there (and never in scrolled mode, where the info floats in pills) —
+    // see footerReservesBand. Otherwise the empty reservation shows as a
+    // full-width blank bar that steals space from the book text.
+    const showBottomFooter = footerReservesBand(viewSettings) && !viewSettings.vertical;
     const moreTopInset = showTopHeader ? Math.max(0, 16 - insets.top) : 0;
+    // Only the persistent 'minimal' card reserves a band; the 'full' one
+    // auto-hides with the toolbar and overlaps instead (#5310).
     const miniPlayerClearance = viewState?.ttsEnabled
-      ? TTS_MINI_PLAYER_CLEARANCE + gridInsets.bottom * 0.33
+      ? getTTSMiniPlayerClearance(viewSettings, gridInsets.bottom * 0.33)
       : 0;
     const moreBottomInset = showBottomFooter
       ? Math.max(0, Math.max(miniPlayerClearance, 16) - insets.bottom)
@@ -792,7 +866,10 @@ const FoliateViewer: React.FC<{
       const footerVisible = showBottomFooter;
       const safeBottomPadding = appService?.hasSafeAreaInset ? gridInsets.bottom * 0.33 : 0;
       const footerBarHeight = safeBottomPadding + viewSettings.marginBottomPx;
-      const scrollTop = headerVisible ? gridInsets.top + viewSettings.marginTopPx : 0;
+      // topMargin, not the raw margin sum: it carries the 16px moreTopInset
+      // floor, so a negative top margin keeps the scroll viewport glued to the
+      // lifted header band instead of running under it (#5303).
+      const scrollTop = headerVisible ? topMargin : 0;
       const scrollBottom = footerVisible
         ? Math.max(footerBarHeight, miniPlayerClearance)
         : miniPlayerClearance;
@@ -801,6 +878,10 @@ const FoliateViewer: React.FC<{
       setScrollMargins({ top: 0, bottom: 0 });
     }
     viewRef.current?.renderer.setAttribute('gap', `${viewSettings.gapPercent}%`);
+    viewRef.current?.renderer.setAttribute(
+      'scroll-direction',
+      viewSettings.scrolledDirection === 'horizontal' ? 'horizontal' : 'vertical',
+    );
     if (viewSettings.scrolled) {
       viewRef.current?.renderer.setAttribute('flow', 'scrolled');
       if (viewSettings.noContinuousScroll) {
@@ -810,6 +891,40 @@ const FoliateViewer: React.FC<{
       }
     }
   };
+
+  // iOS: the system long-press selection would race the instant-highlight
+  // hold — WebKit consults selectability before any touch handler runs, so
+  // JS-level suppression cannot win. Suppress it natively while the highlight
+  // quick action owns the gesture; restore when the mode turns off or the
+  // reader closes.
+  useEffect(() => {
+    if (!appService?.isIOSApp) return;
+    const suppressed =
+      !!viewSettings?.enableAnnotationQuickActions &&
+      viewSettings?.annotationQuickAction === 'highlight';
+    setSelectionSuppressed({ target: 'gesture', suppressed }).catch(() => {});
+    return () => {
+      if (suppressed) {
+        setSelectionSuppressed({ target: 'gesture', suppressed: false }).catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    appService?.isIOSApp,
+    viewSettings?.enableAnnotationQuickActions,
+    viewSettings?.annotationQuickAction,
+  ]);
+
+  // Android (#5427): useTextSelector keeps the system selection toolbar
+  // natively suppressed while reader text is selected. If the reader closes
+  // with a live selection, no selectionchange fires to lift the flag — reset
+  // it here so selection menus elsewhere in the app are not muted.
+  useEffect(() => {
+    if (!appService?.isAndroidApp) return;
+    return () => {
+      setSelectionSuppressed({ target: 'menu', suppressed: false }).catch(() => {});
+    };
+  }, [appService?.isAndroidApp]);
 
   useEffect(() => {
     if (viewRef.current && viewRef.current.renderer) {
@@ -911,6 +1026,16 @@ const FoliateViewer: React.FC<{
     viewSettings?.scrolled,
     viewSettings?.noContinuousScroll,
     viewState?.ttsEnabled,
+    // Switching Player Style changes whether a band is reserved at all.
+    viewSettings?.ttsPlayerStyle,
+    // footerReservesBand inputs: the band must collapse/return live when the
+    // user flips these settings.
+    viewSettings?.showStickyProgressBar,
+    viewSettings?.showRemainingTime,
+    viewSettings?.showRemainingPages,
+    viewSettings?.showProgressInfo,
+    viewSettings?.showCurrentTime,
+    viewSettings?.showCurrentBatteryStatus,
   ]);
 
   return (
@@ -961,6 +1086,9 @@ const FoliateViewer: React.FC<{
         />
       )}
       <BrightnessOverlay visible={overlayVisible} level={overlayLevel} />
+      {autoScroll.active && (
+        <AutoScrollSpeedOverlay visible={speedOverlayVisible} speed={autoScroll.speed} />
+      )}
       <ParagraphControl bookKey={bookKey} viewRef={viewRef} gridInsets={gridInsets} />
       {((!docLoaded.current && loading) || navigating || viewState?.loading) && (
         <div className='absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center'>
@@ -973,6 +1101,14 @@ const FoliateViewer: React.FC<{
           onResolveWithLocal={resolveWithLocal}
           onResolveWithRemote={resolveWithRemote}
           onClose={resolveWithLocal}
+        />
+      )}
+      {bookOrbitSync.syncState === 'conflict' && bookOrbitSync.conflictDetails && (
+        <KOSyncConflictResolver
+          details={bookOrbitSync.conflictDetails}
+          onResolveWithLocal={bookOrbitSync.resolveWithLocal}
+          onResolveWithRemote={bookOrbitSync.resolveWithRemote}
+          onClose={bookOrbitSync.resolveWithLocal}
         />
       )}
     </>

@@ -2,6 +2,7 @@ import type { Book, BookLookupIndex } from '@/types/book';
 import type { AppService, OsPlatform } from '@/types/system';
 import type { SystemSettings } from '@/types/settings';
 import { transferManager } from '@/services/transferManager';
+import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
 import { normalizeFilePathForIndex } from '@/services/bookService';
 import { isContentURI, isValidURL } from '@/utils/misc';
 import { isPseStreamFileName } from '@/services/opds/pseStream';
@@ -34,7 +35,7 @@ export interface IngestFileOptions {
   groupName?: string;
   /** Tag parsed from a Send-to-Readest email subject (`#scifi`). */
   subjectTag?: string;
-  /** Upload to the cloud even when the user has disabled autoUpload. */
+  /** Upload to the cloud even when the user has turned off book sync. */
   forceUpload?: boolean;
   /** Transient import (not stored long-term) — never uploaded. */
   transient?: boolean;
@@ -225,11 +226,15 @@ export async function ingestFile(
     if (!tags.includes(tag)) {
       book.tags = [...tags, tag];
       book.updatedAt = Date.now();
+      // Tags merge on the metadata clock (#5438); stamp it or a peer's older
+      // stamped metadata edit would win the group and drop this tag.
+      book.metadataUpdatedAt = book.updatedAt;
     }
   }
 
   // Sent books force the upload so they reach the user's other devices even
-  // when autoUpload is off; normal library imports honor the setting.
+  // when book sync is off; normal library imports honor the Manage Sync
+  // "book" toggle, which defaults on — upload unless the user turns it off.
   // Transient imports are never uploaded — they're short-lived previews
   // (e.g. /send view) and shouldn't pollute the user's cloud library.
   // In-place imports (book.filePath set, content under one of the user's
@@ -237,11 +242,17 @@ export async function ingestFile(
   // they are equivalent to a hash-copy book — only the local storage
   // location differs. uploadBook reads straight from book.filePath in that
   // case; downloads on other devices land in Books/<hash>/ as a normal copy.
+  // Readest Cloud storage is written only when Readest Cloud is one of the
+  // enabled providers (#5062 lets several run at once). When it is unchecked,
+  // this gate is false and the file-sync engine mirrors the import instead
+  // (including Sent books, which reach other devices via each enabled backend
+  // whose syncBooks toggle is on).
   if (
     !opts.transient &&
     isLoggedIn &&
     !book.uploadedAt &&
-    (opts.forceUpload || settings.autoUpload)
+    (opts.forceUpload || settings.syncCategories?.book !== false) &&
+    isReadestCloudStorageActive(settings)
   ) {
     transferManager.queueUpload(book);
   }

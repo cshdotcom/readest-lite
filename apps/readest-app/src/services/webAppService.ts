@@ -4,7 +4,7 @@ import { SchemaType } from '@/services/database/migrate';
 import { getOSPlatform, isValidURL } from '@/utils/misc';
 import { isSafariBrowser } from '@/utils/ua';
 import { RemoteFile } from '@/utils/file';
-import { detectViewTransitionsAPI, detectViewTransitionGroup } from '@/utils/viewTransition';
+import { detectViewTransitionGroup, detectViewTransitionsAPI } from '@/utils/viewTransition';
 import { isPWA } from './environment';
 import { BaseAppService } from './appService';
 import {
@@ -209,7 +209,10 @@ const indexedDBFileSystem: FileSystem = {
     return new Promise<FileItem[]>((resolve, reject) => {
       const transaction = db.transaction('files', 'readonly');
       const store = transaction.objectStore('files');
-      const request = store.getAll();
+      // Keys are file paths: constrain to the directory prefix instead of
+      // materializing the whole store (every book blob) per listing — an
+      // unbounded getAll() here cost seconds per call on large libraries.
+      const request = store.getAll(IDBKeyRange.bound(prefix, `${prefix}\uffff`, false, true));
 
       request.onsuccess = () => {
         const files = request.result as { path: string; content: string | ArrayBuffer | Blob }[];
@@ -305,7 +308,7 @@ export class WebAppService extends BaseAppService {
       const settings = await this.loadSettings();
       const lastMigrationVersion = settings.migrationVersion || 0;
 
-      await super.runMigrations(lastMigrationVersion);
+      await super.runMigrations(lastMigrationVersion, settings);
 
       if (lastMigrationVersion < this.CURRENT_MIGRATION_VERSION) {
         await this.saveSettings({
@@ -425,5 +428,27 @@ export class WebAppService extends BaseAppService {
     const { getMigrations } = await import('./database/migrations');
     await migrate(db, getMigrations(schema));
     return db;
+  }
+
+  private async opfsDatabaseName(path: string, base: BaseDir): Promise<string> {
+    const fullPath = await this.resolveFilePath(path, base);
+    return fullPath.replace(/[/\\]+/g, '_').replace(/^_+/, '');
+  }
+
+  override async databaseExists(path: string, base: BaseDir): Promise<boolean> {
+    try {
+      const root = await navigator.storage.getDirectory();
+      await root.getFileHandle(await this.opfsDatabaseName(path, base));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  override async deleteDatabase(path: string, base: BaseDir): Promise<void> {
+    const name = await this.opfsDatabaseName(path, base);
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry(name).catch(() => {});
+    await root.removeEntry(`${name}-wal`).catch(() => {});
   }
 }

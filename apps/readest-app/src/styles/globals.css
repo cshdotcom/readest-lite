@@ -168,6 +168,16 @@ foliate-fxl {
   border-radius: 14px;
 }
 
+/* Menu labels wrap (no nowrap), so the anchor-positioned shrink-to-fit box
+   would collapse toward its longest word; keep the natural content width but
+   cap it to the viewport so long translations wrap instead of overflowing the
+   screen (#5259 — Dropdown shifts the box back inside). Zero specificity so
+   explicit utility widths (w-44, max-w-[90vw]) still win. */
+:where(.dropdown-content) {
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
 .dropdown-content::before,
 .dropdown-content::after {
   content: '';
@@ -408,10 +418,18 @@ foliate-fxl {
   position: relative;
 }
 
+/* Grow the hit area to the 44px mobile target (DESIGN.md) instead of bleeding
+   a fixed 12px past the icon: on narrow screens the reader header packs 32px
+   controls with 8px gaps, and a 12px bleed reached 4px into the neighboring
+   icon, so a tap on one icon fired the other. */
 .touch-target::before {
   content: '';
   position: absolute;
-  inset: -12px;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 
 .no-context-menu {
@@ -430,34 +448,25 @@ foliate-fxl {
   user-select: none;
 }
 
+/* Stolen from https://varundhawan.com/blog/2022/01/18/skeuomorphic-book-cover-css */
 .book-spine {
-  background-image:
-    linear-gradient(
-      180deg,
-      hsla(0, 0%, 95%, 0.2) 0%,
-      /* Top highlight */ hsla(0, 0%, 90%, 0.1) 1%,
-      /* Top highlight */ transparent 2%,
-      /* Main book surface */ transparent 50%,
-      /* Main book surface */ hsla(0, 0%, 25%, 0.15) 95%,
-      /* Bottom shadow */ hsla(0, 0%, 15%, 0.2) 100% /* Bottom edge dark */
-    ),
-    linear-gradient(
-      90deg,
-      hsla(0, 0%, 0%, 0.1) 0%,
-      /* Left binding shadow */ hsla(0, 0%, 20%, 0.2) 0.5%,
-      /* Dark transition */ hsla(0, 0%, 95%, 0.4) 0.8%,
-      /* Peak highlight */ hsla(0, 0%, 85%, 0.4) 2%,
-      /* Peak highlight */ hsla(0, 0%, 60%, 0.3) 2.8%,
-      /* Gradient highlight */ hsla(0, 0%, 40%, 0.2) 4.2%,
-      /* Shadow between highlights */ hsla(0, 0%, 70%, 0.15) 4.6%,
-      /* Second peak highlight */ hsla(0, 0%, 60%, 0.15) 5.4%,
-      /* Second gradient highlight */ hsla(0, 0%, 40%, 0.1) 6%,
-      /* Transition shadow */ transparent 88%,
-      /* Main book surface */ hsla(0, 0%, 30%, 0.1) 99%,
-      /* Right edge highlight */ hsla(0, 0%, 30%, 0.2) 99.5%,
-      /* Right edge shadow */ hsla(0, 0%, 10%, 0.2) 100% /* Right binding edge */
-    );
-  mask: linear-gradient(180deg, black 0%, rgba(0, 0, 0, 0.9) 50%, rgba(0, 0, 0, 0.5) 100%);
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.02) 0%,
+    rgba(0, 0, 0, 0.05) 0.75%,
+    rgba(255, 255, 255, 0.5) 1.0%,
+    rgba(255, 255, 255, 0.6) 1.3%,
+    rgba(255, 255, 255, 0.5) 1.4%,
+    rgba(255, 255, 255, 0.3) 1.5%,
+    rgba(255, 255, 255, 0.3) 2.4%,
+    rgba(0, 0, 0, 0.05) 2.7%,
+    rgba(0, 0, 0, 0.05) 3.5%,
+    rgba(255, 255, 255, 0.3) 4%,
+    rgba(255, 255, 255, 0.3) 4.5%,
+    rgba(244, 244, 244, 0.1) 5.4%,
+    rgba(244, 244, 244, 0.1) 99%,
+    rgba(144, 144, 144, 0.2) 100%
+  );
 }
 
 .visible-focus-inset-2:focus-visible {
@@ -475,6 +484,15 @@ foliate-fxl {
   content: '';
   position: absolute;
   inset: -8px;
+}
+
+/* The desktop trio sits 8px apart, so -8px is the widest halo that still tiles
+   exactly — any more and a button would swallow its neighbor's edge. When
+   close is rendered alone (the reader header on mobile: minimize and maximize
+   need a window bar) there is no neighbor, so it takes the full 44px target
+   the tap deserves (#5401). */
+.window-button:only-child::before {
+  inset: -10px;
 }
 
 input[type='range'].slider-input {
@@ -545,6 +563,18 @@ input[type='range'].slider-input {
   font-weight: bold;
 }
 
+/* Emphasized query term inside search result excerpts — shared by the library
+   results and the reader sidebar so custom CSS can restyle both at once. */
+.search-term-highlight {
+  color: theme('colors.red.500');
+  font-weight: 600;
+}
+
+[data-eink='true'] .search-term-highlight {
+  color: theme('colors.base-content') !important;
+  font-weight: bold;
+}
+
 [data-eink='true'] .eink-bordered {
   border-width: 1px !important;
   border-color: theme('colors.base-content') !important;
@@ -606,7 +636,8 @@ input[type='range'].slider-input {
 
 [data-eink='true'] .btn-primary,
 [data-eink='true'] .btn-outline,
-[data-eink='true'] .btn-contrast {
+[data-eink='true'] .btn-contrast,
+[data-eink='true'] .eink-contrast {
   background-color: theme('colors.base-content') !important;
   border: 1px solid theme('colors.base-content') !important;
   color: theme('colors.base-100') !important;
@@ -672,6 +703,17 @@ input[type='range'].slider-input {
 
 [data-eink='true'] input[type='checkbox'] {
   --tglbg: theme('colors.base-100') !important;
+}
+
+/* DaisyUI checkboxes on e-ink: the default unchecked border is a ~20%-opacity
+ * theme color that barely registers on a grayscale panel, so a configured-but-
+ * disabled control (e.g. a cloud sync provider's enable box, #5141) reads as
+ * empty space. Give the box a crisp 1px base-content outline so it stays
+ * visible when unchecked. Scoped to `.checkbox` so the `.toggle` switch keeps
+ * its own treatment. */
+[data-eink='true'] input[type='checkbox'].checkbox {
+  border-width: 1px !important;
+  border-color: theme('colors.base-content') !important;
 }
 
 /* Dictionary popup font size (#4443).
@@ -973,4 +1015,54 @@ textarea:focus-within,
 .textarea:focus-within {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* A captured or View Transition curl/slide snapshot already contains the
+   visible reader chrome. Sync its live copy underneath without playing the
+   regular toolbar transition alongside the page turn or cancellation. */
+.captured-turn-sync-chrome .header-bar,
+.captured-turn-sync-chrome .footer-bar {
+  transition: none !important;
+}
+
+/* Native snapshots must not bake transient host chrome (for example Toast)
+   into the page texture. The live element remains above the turn after capture. */
+.captured-turn-filter-transient-overlays [data-capture-invalidating-overlay='true'] {
+  visibility: hidden !important;
+}
+
+/* TTS player scrubber: the track is painted by an inline three-stop gradient
+   (played / buffered / rest), so the native appearance must be blanked and
+   the element itself becomes the 4px track. Thumb inherits currentColor. */
+.tts-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+}
+.tts-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+.tts-scrubber::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 9999px;
+  background: currentColor;
+}
+.tts-scrubber:disabled {
+  opacity: 0.5;
+}
+
+/* E-ink: the gradient's grey stops wash out, so a crisp 1px border marks the
+   track's extent while the solid currentColor fill and thumb carry the
+   position. Slightly taller so the fill stays visible inside the border. */
+[data-eink='true'] .tts-scrubber {
+  height: 6px;
+  border: 1px solid currentColor;
 }

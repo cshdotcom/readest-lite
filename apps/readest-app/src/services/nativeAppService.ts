@@ -38,9 +38,15 @@ import {
 import { getOSPlatform, isContentURI, isFileURI, isValidURL } from '@/utils/misc';
 import { getDirPath, getFilename } from '@/utils/path';
 import { NativeFile, RemoteFile } from '@/utils/file';
-import { copyURIToPath, getStorefrontRegionCode, saveImageToGallery } from '@/utils/bridge';
+import {
+  copyURIToPath,
+  getStorefrontRegionCode,
+  hasAmbientLightSensor,
+  saveImageToGallery,
+} from '@/utils/bridge';
+import { galleryFileName } from '@/utils/image';
 import { copyFiles } from '@/utils/files';
-import { detectViewTransitionsAPI, detectViewTransitionGroup } from '@/utils/viewTransition';
+import { detectViewTransitionGroup, detectViewTransitionsAPI } from '@/utils/viewTransition';
 
 import { BaseAppService } from './appService';
 import { DatabaseOpts, DatabaseService } from '@/types/database';
@@ -453,7 +459,7 @@ export const nativeFileSystem: FileSystem = {
       }
     }
   },
-  async readDir(path: string, base: BaseDir) {
+  async readDir(path: string, base: BaseDir, extensions?: string[]) {
     const { fp, baseDir } = this.resolvePath(path, base);
 
     const getRelativePath = (filePath: string, basePath: string): string => {
@@ -467,13 +473,17 @@ export const nativeFileSystem: FileSystem = {
       return relativePath;
     };
 
-    // Use Rust WalkDir for massive performance gain on absolute paths
+    // Use Rust WalkDir for massive performance gain on absolute paths.
+    // `extensions` filters inside the walk, so non-matching files (e.g. the
+    // covers and metadata sidecars of a Calibre-style folder) are neither
+    // stat'ed nor serialized over IPC. The JS fallback below ignores the
+    // filter — callers that pass it must still tolerate extra entries.
     if (!baseDir || baseDir === 0) {
       try {
         const files = await invoke<{ path: string; size: number }[]>('read_dir', {
           path: fp,
           recursive: true,
-          extensions: ['*'],
+          extensions: extensions?.length ? extensions : ['*'],
         });
 
         return files.map((file) => ({
@@ -558,7 +568,10 @@ export class NativeAppService extends BaseAppService {
   override hasWindow = !(OS_TYPE === 'ios' || OS_TYPE === 'android');
   override hasWindowBar = !(OS_TYPE === 'ios' || OS_TYPE === 'android');
   override hasContextMenu = !(OS_TYPE === 'ios' || OS_TYPE === 'android');
-  override hasRoundedWindow = OS_TYPE === 'linux';
+  // No desktop platform draws a rounded, transparent window anymore: the Linux
+  // window is opaque with square corners to avoid the WebKitGTK "turns
+  // invisible while busy" bug (#3682).
+  override hasRoundedWindow = false;
   override hasSafeAreaInset = OS_TYPE === 'ios' || OS_TYPE === 'android';
   override hasHaptics = OS_TYPE === 'ios' || OS_TYPE === 'android';
   override hasUpdater =
@@ -569,13 +582,20 @@ export class NativeAppService extends BaseAppService {
   override hasOrientationLock =
     (OS_TYPE === 'ios' && getOSPlatform() === 'ios') || OS_TYPE === 'android';
   override hasScreenBrightness = OS_TYPE === 'ios' || OS_TYPE === 'android';
+  override hasAmbientLightSensor = false;
   override hasIAP = OS_TYPE === 'ios' || (OS_TYPE === 'android' && DIST_CHANNEL === 'playstore');
   // CustomizeRootDir has a blocker on macOS App Store builds due to Security Scoped Resource restrictions.
   // See: https://github.com/tauri-apps/tauri/issues/3716
   override canCustomizeRootDir = DIST_CHANNEL !== 'appstore';
-  override canReadExternalDir = DIST_CHANNEL !== 'appstore' && DIST_CHANNEL !== 'playstore';
+  // Android builds — Play Store included — declare MANAGE_EXTERNAL_STORAGE, so
+  // absolute-path reads outside the app sandbox work once the user grants All
+  // Files Access. Apple offers no equivalent, so App Store builds stay gated.
+  override canReadExternalDir = DIST_CHANNEL !== 'appstore';
   override supportsCanvasContext2DFilter =
     OS_TYPE !== 'ios' && OS_TYPE !== 'macos' && OS_TYPE !== 'linux';
+  // WebKitGTK on Linux crashes when a View Transition snapshots the window,
+  // so both capabilities are unavailable there regardless of what the engine
+  // reports; every other webview is gated on the real feature probe.
   override supportsViewTransitionsAPI = OS_TYPE !== 'linux' && detectViewTransitionsAPI();
   override supportsViewTransitionGroup = OS_TYPE !== 'linux' && detectViewTransitionGroup();
   override distChannel = DIST_CHANNEL;
@@ -595,6 +615,25 @@ export class NativeAppService extends BaseAppService {
   override async init() {
     const execDir = await invoke<string>('get_executable_dir');
     this.execDir = execDir;
+    // Report the WebView User-Agent so Sentry can tag crashes with the
+    // engine/version (the injected browser SDK's UA context isn't forwarded).
+    try {
+      await invoke('set_webview_info', { userAgent: navigator.userAgent });
+    } catch (err) {
+      console.warn('[nativeAppService] set_webview_info failed:', err);
+    }
+    // Ask Rust whether the in-app updater must stay hidden (READEST_DISABLE_UPDATER,
+    // Flatpak, or a Linux deb/rpm/pacman install that Tauri can't self-update). The
+    // command is the reliable source of truth; the `__READEST_UPDATER_DISABLED`
+    // init-script global isn't dependable on every Linux/WebKitGTK setup (#4874).
+    if (this.isDesktopApp) {
+      try {
+        const updaterDisabled = await invoke<boolean>('is_updater_disabled');
+        this.hasUpdater = this.hasUpdater && !updaterDisabled;
+      } catch (err) {
+        console.warn('[nativeAppService] is_updater_disabled failed:', err);
+      }
+    }
     if (
       process.env['NEXT_PUBLIC_PORTABLE_APP'] ||
       (await this.fs.exists(`${execDir}/${SETTINGS_FILENAME}`, 'None'))
@@ -630,6 +669,15 @@ export class NativeAppService extends BaseAppService {
         console.warn('[nativeAppService] getStorefrontRegionCode failed:', err);
       }
     }
+    if (this.isAndroidApp) {
+      try {
+        const res = await hasAmbientLightSensor();
+        this.hasAmbientLightSensor = !!res.available;
+      } catch (err) {
+        console.warn('[nativeAppService] hasAmbientLightSensor failed:', err);
+        this.hasAmbientLightSensor = false;
+      }
+    }
     await this.prepareBooksDir();
     await this.runMigrations();
   }
@@ -639,7 +687,7 @@ export class NativeAppService extends BaseAppService {
       const settings = await this.loadSettings();
       const lastMigrationVersion = settings.migrationVersion || 0;
 
-      await super.runMigrations(lastMigrationVersion);
+      await super.runMigrations(lastMigrationVersion, settings);
 
       if (lastMigrationVersion < 20251029) {
         try {
@@ -820,19 +868,27 @@ export class NativeAppService extends BaseAppService {
   ): Promise<boolean> {
     // MediaStore is Android-only; other platforms keep the saveFile/share path.
     if (!this.isAndroidApp) return false;
+    // Every image reaching here is called `image.<ext>`, which left the insert at
+    // the mercy of the OEM's duplicate handling. Name each save uniquely instead.
+    const galleryName = galleryFileName(filename);
     // Write the bytes to a Temp subdirectory (not the Temp root, mirroring the
     // share path), then hand the path to the native MediaStore insert.
     const shareDir = await this.resolveFilePath('shared', 'Temp');
     await mkdir(shareDir, { recursive: true });
-    const srcPath = await this.resolveFilePath(`shared/${filename}`, 'Temp');
+    const srcPath = await this.resolveFilePath(`shared/${galleryName}`, 'Temp');
     try {
       await writeFile(srcPath, new Uint8Array(content));
       const res = await saveImageToGallery({
         srcPath,
-        fileName: filename,
+        fileName: galleryName,
         mimeType,
         albumName: 'Readest',
       });
+      if (!res.success) {
+        // The plugin returns the MediaStore exception here. Dropping it left an
+        // OEM-specific insert failure showing up as nothing but a toast.
+        console.error('Failed to save image to gallery:', res.error);
+      }
       return res.success;
     } catch (error) {
       console.error('Failed to save image to gallery:', error);

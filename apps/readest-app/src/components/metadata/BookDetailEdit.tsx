@@ -10,10 +10,12 @@ import { flattenContributors, formatAuthors, formatPublisher, formatTitle } from
 import { useFileSelector } from '@/hooks/useFileSelector';
 import { FormField } from './FormField';
 import BookCover from '@/components/BookCover';
+import { useSettingsStore } from '@/store/settingsStore';
 
 interface BookDetailEditProps {
   book: Book;
   metadata: BookMetadata;
+  tags: string[];
   fieldSources: Record<string, string>;
   lockedFields: Record<string, boolean>;
   fieldErrors: Record<string, string>;
@@ -33,6 +35,7 @@ const emptyCoverImageUrl = '_blank';
 const BookDetailEdit: React.FC<BookDetailEditProps> = ({
   book,
   metadata,
+  tags,
   fieldSources,
   lockedFields,
   fieldErrors,
@@ -48,6 +51,7 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
+  const { settings } = useSettingsStore();
   const { selectFiles } = useFileSelector(appService, _);
 
   const hasLockedFields = Object.values(lockedFields).some((locked) => locked);
@@ -142,6 +146,12 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
       placeholder: _('Fiction, Science, History'),
     },
     {
+      field: 'tags',
+      label: _('Tags'),
+      value: tags.join(', '),
+      placeholder: _('Favorites, To Read'),
+    },
+    {
       field: 'description',
       label: _('Description'),
       type: 'textarea',
@@ -179,6 +189,7 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
           >
             <BookCover
               mode='list'
+              showSpine={settings.librarySkeuomorphicCovers}
               book={{
                 ...book,
                 metadata: {

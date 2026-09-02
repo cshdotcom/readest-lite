@@ -96,6 +96,27 @@ export interface RemoteLibraryIndex {
   schemaVersion: 1;
   books: Book[];
   updatedAt: number;
+  /**
+   * Hashes whose book FILE (not just config/cover) is confirmed present on the
+   * remote. A book's file is immutable per hash, so once uploaded it never
+   * needs re-checking — recording it here lets an incremental "Sync now" skip
+   * the per-book HEAD probe for already-mirrored files and stay O(changed)
+   * instead of O(library) when "Upload Book Files" is on (#4856).
+   *
+   * Optional + additive: a legacy/absent value is treated as empty, so an old
+   * client that rewrites the index simply drops it and the next new-client sync
+   * re-verifies each file once (a bounded, self-healing HEAD) and re-records it.
+   */
+  uploadedHashes?: string[];
+  /**
+   * Hash dirs inspected by discovery and found to hold no book file (config /
+   * cover only — legacy leftovers, or peers syncing without "Upload Book
+   * Files"). Discovery skips them instead of re-listing every one on every
+   * run. A dir is re-checked when {@link uploadedHashes} says its file has
+   * arrived, on Full Sync, and whenever the record is dropped by a legacy
+   * client (same optional + additive self-healing contract as uploadedHashes).
+   */
+  emptyDirs?: string[];
 }
 
 export const parseRemoteLibraryIndex = (raw: string | null): RemoteLibraryIndex | null => {
@@ -107,4 +128,35 @@ export const parseRemoteLibraryIndex = (raw: string | null): RemoteLibraryIndex 
     // Ignore parse errors — a malformed index is treated as "no index".
   }
   return null;
+};
+
+/**
+ * Fields that describe THIS device's copy of a book rather than the book
+ * itself: an absolute path from an in-place / transient import, the blob URL of
+ * the rendered cover, and the two "this device holds the bytes" stamps.
+ *
+ * They must never cross devices. A peer that adopts a foreign `filePath` reads
+ * the row as a purely-local book (that is what `book.filePath` means to the
+ * rest of the app), so as soon as its managed copy is absent — exactly the
+ * state "Remove from Device Only" creates — the stale-record cleanup in
+ * `useOpenBook` offers to delete the "missing" book, which runs the cloud-and-
+ * device delete and GCs the book off the shared remote (#5084).
+ * `useBooksSync.getNewBooks` strips `filePath` from the native channel for the
+ * same reason; the shared index needs the same discipline.
+ */
+const DEVICE_LOCAL_BOOK_FIELDS = [
+  'filePath',
+  'altFilePaths',
+  'coverImageUrl',
+  'downloadedAt',
+  'coverDownloadedAt',
+] as const satisfies readonly (keyof Book)[];
+
+/** A copy of `book` safe to publish to — or adopt from — the shared index. */
+export const stripDeviceLocalFields = (book: Book): Book => {
+  const copy = { ...book };
+  for (const field of DEVICE_LOCAL_BOOK_FIELDS) {
+    delete copy[field];
+  }
+  return copy;
 };

@@ -81,7 +81,7 @@ const ToolChip: React.FC<ToolChipProps> = ({ type, label, variant, onActivate })
         'flex cursor-grab touch-none select-none items-center active:cursor-grabbing',
         isToolbar
           ? // Mirror the live toolbar's AnnotationToolButton: icon-only 32×32.
-            'h-8 min-h-8 w-8 justify-center rounded-md p-0 not-eink:hover:bg-gray-500 eink:hover:border'
+            'h-8 min-h-8 w-8 justify-center rounded-md p-0 not-eink:hover:bg-base-200 eink:hover:border'
           : // Available tools are labeled so they're identifiable off the bar.
             'eink-bordered border-base-300 bg-base-100 gap-1.5 rounded-md border px-2.5 py-1.5 text-sm',
         isDragging && 'shadow-lg',
@@ -113,12 +113,13 @@ const Zone: React.FC<{
           'flex min-h-12 flex-wrap items-center gap-2 rounded-lg p-2',
           isToolbar
             ? // A faithful, content-width preview of the real popup, start-aligned
-              // with the Available row below it. Off e-ink it mirrors the popup's
-              // dark fill; in e-ink the dark fill is dropped entirely and
-              // `eink-bordered` renders it as the popup's e-ink chrome instead
-              // (.popup-container): a base-100 surface with a 1px base-content
-              // border, so it doesn't paint as a solid black bar (#4839).
-              'selection-popup eink-bordered w-fit max-w-full not-eink:bg-gray-600 not-eink:text-white'
+              // with the Available row below it. Off e-ink it mirrors Popup.tsx's
+              // `.popup-container` chrome. That chrome earns its e-ink treatment
+              // from `[data-eink] .popup-container` in globals.css, which this
+              // plain div doesn't match — so `eink-bordered` supplies the same
+              // thing here (base-100 surface, 1px base-content border) and keeps
+              // the row from painting as a solid black bar (#4839).
+              'selection-popup eink-bordered text-base-content w-fit max-w-full border font-sans not-eink:border-base-content/20 not-eink:shadow-2xl bg-base-300 theme-dark:bg-base-100'
             : 'bg-base-200/60',
         )}
       >
@@ -126,9 +127,12 @@ const Zone: React.FC<{
           <span
             className={clsx(
               'px-1 text-sm',
-              // In e-ink the toolbar surface turns base-100, so the white hint would
-              // vanish; fall back to base-content there (#4839).
-              isToolbar ? 'not-eink:text-white/70 eink:text-base-content' : 'text-base-content/50',
+              // The toolbar surface is theme-aware (base-300, base-100 on dark
+              // themes and in e-ink), so the hint tracks base-content rather
+              // than a fixed white; e-ink takes it at full opacity (#4839).
+              isToolbar
+                ? 'not-eink:text-base-content/50 eink:text-base-content'
+                : 'text-base-content/50',
             )}
           >
             {emptyHint}

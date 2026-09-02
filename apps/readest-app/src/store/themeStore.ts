@@ -1,7 +1,19 @@
 import { create } from 'zustand';
+import { addPluginListener, type PluginListener } from '@tauri-apps/api/core';
 import { AppService } from '@/types/system';
 import { getThemeCode, ThemeCode } from '@/utils/style';
-import { getSystemColorScheme } from '@/utils/bridge';
+import {
+  getSystemColorScheme,
+  startAmbientLightUpdates,
+  stopAmbientLightUpdates,
+  type AmbientLightPayload,
+} from '@/utils/bridge';
+import {
+  isValidThemeMode,
+  readStoredAmbientIsDarkMode,
+  resolveAmbientIsDarkMode,
+  resolveThemeIsDarkMode,
+} from '@/utils/ambientLight';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { CustomTheme, Palette, ThemeMode } from '@/styles/themes';
 import { EnvConfigType, isWebAppPlatform } from '@/services/environment';
@@ -19,6 +31,7 @@ interface ThemeState {
   themeMode: ThemeMode;
   themeColor: string;
   systemIsDarkMode: boolean;
+  ambientIsDarkMode: boolean;
   themeCode: ThemeCode;
   isDarkMode: boolean;
   systemUIVisible: boolean;
@@ -41,12 +54,14 @@ interface ThemeState {
     isDelete?: boolean,
   ) => void;
   handleSystemThemeChange: (isDark: boolean) => void;
+  handleAmbientLightChange: (lux: number) => void;
   updateSafeAreaInsets: (insets: Insets) => void;
 }
 
 const getInitialThemeMode = (): ThemeMode => {
   if (typeof window !== 'undefined' && localStorage) {
-    return (localStorage.getItem('themeMode') as ThemeMode) || 'auto';
+    const stored = localStorage.getItem('themeMode');
+    if (isValidThemeMode(stored)) return stored;
   }
   return 'auto';
 };
@@ -59,19 +74,99 @@ const getInitialThemeColor = (): string => {
   return 'default';
 };
 
+const getInitialAmbientIsDarkMode = (systemIsDarkMode: boolean): boolean => {
+  if (typeof window !== 'undefined' && localStorage) {
+    return readStoredAmbientIsDarkMode(localStorage.getItem('ambientIsDarkMode'), systemIsDarkMode);
+  }
+  return systemIsDarkMode;
+};
+
+const persistAmbientIsDarkMode = (isDark: boolean) => {
+  if (typeof window !== 'undefined' && localStorage) {
+    localStorage.setItem('ambientIsDarkMode', isDark ? 'true' : 'false');
+  }
+};
+
+const applyDataTheme = (themeColor: string, isDarkMode: boolean) => {
+  document.documentElement.setAttribute(
+    'data-theme',
+    `${themeColor}-${isDarkMode ? 'dark' : 'light'}`,
+  );
+};
+
+let ambientLightListener: PluginListener | null = null;
+let ambientLightListening = false;
+let ambientHasLuxReading = false;
+
+const stopAmbientLightListening = async () => {
+  if (ambientLightListener) {
+    try {
+      await ambientLightListener.unregister();
+    } catch {
+      // ignore unregister races on teardown
+    }
+    ambientLightListener = null;
+  }
+  if (ambientLightListening) {
+    ambientLightListening = false;
+    try {
+      await stopAmbientLightUpdates();
+    } catch {
+      // platform may not support ambient light
+    }
+  }
+  ambientHasLuxReading = false;
+};
+
+const startAmbientLightListening = async () => {
+  if (ambientLightListening) return;
+  try {
+    const started = await startAmbientLightUpdates();
+    if (!started.success) {
+      useThemeStore.getState().setThemeMode('auto');
+      return;
+    }
+    ambientLightListening = true;
+    ambientLightListener = await addPluginListener<AmbientLightPayload>(
+      'native-bridge',
+      'ambient-light',
+      (payload) => {
+        if (typeof payload?.lux === 'number') {
+          useThemeStore.getState().handleAmbientLightChange(payload.lux);
+        }
+      },
+    );
+  } catch {
+    useThemeStore.getState().setThemeMode('auto');
+  }
+};
+
+// Start and stop both span several awaits, so overlapping calls could
+// interleave: a stop landing after a start leaves the sensor off while we
+// still believe we are listening, and two starts leak the first listener.
+// Chaining every transition keeps the sensor in step with the last mode set.
+let ambientLightSync: Promise<void> = Promise.resolve();
+
+const syncAmbientLightSubscription = (mode: ThemeMode) => {
+  ambientLightSync = ambientLightSync.then(() =>
+    mode === 'ambient' ? startAmbientLightListening() : stopAmbientLightListening(),
+  );
+};
+
 export const useThemeStore = create<ThemeState>((set, get) => {
   const initialThemeMode = getInitialThemeMode();
   const initialThemeColor = getInitialThemeColor();
   const systemIsDarkMode =
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const isDarkMode =
-    initialThemeMode === 'dark' || (initialThemeMode === 'auto' && systemIsDarkMode);
+  const ambientIsDarkMode = getInitialAmbientIsDarkMode(systemIsDarkMode);
+  const isDarkMode = resolveThemeIsDarkMode(initialThemeMode, systemIsDarkMode, ambientIsDarkMode);
   const themeCode = getThemeCode();
 
   return {
     themeMode: initialThemeMode,
     themeColor: initialThemeColor,
     systemIsDarkMode,
+    ambientIsDarkMode,
     isDarkMode,
     themeCode,
     systemUIVisible: false,
@@ -88,22 +183,21 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       if (typeof window !== 'undefined' && localStorage) {
         localStorage.setItem('themeMode', mode);
       }
-      const isDarkMode = mode === 'dark' || (mode === 'auto' && get().systemIsDarkMode);
-      document.documentElement.setAttribute(
-        'data-theme',
-        `${get().themeColor}-${isDarkMode ? 'dark' : 'light'}`,
+      const isDarkMode = resolveThemeIsDarkMode(
+        mode,
+        get().systemIsDarkMode,
+        get().ambientIsDarkMode,
       );
+      applyDataTheme(get().themeColor, isDarkMode);
       set({ themeMode: mode, isDarkMode });
       set({ themeCode: getThemeCode() });
+      syncAmbientLightSubscription(mode);
     },
     setThemeColor: (color) => {
       if (typeof window !== 'undefined' && localStorage) {
         localStorage.setItem('themeColor', color);
       }
-      document.documentElement.setAttribute(
-        'data-theme',
-        `${color}-${get().isDarkMode ? 'dark' : 'light'}`,
-      );
+      applyDataTheme(color, get().isDarkMode);
       set({ themeColor: color });
       set({ themeCode: getThemeCode() });
     },
@@ -134,12 +228,22 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     },
     handleSystemThemeChange: (systemIsDarkMode) => {
       const mode = get().themeMode;
-      const isDarkMode = mode === 'dark' || (mode === 'auto' && systemIsDarkMode);
-      document.documentElement.setAttribute(
-        'data-theme',
-        `${get().themeColor}-${isDarkMode ? 'dark' : 'light'}`,
-      );
+      const isDarkMode = resolveThemeIsDarkMode(mode, systemIsDarkMode, get().ambientIsDarkMode);
+      applyDataTheme(get().themeColor, isDarkMode);
       set({ systemIsDarkMode, isDarkMode });
+      set({ themeCode: getThemeCode() });
+    },
+    handleAmbientLightChange: (lux) => {
+      if (get().themeMode !== 'ambient') return;
+      const previous = ambientHasLuxReading ? get().ambientIsDarkMode : null;
+      ambientHasLuxReading = true;
+      const nextAmbientIsDark = resolveAmbientIsDarkMode(lux, previous);
+      if (nextAmbientIsDark === get().ambientIsDarkMode && get().isDarkMode === nextAmbientIsDark) {
+        return;
+      }
+      persistAmbientIsDarkMode(nextAmbientIsDark);
+      applyDataTheme(get().themeColor, nextAmbientIsDark);
+      set({ ambientIsDarkMode: nextAmbientIsDark, isDarkMode: nextAmbientIsDark });
       set({ themeCode: getThemeCode() });
     },
     updateSafeAreaInsets: (insets) => {
@@ -155,11 +259,10 @@ export const loadDataTheme = () => {
   const themeColor = localStorage.getItem('themeColor');
   if (themeMode && themeColor) {
     const systemIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDarkMode = themeMode === 'dark' || (themeMode === 'auto' && systemIsDarkMode);
-    document.documentElement.setAttribute(
-      'data-theme',
-      `${themeColor}-${isDarkMode ? 'dark' : 'light'}`,
-    );
+    const ambientIsDarkMode = getInitialAmbientIsDarkMode(systemIsDarkMode);
+    const mode = isValidThemeMode(themeMode) ? themeMode : 'auto';
+    const isDarkMode = resolveThemeIsDarkMode(mode, systemIsDarkMode, ambientIsDarkMode);
+    applyDataTheme(themeColor, isDarkMode);
   }
 };
 
@@ -192,8 +295,20 @@ export const initSystemThemeListener = (appService: AppService) => {
     useThemeStore.setState({ isRoundedWindow: !isMaximized && !isFullscreen });
   };
 
+  const syncAmbientForVisibility = () => {
+    const mode = useThemeStore.getState().themeMode;
+    if (document.visibilityState === 'visible') {
+      syncAmbientLightSubscription(mode);
+    } else {
+      void stopAmbientLightListening();
+    }
+  };
+
   mediaQuery?.addEventListener('change', updateColorTheme);
-  document.addEventListener('visibilitychange', updateColorTheme);
+  document.addEventListener('visibilitychange', () => {
+    void updateColorTheme();
+    syncAmbientForVisibility();
+  });
   window.addEventListener('resize', updateWindowTheme);
 
   // iOS WKWebView never fires the `prefers-color-scheme` media query
@@ -207,4 +322,13 @@ export const initSystemThemeListener = (appService: AppService) => {
   }
 
   updateColorTheme();
+
+  // appService.init() has already probed the sensor by the time this runs, so
+  // fall back when Ambient Mode was persisted on a device that lacks one.
+  const themeMode = useThemeStore.getState().themeMode;
+  if (themeMode === 'ambient' && !appService.hasAmbientLightSensor) {
+    useThemeStore.getState().setThemeMode('auto');
+  } else {
+    syncAmbientLightSubscription(themeMode);
+  }
 };

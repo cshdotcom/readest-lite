@@ -10,11 +10,21 @@ import { TrackerCore, type FlushedEvent } from '@/services/statistics/trackerCor
 import { getBookHashFromKey, ttsSessionManager } from '@/services/tts/TTSSessionManager';
 import { DEFAULT_STATS_TRACKING_CONFIG } from '@/types/statistics';
 import { SyncClient } from '@/libs/sync';
+import { BookOrbitClient } from '@/services/bookorbit/BookOrbitClient';
+import { pushStatsToBookOrbit } from '@/services/bookorbit/statsPush';
 import { pushStats, pullStats } from '@/services/statistics/statsSync';
 import { isSyncCategoryEnabled } from '@/services/sync/syncCategories';
+import { useSettingsStore } from '@/store/settingsStore';
 import { eventDispatcher } from '@/utils/event';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// Statistics are best-effort telemetry: a failed write or sync (e.g. the
+// statistics DB torn down mid-flight on app teardown -> "database ... not
+// loaded", Sentry READEST-6) must never surface as an unhandled rejection.
+const runBestEffort = (work: Promise<unknown>): void => {
+  void work.catch((err) => console.warn('[stats] background operation failed:', err));
+};
 
 export default function ReadingStatsTracker({ bookKey }: { bookKey: string }) {
   const { appService } = useEnv();
@@ -47,23 +57,46 @@ export default function ReadingStatsTracker({ bookKey }: { bookKey: string }) {
 
   const syncEnabled = () => !!user && isSyncCategoryEnabled('stats');
 
+  // BookOrbit stats push needs no Readest account — only the integration.
+  const bookOrbitStatsPush = (db: StatisticsDb): Promise<unknown> | undefined => {
+    const { settings } = useSettingsStore.getState();
+    const bookorbit = settings.bookorbit;
+    if (
+      !bookorbit.enabled ||
+      !bookorbit.syncStats ||
+      !bookorbit.serverUrl ||
+      !bookorbit.username ||
+      !bookorbit.userkey
+    ) {
+      return undefined;
+    }
+    return pushStatsToBookOrbit(db, new BookOrbitClient(bookorbit));
+  };
+
+  const pushToAllTargets = (db: StatisticsDb) => {
+    if (syncEnabled()) runBestEffort(pushStats(db, new SyncClient()));
+    const bookOrbitPush = bookOrbitStatsPush(db);
+    if (bookOrbitPush) runBestEffort(bookOrbitPush);
+  };
+
   const schedulePush = () => {
-    if (!syncEnabled()) return;
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
       const db = dbRef.current;
-      if (db) void pushStats(db, new SyncClient());
+      if (db) pushToAllTargets(db);
     }, 10_000);
   };
 
   useEffect(() => {
     if (!appService) return;
     let cancelled = false;
-    StatisticsDb.open(appService).then((db) => {
-      if (cancelled) return;
-      dbRef.current = db;
-      if (syncEnabled()) void pullStats(db, new SyncClient());
-    });
+    runBestEffort(
+      StatisticsDb.open(appService).then((db) => {
+        if (cancelled) return;
+        dbRef.current = db;
+        if (syncEnabled()) runBestEffort(pullStats(db, new SyncClient()));
+      }),
+    );
     return () => {
       cancelled = true;
     };
@@ -71,15 +104,20 @@ export default function ReadingStatsTracker({ bookKey }: { bookKey: string }) {
   }, [appService]);
 
   // Persist flushed events into the statistics DB.
-  const persist = (events: FlushedEvent[]): Promise<void> => {
+  const persist = async (events: FlushedEvent[]): Promise<void> => {
     const db = dbRef.current;
-    if (!db || !bookMd5 || events.length === 0) return Promise.resolve();
-    return (async () => {
+    if (!db || !bookMd5 || events.length === 0) return;
+    try {
       const idBook = await db.upsertBook({ bookMd5, title, authors });
       for (const e of events) await db.insertPageEvent(idBook, e);
       await db.recomputeBookTotals(idBook);
       schedulePush();
-    })();
+    } catch (err) {
+      // The statistics DB can be closed mid-write on app/tab teardown
+      // ("database ... not loaded", Sentry READEST-6). Best-effort: log and
+      // never reject, so the fire-and-forget dispatch sites stay safe.
+      console.warn('[stats] failed to persist reading events:', err);
+    }
   };
 
   const armIdle = () => {
@@ -90,13 +128,13 @@ export default function ReadingStatsTracker({ bookKey }: { bookKey: string }) {
     );
   };
 
-  // Page changes drive the tracker.
   const openPageAt = (info: { current?: number; total: number } | undefined) => {
     if (!info) return;
     void persist(coreRef.current.onPage((info.current ?? 0) + 1, info.total || 1, nowSec()));
     armIdle();
   };
 
+  // Page changes drive the tracker.
   useEffect(() => {
     if (ttsPlayingRef.current) return;
     openPageAt(progress?.pageinfo);
@@ -145,11 +183,12 @@ export default function ReadingStatsTracker({ bookKey }: { bookKey: string }) {
     return () => {
       if (idleRef.current) clearTimeout(idleRef.current);
       if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
-      const closePersist = persist(coreRef.current.onClose(nowSec()));
-      void closePersist.then(() => {
-        if (syncEnabled() && dbRef.current) return pushStats(dbRef.current, new SyncClient());
-        return undefined;
-      });
+      runBestEffort(
+        persist(coreRef.current.onClose(nowSec())).then(() => {
+          if (dbRef.current) pushToAllTargets(dbRef.current);
+          return undefined;
+        }),
+      );
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookMd5]);

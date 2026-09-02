@@ -1,31 +1,57 @@
-// Readest Lite — NativeDatabaseService stub.
-// 原文件依赖 tauri-plugin-turso（src-tauri 子模块），web 构建不需要。
-// 此 stub 仅在 web 平台保留类型占位，运行时不会被调用（environment.ts 仅在
-// isTauriAppPlatform() 为 true 时才动态 import NativeAppService）。
-import { DatabaseService, DatabaseExecResult, DatabaseRow } from '@/types/database';
+import { Database, LoadOptions, QueryResult } from 'tauri-plugin-turso';
+import { DatabaseService, DatabaseExecResult, DatabaseRow, DatabaseOpts } from '@/types/database';
 
 export class NativeDatabaseService implements DatabaseService {
-  private constructor() {
-    // no-op
+  private db: Database;
+
+  private constructor(db: Database) {
+    this.db = db;
   }
 
-  static async open(_path: string, _opts?: unknown): Promise<NativeDatabaseService> {
-    throw new Error('NativeDatabaseService is not available in web build');
+  static async open(path: string, opts?: DatabaseOpts): Promise<NativeDatabaseService> {
+    // Translate the cross-platform DatabaseOpts (from @readest/turso-database-common,
+    // used by WASM bindings) to tauri-plugin-turso's LoadOptions. The two interfaces
+    // have diverged: `experimental` is the same field name with compatible types
+    // (literal union vs `string[]`); `encryption` shapes differ entirely (native
+    // 'aes256cbc' + byte-array key vs WASM 'aes256gcm'/etc + hex key) and is not
+    // wired in MVP — revisit alongside any Reedy.db encryption work. Skip the
+    // translation when no relevant opts are set so existing callers preserve their
+    // plain path-string call shape.
+    const loadArg: string | LoadOptions = opts?.experimental?.length
+      ? { path, experimental: opts.experimental as string[] }
+      : path;
+    const db = await Database.load(loadArg);
+    return new NativeDatabaseService(db);
   }
 
-  async execute(_sql: string, _params?: unknown[]): Promise<DatabaseExecResult> {
-    throw new Error('NativeDatabaseService is not available in web build');
+  async execute(sql: string, params: unknown[] = []): Promise<DatabaseExecResult> {
+    const result: QueryResult = await this.db.execute(sql, params);
+    return {
+      rowsAffected: result.rowsAffected,
+      lastInsertId: result.lastInsertId,
+    };
   }
 
-  async select<T extends DatabaseRow = DatabaseRow>(_sql: string, _params?: unknown[]): Promise<T[]> {
-    throw new Error('NativeDatabaseService is not available in web build');
+  async select<T extends DatabaseRow = DatabaseRow>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<T[]> {
+    return await this.db.select<T[]>(sql, params);
   }
 
-  async batch(_statements: string[]): Promise<void> {
-    throw new Error('NativeDatabaseService is not available in web build');
+  async batch(statements: string[]): Promise<void> {
+    await this.db.batch(statements);
   }
 
   async close(): Promise<void> {
-    throw new Error('NativeDatabaseService is not available in web build');
+    // Turso is WAL-only with no auto-checkpoint and does not fold the WAL on
+    // close by itself; without this the main file never grows past its header
+    // and every written byte sits in the -wal sidecar, which file-level copy
+    // or sync of the containing directory can miss.
+    await this.execute('PRAGMA wal_checkpoint(TRUNCATE)').catch(() => {});
+    // The plugin's arg-less close() drains EVERY open connection app-wide;
+    // pass our path so closing this database cannot tear down the others
+    // (statistics.db etc. dying with "database ... not loaded", READEST-6).
+    await this.db.close(this.db.path);
   }
 }

@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BiMoon, BiSun } from 'react-icons/bi';
 import { TbSunMoon } from 'react-icons/tb';
-import { MdZoomOut, MdZoomIn, MdCheck, MdInfoOutline } from 'react-icons/md';
+import { MdZoomOut, MdZoomIn, MdCheck, MdInfoOutline, MdOutlineSensors } from 'react-icons/md';
 import { MdRemove, MdAdd, MdContrast } from 'react-icons/md';
 import { MdSync, MdSyncProblem } from 'react-icons/md';
 import { IoMdExpand } from 'react-icons/io';
 import { IoShareOutline } from 'react-icons/io5';
 import { TbArrowAutofitWidth } from 'react-icons/tb';
 import { TbColumns1, TbColumns2 } from 'react-icons/tb';
+import { TbCarouselVertical, TbCarouselHorizontal } from 'react-icons/tb';
 
 import {
   MAX_ZOOM_LEVEL,
@@ -29,8 +30,11 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { getStyles } from '@/utils/style';
 import { navigateToLogin } from '@/utils/nav';
+import { getScrollGapAttr } from '@/utils/webtoon';
+import { applyPageTurnAttributes } from '@/app/reader/hooks/useCapturedTurn';
 import { eventDispatcher } from '@/utils/event';
 import { getMaxInlineSize } from '@/utils/config';
+import { nextThemeMode } from '@/utils/ambientLight';
 import dayjs from 'dayjs';
 import { saveViewSettings } from '@/helpers/settings';
 import { tauriHandleToggleFullScreen } from '@/utils/window';
@@ -62,6 +66,10 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
 
   const { themeMode, isDarkMode, setThemeMode } = useThemeStore();
   const [isScrolledMode, setScrolledMode] = useState(viewSettings!.scrolled);
+  const [scrolledDirection, setScrolledDirection] = useState(
+    viewSettings!.scrolledDirection ?? 'vertical',
+  );
+  const [webtoonMode, setWebtoonMode] = useState(viewSettings!.webtoonMode ?? false);
   const [isParagraphMode, setParagraphMode] = useState(
     viewSettings?.paragraphMode?.enabled ?? false,
   );
@@ -84,6 +92,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     setContrast((prev) => Math.max(prev - CONTRAST_STEP, MIN_CONTRAST));
   const resetContrast = () => setContrast(100);
   const toggleScrolledMode = () => setScrolledMode(!isScrolledMode);
+  const toggleWebtoonMode = () => setWebtoonMode(!webtoonMode);
   const toggleParagraphMode = () => {
     setParagraphMode(!isParagraphMode);
     eventDispatcher.dispatch('toggle-paragraph-mode', { bookKey });
@@ -97,8 +106,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
   };
 
   const cycleThemeMode = () => {
-    const nextMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
-    setThemeMode(nextMode);
+    setThemeMode(nextThemeMode(themeMode, !!appService?.hasAmbientLightSensor));
   };
 
   const handleFullScreen = () => {
@@ -136,17 +144,52 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
   };
 
   useEffect(() => {
+    if (scrolledDirection === (viewSettings.scrolledDirection ?? 'vertical')) return;
+    viewSettings.scrolledDirection = scrolledDirection;
+    getView(bookKey)?.renderer.setAttribute('scroll-direction', scrolledDirection);
+    setViewSettings(bookKey, viewSettings);
+    saveViewSettings(envConfig, bookKey, 'scrolledDirection', scrolledDirection, true, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrolledDirection]);
+
+  useEffect(() => {
     if (isScrolledMode === viewSettings!.scrolled) return;
     viewSettings!.scrolled = isScrolledMode;
+    if (!isScrolledMode && webtoonMode) setWebtoonMode(false);
     getView(bookKey)?.renderer.setAttribute('flow', isScrolledMode ? 'scrolled' : 'paginated');
     getView(bookKey)?.renderer.setAttribute(
       'max-inline-size',
       `${getMaxInlineSize(viewSettings)}px`,
     );
     getView(bookKey)?.renderer.setStyles?.(getStyles(viewSettings!));
+    // `scrolled` decides which engine owns a swipe: leaving it stale keeps the
+    // paginator's `turn-style` / cleared `no-swipe` from scroll flow, so the
+    // paginator animates the swipe itself while the touch interceptor — which
+    // recomputes eligibility live — runs a captured turn over the top, and
+    // three pages slide at once.
+    const view = getView(bookKey);
+    if (view) applyPageTurnAttributes(view, viewSettings!, !!bookData?.isFixedLayout);
     setViewSettings(bookKey, viewSettings!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScrolledMode]);
+
+  useEffect(() => {
+    if (webtoonMode === viewSettings.webtoonMode) return;
+    viewSettings.webtoonMode = webtoonMode;
+    getView(bookKey)?.renderer.setAttribute('scroll-gap', getScrollGapAttr(webtoonMode));
+    if (webtoonMode) {
+      // Webtoon Mode implies scrolled flow + fit-width (scale-factor 100) so pages
+      // fill the width without horizontal overflow/clipping. Reuse the existing
+      // scrolled / zoomLevel effects rather than duplicating their renderer wiring.
+      if (!isScrolledMode) setScrolledMode(true);
+      if (zoomLevel !== 100) setZoomLevel(100);
+      if (scrolledDirection !== 'vertical') setScrolledDirection('vertical');
+      saveViewSettings(envConfig, bookKey, 'scrolled', true, false, false);
+    }
+    setViewSettings(bookKey, viewSettings);
+    saveViewSettings(envConfig, bookKey, 'webtoonMode', webtoonMode, false, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webtoonMode]);
 
   useEffect(() => {
     if (zoomLevel === viewSettings.zoomLevel) return;
@@ -218,10 +261,6 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
         'view-menu dropdown-content dropdown-right no-triangle z-20 mt-1.5 border',
         'bgcolor-base-200 shadow-2xl',
       )}
-      style={{
-        maxWidth: `${window.innerWidth - 40}px`,
-        marginRight: window.innerWidth < 640 ? '-36px' : '0px',
-      }}
       onCancel={() => setIsDropdownOpen?.(false)}
     >
       {bookData.bookDoc?.rendition?.layout === 'pre-paginated' && (
@@ -304,23 +343,56 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
             >
               <button
                 title={_('Single Page')}
-                onClick={setSpreadMode.bind(null, 'none')}
+                onClick={() => {
+                  setSpreadMode('none');
+                  if (isScrolledMode) setScrolledMode(false);
+                }}
                 className={clsx(
                   'hover:bg-base-300 text-base-content rounded-full p-2',
-                  spreadMode === 'none' && 'bg-base-300/75',
+                  !isScrolledMode && spreadMode === 'none' && 'bg-base-300/75',
                 )}
               >
                 <TbColumns1 />
               </button>
               <button
                 title={_('Auto Spread')}
-                onClick={setSpreadMode.bind(null, 'auto')}
+                onClick={() => {
+                  setSpreadMode('auto');
+                  if (isScrolledMode) setScrolledMode(false);
+                }}
                 className={clsx(
                   'hover:bg-base-300 text-base-content rounded-full p-2',
-                  spreadMode === 'auto' && 'bg-base-300/75',
+                  !isScrolledMode && spreadMode === 'auto' && 'bg-base-300/75',
                 )}
               >
                 <TbColumns2 />
+              </button>
+              <button
+                title={_('Vertical Scrolling')}
+                onClick={() => {
+                  setScrolledDirection('vertical');
+                  if (!isScrolledMode) setScrolledMode(true);
+                }}
+                className={clsx(
+                  'hover:bg-base-300 text-base-content rounded-full p-2',
+                  isScrolledMode && scrolledDirection === 'vertical' && 'bg-base-300/75',
+                )}
+              >
+                <TbCarouselVertical />
+              </button>
+              <button
+                title={_('Horizontal Scrolling')}
+                onClick={() => {
+                  if (webtoonMode) setWebtoonMode(false);
+                  setScrolledDirection('horizontal');
+                  if (!isScrolledMode) setScrolledMode(true);
+                }}
+                className={clsx(
+                  'hover:bg-base-300 text-base-content rounded-full p-2',
+                  isScrolledMode && scrolledDirection === 'horizontal' && 'bg-base-300/75',
+                )}
+              >
+                <TbCarouselHorizontal />
               </button>
               <div className='bg-base-300 mx-2 h-6 w-[1px]' />
               <button
@@ -351,6 +423,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
               onClick={() => setKeepCoverSpread(!keepCoverSpread)}
               disabled={spreadMode === 'none'}
             />
+            <MenuItem label={_('Webtoon Mode')} toggled={webtoonMode} onClick={toggleWebtoonMode} />
           </>
           <hr aria-hidden='true' className='border-base-300 my-1' />
         </>
@@ -358,12 +431,14 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
 
       <MenuItem label={_('Font & Layout')} shortcut='Shift+F' onClick={openFontLayoutMenu} />
 
-      <MenuItem
-        label={_('Scrolled Mode')}
-        shortcut='Shift+J'
-        Icon={isScrolledMode ? MdCheck : undefined}
-        onClick={toggleScrolledMode}
-      />
+      {!bookData.isFixedLayout && (
+        <MenuItem
+          label={_('Scrolled Mode')}
+          shortcut='Shift+J'
+          Icon={isScrolledMode ? MdCheck : undefined}
+          onClick={toggleScrolledMode}
+        />
+      )}
 
       <MenuItem
         label={_('Auto Scroll')}
@@ -429,9 +504,19 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
             ? _('Dark Mode')
             : themeMode === 'light'
               ? _('Light Mode')
-              : _('Auto Mode')
+              : themeMode === 'ambient'
+                ? _('Ambient Mode')
+                : _('Auto Mode')
         }
-        Icon={themeMode === 'dark' ? BiMoon : themeMode === 'light' ? BiSun : TbSunMoon}
+        Icon={
+          themeMode === 'dark'
+            ? BiMoon
+            : themeMode === 'light'
+              ? BiSun
+              : themeMode === 'ambient'
+                ? MdOutlineSensors
+                : TbSunMoon
+        }
         onClick={cycleThemeMode}
       />
       {bookData.book?.format === 'PDF' && appService?.supportsCanvasContext2DFilter && (

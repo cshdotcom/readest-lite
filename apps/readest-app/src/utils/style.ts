@@ -15,6 +15,8 @@ import {
   generateDarkPalette,
 } from '@/styles/themes';
 import { createFontCSS, CustomFont } from '@/styles/fonts';
+import { readStoredAmbientIsDarkMode } from './ambientLight';
+import { INLINE_FORMATTING_SELECTOR } from './inlineTags';
 import { getOSPlatform } from './misc';
 import { SCROLL_WRAPPER_CLASS, SCROLL_WRAPPER_FIT_CLASS } from './scrollable';
 
@@ -90,6 +92,16 @@ const getFontStyles = (
 ) => {
   const families = buildFontFamilyLists(serif, sansSerif, monospace, defaultCJKFont);
   const defaultFontFamily = defaultFont.toLowerCase() === 'serif' ? '--serif' : '--sans-serif';
+  // Normalize publisher body-copy sizes (the Readium CSS element set) so the
+  // configured font size applies even when the book sets explicit sizes on its
+  // paragraphs (#5420). Opt-in via "Override Book Font" since it also flattens
+  // intentional sizing on these elements. Fixed layouts are unaffected: their
+  // renderer has no setStyles, so this is only injected into reflowable docs.
+  const bodyFontSizeOverride = `
+    p, li, div, pre, dd {
+      font-size: max(1rem, var(--min-font-size, 8px)) !important;
+    }
+  `;
   const fontStyles = `
     html {
       --serif: ${families.serif};
@@ -145,6 +157,7 @@ const getFontStyles = (
     body *:not(pre, code, kbd, .code):not(pre *, code *, kbd *, .code *) {
       ${overrideFont ? 'font-family: revert !important;' : ''}
     }
+    ${overrideFont ? bodyFontSizeOverride : ''}
   `;
   return fontStyles;
 };
@@ -264,10 +277,13 @@ const getColorStyles = (
     body.pbg {
       ${isDarkMode ? `background-color: ${bg} !important;` : ''}
     }
+    /* When inverting in dark mode, invert(100%) must stay the effective filter
+       (a later filter declaration would discard it), and multiply must not
+       apply: multiply with a dark page background erases the image (#5250). */
     img {
       ${isDarkMode && invertImgColorInDark ? 'filter: invert(100%);' : ''}
-      ${isDarkMode && overrideColor ? 'filter: grayscale(100%) contrast(1.2) brightness(1.2);' : ''}
-      ${overrideColor ? 'mix-blend-mode: multiply;' : ''}
+      ${isDarkMode && !invertImgColorInDark && overrideColor ? 'filter: grayscale(100%) contrast(1.2) brightness(1.2);' : ''}
+      ${overrideColor && !(isDarkMode && invertImgColorInDark) ? 'mix-blend-mode: multiply;' : ''}
     }
     svg, img {
       ${overrideColor ? `background-color: transparent !important;` : ''};
@@ -373,6 +389,13 @@ const getPageLayoutStyles = (
     padding: unset;
     margin: unset;
   }
+  /* -webkit-touch-callout on html/body does not reach descendant images in
+     Android WebView, and the native image callout collides with the reader's
+     touch handlers and can freeze the app */
+  img {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+  }
   svg:where(:not([width])), img:where(:not([width])) {
     width: auto;
   }
@@ -472,6 +495,12 @@ const getPageLayoutStyles = (
   }
   img.has-text-siblings {
     ${vertical ? 'width: 1em;' : 'height: 1em;'}
+  }
+  /* Baseline is only Readest's default: applyImageStyle adds this class when the
+     book leaves vertical-align at its initial value, so an author-set value
+     (e.g. a CJK glyph-substitution image nudged with vertical-align: -0.15em)
+     keeps winning. See #4866. */
+  img.has-text-siblings-baseline {
     vertical-align: baseline;
   }
   :is(div) > img.has-text-siblings[style*="object-fit"] {
@@ -542,7 +571,13 @@ const getParagraphLayoutStyles = (
       text-align: unset;
       hyphens: unset;
   }
-  p, blockquote, dd, div:not(:has(*:not(b, a, em, i, strong, u, span))) {
+  /* The div clause treats a div as paragraph-like only when every descendant is
+     inline formatting (INLINE_FORMATTING_TAGS). Anything injected into a book
+     paragraph at runtime — the translation target, its preserved markup, the
+     a11y skip link — must use a tag from that list, or the enclosing div drops
+     this whole rule and reverts to the book's default line spacing, indent and
+     hyphenation. */
+  p, blockquote, dd, div:not(:has(*:not(${INLINE_FORMATTING_SELECTOR}))) {
     line-height: ${lineSpacing} ${overrideLayout ? '!important' : ''};
     word-spacing: ${wordSpacing}px ${overrideLayout ? '!important' : ''};
     letter-spacing: ${letterSpacing}px ${overrideLayout ? '!important' : ''};
@@ -712,6 +747,11 @@ const getTranslationStyles = (showSource: boolean) => `
   }
   .translation-target {
   }
+  /* The original is wrapped rather than erased so its CFIs stay resolvable;
+     cfi-skip keeps the wrapper invisible to CFI indexing. */
+  .translation-source-hidden {
+    display: none !important;
+  }
   .translation-target.hidden {
     display: none !important;
   }
@@ -793,14 +833,22 @@ export const getThemeCode = () => {
   let themeMode = 'auto';
   let themeColor = 'default';
   let systemIsDarkMode = false;
+  let ambientIsDarkMode = false;
   let customThemes: CustomTheme[] = [];
   if (typeof window !== 'undefined') {
     themeColor = localStorage.getItem('themeColor') || 'default';
     themeMode = localStorage.getItem('themeMode') || 'auto';
     systemIsDarkMode = localStorage.getItem('systemIsDarkMode') === 'true';
+    ambientIsDarkMode = readStoredAmbientIsDarkMode(
+      localStorage.getItem('ambientIsDarkMode'),
+      systemIsDarkMode,
+    );
     customThemes = JSON.parse(localStorage.getItem('customThemes') || '[]');
   }
-  const isDarkMode = themeMode === 'dark' || (themeMode === 'auto' && systemIsDarkMode);
+  const isDarkMode =
+    themeMode === 'dark' ||
+    (themeMode === 'auto' && systemIsDarkMode) ||
+    (themeMode === 'ambient' && ambientIsDarkMode);
   let currentTheme = themes.find((theme) => theme.name === themeColor);
   if (!currentTheme) {
     const customTheme = customThemes.find((theme) => theme.name === themeColor);
@@ -1088,10 +1136,17 @@ export const transformStylesheet = (css: string, vw: number, vh: number, vertica
     .replace(/([\s;])-ms-user-select\s*:\s*none/gi, '$1-ms-user-select: unset')
     .replace(/([\s;])-o-user-select\s*:\s*none/gi, '$1-o-user-select: unset')
     .replace(/([\s;])user-select\s*:\s*none/gi, '$1user-select: unset')
+    // Park the `var(--x, x)` chunks an earlier pass already produced: their
+    // inner keywords would otherwise be rewritten again into
+    // `var(--var(--serif, serif), serif)`, which is invalid, so the CSS parser
+    // drops the whole declaration and the book loses its fonts (readest#5277).
+    // The placeholders are underscore-wrapped so `\b` never matches inside them.
+    .replace(/var\(\s*--(sans-serif|serif|monospace)\s*,\s*\1\s*\)/gi, 'READEST_GF_$1_PLACEHOLDER')
     .replace(/(font-family\s*:[^;]*?)\bsans-serif\b/gi, '$1READEST_SS_PLACEHOLDER')
     .replace(/(font-family\s*:[^;]*?)\bserif\b(?!-)/gi, '$1var(--serif, serif)')
     .replace(/READEST_SS_PLACEHOLDER/g, 'var(--sans-serif, sans-serif)')
     .replace(/(font-family\s*:[^;]*?)\bmonospace\b/gi, '$1var(--monospace, monospace)')
+    .replace(/READEST_GF_(sans-serif|serif|monospace)_PLACEHOLDER/gi, 'var(--$1, $1)')
     .replace(/([\s;])font-weight\s*:\s*normal/gi, '$1font-weight: var(--font-weight)')
     .replace(/([\s;])color\s*:\s*black/gi, '$1color: var(--theme-fg-color)')
     .replace(/([\s;])color\s*:\s*#000000/gi, '$1color: var(--theme-fg-color)')
@@ -1148,37 +1203,60 @@ export const applyScrollbarStyle = (document: Document, hideScrollbar: boolean) 
 };
 
 export const applyImageStyle = (document: Document) => {
-  document.querySelectorAll('img').forEach((img) => {
+  const win = document.defaultView ?? window;
+  // Two-phase (read then write): reading getComputedStyle after a class/style
+  // write forces a style recalc, so gather every decision first and apply the
+  // mutations afterwards (same reasoning as keepTextAlignment's split).
+  const plans = Array.from(document.querySelectorAll('img')).map((img) => {
     const widthAttr = img.getAttribute('width');
-    if (widthAttr && (widthAttr.endsWith('%') || widthAttr.endsWith('vw'))) {
-      const percentage = parseFloat(widthAttr);
-      if (!isNaN(percentage)) {
-        img.style.width = `${(percentage / 100) * window.innerWidth}px`;
-        img.removeAttribute('width');
-      }
-    }
-
+    const percentWidth =
+      widthAttr && (widthAttr.endsWith('%') || widthAttr.endsWith('vw'))
+        ? parseFloat(widthAttr)
+        : NaN;
     const heightAttr = img.getAttribute('height');
-    if (heightAttr && (heightAttr.endsWith('%') || heightAttr.endsWith('vh'))) {
-      const percentage = parseFloat(heightAttr);
-      if (!isNaN(percentage)) {
-        img.style.height = `${(percentage / 100) * window.innerHeight}px`;
-        img.removeAttribute('height');
+    const percentHeight =
+      heightAttr && (heightAttr.endsWith('%') || heightAttr.endsWith('vh'))
+        ? parseFloat(heightAttr)
+        : NaN;
+
+    let inlineWithText = false;
+    let keepBaseline = false;
+    const parent = img.parentNode;
+    if (parent && parent.nodeType === Node.ELEMENT_NODE) {
+      const childNodes = Array.from(parent.childNodes);
+      const hasTextSiblings = childNodes.some(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+      );
+      const isInline = childNodes.every(
+        (node) => node.nodeType !== Node.ELEMENT_NODE || (node as Element).tagName !== 'BR',
+      );
+      inlineWithText = hasTextSiblings && isInline;
+      if (inlineWithText) {
+        // Only supply Readest's baseline default when the book leaves
+        // vertical-align at its initial value; an author-set value (e.g. a CJK
+        // glyph-substitution image nudged with `vertical-align: -0.15em`) must
+        // win. Empty string covers environments that report unset props as ''.
+        const valign = win.getComputedStyle(img).verticalAlign;
+        keepBaseline = valign === '' || valign === 'baseline';
       }
     }
-
-    const parent = img.parentNode;
-    if (!parent || parent.nodeType !== Node.ELEMENT_NODE) return;
-    const hasTextSiblings = Array.from(parent.childNodes).some(
-      (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
-    );
-    const isInline = Array.from(parent.childNodes).every(
-      (node) => node.nodeType !== Node.ELEMENT_NODE || (node as Element).tagName !== 'BR',
-    );
-    if (hasTextSiblings && isInline) {
-      img.classList.add('has-text-siblings');
-    }
+    return { img, percentWidth, percentHeight, inlineWithText, keepBaseline };
   });
+
+  for (const { img, percentWidth, percentHeight, inlineWithText, keepBaseline } of plans) {
+    if (!isNaN(percentWidth)) {
+      img.style.width = `${(percentWidth / 100) * window.innerWidth}px`;
+      img.removeAttribute('width');
+    }
+    if (!isNaN(percentHeight)) {
+      img.style.height = `${(percentHeight / 100) * window.innerHeight}px`;
+      img.removeAttribute('height');
+    }
+    if (inlineWithText) {
+      img.classList.add('has-text-siblings');
+      if (keepBaseline) img.classList.add('has-text-siblings-baseline');
+    }
+  }
   document.querySelectorAll('hr').forEach((hr) => {
     const computedStyle = window.getComputedStyle(hr);
     if (computedStyle.backgroundImage && computedStyle.backgroundImage !== 'none') {

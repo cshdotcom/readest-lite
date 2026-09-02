@@ -19,6 +19,7 @@ import { getHighlightColorHex } from '../utils/annotatorUtil';
 import { annotationToolQuickActions } from './annotator/AnnotationTools';
 import { AnnotationToolType } from '@/types/annotator';
 import { saveViewSettings } from '@/helpers/settings';
+import { getHeaderTriggerHeight } from '@/utils/insets';
 import { HighlighterIcon } from '@/components/HighlighterIcon';
 import Dropdown from '@/components/Dropdown';
 import ModalPortal from '@/components/ModalPortal';
@@ -141,6 +142,8 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
   const isHeaderCompact = headerWidth > 0 && headerWidth < 350;
   const insets = window.innerWidth < 640 ? screenInsets : gridInsets;
   const isHeaderVisible = hoveredBookKey === bookKey || isDropdownOpen;
+  const isMobile = appService?.isMobile || window.innerWidth < 640;
+  const triggerHeight = viewSettings ? getHeaderTriggerHeight(gridInsets.top, viewSettings) : 0;
 
   useSpatialNavigation(headerRef, isHeaderVisible);
   const trafficLightInHeader =
@@ -151,7 +154,11 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
   return (
     <div
       className={clsx(
-        'left-0 top-0 w-full',
+        // pointer-events-none: the wrapper is as tall as its safe-area
+        // padding, so on notch devices its box covers the top inset strip and
+        // swallowed long presses on text rendered there (#5429) — children
+        // that take input restore pointer-events themselves.
+        'pointer-events-none left-0 top-0 w-full',
         isHeaderVisible && 'bg-base-100',
         window.innerWidth < 640 ? 'fixed z-20' : 'absolute',
       )}
@@ -159,10 +166,24 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
         paddingTop: appService?.hasSafeAreaInset ? `${insets.top}px` : '0px',
       }}
     >
+      {/*
+        Hover trigger area. Mobile has no hover and toggles the bars by tapping
+        the page (usePagination), so this must not take pointer events there —
+        it used to be a fixed 44px tall, the same as the default page-header
+        margin, so with the page header off (compact 16px margin) it covered the
+        first line of text and swallowed long presses on it (#5429). Mirrors the
+        footer's trigger. Its height now tracks the content top on every
+        platform, so the strip can never reach past where the text starts and
+        block a selection (#4977).
+      */}
       <div
         role='none'
         tabIndex={-1}
-        className={clsx('absolute top-0 z-10 h-11 w-full', pointerInDoc && 'pointer-events-none')}
+        className={clsx(
+          'absolute top-0 z-10 w-full',
+          isMobile || pointerInDoc ? 'pointer-events-none' : 'pointer-events-auto',
+        )}
+        style={{ height: `${triggerHeight}px` }}
         onClick={() => setHoveredBookKey(bookKey)}
         onMouseEnter={() => !appService?.isMobile && setHoveredBookKey(bookKey)}
         onTouchStart={() => !appService?.isMobile && setHoveredBookKey(bookKey)}
@@ -204,10 +225,14 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
         }}
       >
         <div className='header-tools-start bg-base-100 sidebar-bookmark-toggler z-20 flex h-full min-w-0 items-center gap-x-4 pe-2 max-[350px]:gap-x-2'>
-          <div
-            className='flex min-w-0 items-center gap-x-4 overflow-x-auto max-[350px]:gap-x-2'
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
+          {/* h-full so this scroller spans the whole bar: `overflow-x-auto`
+              also clips vertically, and shrink-wrapped to the 32px icons it
+              cut the buttons' touch halos back down to 32px (#5401). */}
+          {/* no-scrollbar: the overlay scrollbar of `overflow-x-auto` owns a
+              hit-test strip at the scroller's bottom edge on Android, which
+              cut the touch halos short of the 44px target (#5401) —
+              `scrollbar-width: none` alone does not remove that strip. */}
+          <div className='no-scrollbar flex h-full min-w-0 items-center gap-x-4 overflow-x-auto max-[350px]:gap-x-2'>
             {!isSideBarVisible && (
               <div className='hidden sm:flex'>
                 <SidebarToggler bookKey={bookKey} />

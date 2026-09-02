@@ -9,28 +9,42 @@ import { SYNC_BOOKS_INTERVAL_SEC } from '@/services/constants';
 import { throttle } from '@/utils/throttle';
 import { debounce } from '@/utils/debounce';
 import { eventDispatcher } from '@/utils/event';
+import { useSettingsStore } from '@/store/settingsStore';
+import {
+  isReadestCloudEnabled,
+  getActiveFileSyncBackends,
+} from '@/services/sync/cloudSyncProvider';
+import { isDemoBook } from '@/services/demoBooks';
+import { isFeedBook } from '@/services/rss/feedBookUrl';
+import { ensureFeedBookCover } from '@/services/rss/feedBook';
+import { runFileLibrarySyncPass } from '@/services/sync/file/runLibrarySync';
+import { checkMixedFleetOnce } from '@/services/sync/fleetDetection';
+import { useSyncContext } from '@/context/SyncContext';
+import {
+  pickFresherReadingStatus,
+  needsCoverRefresh,
+  pickFresherCover,
+  pickFresherMetadata,
+} from '@/app/library/utils/libraryUtils';
+import { getPrimaryLanguage } from '@/utils/book';
 
 export const useBooksSync = () => {
   const _ = useTranslation();
   const { user } = useAuth();
-  const { appService } = useEnv();
+  const { envConfig, appService } = useEnv();
   const { library, isSyncing, libraryLoaded } = useLibraryStore();
   const { setLibrary, setIsSyncing, setSyncProgress } = useLibraryStore();
   const { useSyncInited, syncedBooks, syncBooks, lastSyncedAtBooks } = useSync();
+  const { syncClient } = useSyncContext();
   const isPullingRef = useRef(false);
-
-  // v8.3.0: 用户切换检测
-  // - prevUserIdRef 记录上次的 user.id
-  // - replaceModeRef 标记下次 updateLibrary 走 replace 模式（不 merge）
-  // - didInitialPushRef 标记登录后是否已 push 过一次未同步的书
-  const prevUserIdRef = useRef<string | null>(null);
-  const replaceModeRef = useRef(false);
-  const didInitialPushRef = useRef(false);
 
   const getNewBooks = useCallback(() => {
     if (!user) return {};
     const library = useLibraryStore.getState().library;
     const newBooks = library
+      // Demo books are the sample shelf we hand anonymous web visitors, not the
+      // user's content — they never go to the cloud (issue #5049).
+      .filter((book) => !isDemoBook(book))
       .filter(
         (book) =>
           !book.syncedAt ||
@@ -47,7 +61,9 @@ export const useBooksSync = () => {
       // got its branch order swapped (it currently checks Books/<hash>
       // before falling back to filePath; flipping that order would make
       // peers chase a non-existent path instead of downloading).
-      .map(({ filePath: _filePath, ...rest }): Book => rest);
+      // `altFilePaths` (the other on-disk names that resolve to the same book)
+      // is device-local for exactly the same reason.
+      .map(({ filePath: _filePath, altFilePaths: _altFilePaths, ...rest }): Book => rest);
     return {
       books: newBooks,
       lastSyncedAt: lastSyncedAtBooks,
@@ -56,24 +72,63 @@ export const useBooksSync = () => {
 
   const pullLibrary = useCallback(
     async (fullRefresh = false, verbose = false) => {
-      if (!user) return;
+      // Providers are independently selectable (#5062): an enabled file
+      // backend and Readest Cloud both run their own pass here, every
+      // library-refresh surface — pull to refresh, the SettingsMenu sync
+      // row, BackupWindow — routes through here. The file pass works
+      // logged out (file sync has no Readest account dependency); the
+      // native pull below still requires `user`.
+      const settingsNow = useSettingsStore.getState().settings;
+      const backends = getActiveFileSyncBackends(settingsNow);
+      const readest = isReadestCloudEnabled(settingsNow);
+      const runFilePass = backends.length > 0;
+      const runNativePull = readest && !!user;
+
+      if (!runFilePass && !runNativePull) return;
       if (isPullingRef.current) return;
+
+      isPullingRef.current = true;
       try {
-        isPullingRef.current = true;
-        const library = useLibraryStore.getState().library;
-        const since = (libraryLoaded && library.length === 0) || fullRefresh ? 0 : undefined;
-        const syncedBooksCount = await syncBooks([], 'pull', since);
+        // Both legs run to completion (under the same isPullingRef guard)
+        // before anything is reported: a `verbose` pull emits exactly ONE
+        // toast for the combined outcome, never one per provider. Reporting
+        // from the file leg alone would fire before the native pull even
+        // started, and would show its outcome only — a file-pass failure
+        // masking a native pull that then succeeds, or a book count that
+        // ignores what the native pull actually synced.
+        let fileSynced = 0;
+        let fileSucceeded = false;
+        if (runFilePass) {
+          const result = await runFileLibrarySyncPass(envConfig, _);
+          fileSucceeded = result !== null;
+          fileSynced = result?.booksSynced ?? 0;
+        }
+
+        let nativeSynced = 0;
+        if (runNativePull) {
+          const library = useLibraryStore.getState().library;
+          const since = (libraryLoaded && library.length === 0) || fullRefresh ? 0 : undefined;
+          nativeSynced = (await syncBooks([], 'pull', since)) ?? 0;
+        }
+
         if (verbose) {
+          // The native pull swallows its own errors (returns a count, never
+          // throws), so it never contributes a "failed" leg here — matching
+          // its pre-existing standalone behaviour. Only report failure when
+          // every leg that ran actually failed.
+          const succeeded = (runFilePass && fileSucceeded) || runNativePull;
           eventDispatcher.dispatch('toast', {
-            type: 'info',
-            message: _('{{count}} book(s) synced', { count: syncedBooksCount }),
+            type: succeeded ? 'info' : 'error',
+            message: succeeded
+              ? _('{{count}} book(s) synced', { count: fileSynced + nativeSynced })
+              : _('Sync failed'),
           });
         }
       } finally {
         isPullingRef.current = false;
       }
     },
-    [_, user, libraryLoaded, syncBooks],
+    [_, user, libraryLoaded, syncBooks, envConfig],
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,6 +136,15 @@ export const useBooksSync = () => {
     throttle(
       async () => {
         if (isPullingRef.current) return;
+        // Readest Cloud unchecked: the native book channel is gated, so the
+        // interval runs the read-only mixed-fleet probe instead — a device
+        // still writing natively would otherwise fork progress silently
+        // (the auto library sync itself is useLibraryFileSync's).
+        const settingsNow = useSettingsStore.getState().settings;
+        if (!isReadestCloudEnabled(settingsNow)) {
+          void checkMixedFleetOnce(syncClient, settingsNow, _);
+          return;
+        }
         const newBooks = getNewBooks();
         if (!newBooks.lastSyncedAt) return;
         isPullingRef.current = true;
@@ -115,104 +179,76 @@ export const useBooksSync = () => {
     pullLibrary();
   }, [user, useSyncInited, libraryLoaded, pullLibrary]);
 
-  // v8.4: 用户切换检测 — 检测 user.id 变化时清空 library + 触发全量 pull replace
-  // v8.4 改动：不再清磁盘（加密文件 library-<userId>.enc 按 userId 隔离，自动不串号）
-  // 只清内存 state，让 pullLibrary 走 since=0 全量拉新账号的书
-  // 场景：登出账号 A → 登录账号 B
-  //   - prevUserIdRef.current = A, user.id = B → 检测到切换
-  //   - 清空 library state（内存）
-  //   - 不清磁盘（A 的 library-A.enc 保留，B 用 library-B.enc）
-  //   - 设 replaceModeRef = true，让下次 updateLibrary 走 replace（不 merge）
-  //   - 重置 didInitialPushRef，让登录后 push effect 重新触发
-  // 场景：未登录 → 登录（prevUserIdRef.current = null）
-  //   - 不清 library（保留未登录时导入的书，让它们 push 到当前账号）
-  // 场景：首次安装（prevUserIdRef.current = null）
-  //   - 不清 library（正常流程）
-  useEffect(() => {
-    const prevId = prevUserIdRef.current;
-    const currId = user?.id ?? null;
-    if (prevId === currId) return;
-    prevUserIdRef.current = currId;
-
-    if (prevId !== null && currId !== null && prevId !== currId) {
-      // 账号切换（A → B）：只清内存 state（磁盘加密文件按 userId 隔离）
-      useLibraryStore.getState().setLibrary([]);
-      replaceModeRef.current = true;
-      didInitialPushRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  // v8.3.0: 登录后显式 push 未同步的书
-  // 解决"未登录时导入书 → 登录后自动同步"的时序问题
-  // pullLibrary 完成后 lastSyncedAtBooks > 0，pushLibrary 的守卫通过，push 未同步书
-  useEffect(() => {
-    if (!user || !useSyncInited || !libraryLoaded) return;
-    if (didInitialPushRef.current) return;
-    if (lastSyncedAtBooks === 0) return; // 等 pull 完成设了 cursor 再 push
-    didInitialPushRef.current = true;
-    pushLibrary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, useSyncInited, libraryLoaded, lastSyncedAtBooks]);
-
   const updateLibrary = useCallback(async () => {
     if (!syncedBooks?.length) return;
 
-    // v8.3.0: replace 模式 — 用户切换账号时，直接用 syncedBooks 替换整个 library
-    // 不走 merge 逻辑，防止上个账号的书被保留
-    if (replaceModeRef.current) {
-      replaceModeRef.current = false;
-      syncedBooks.sort((a, b) => a.updatedAt - b.updatedAt);
-      const newLibrary = await Promise.all(
-        syncedBooks.map(async (book) => {
-          if (book.uploadedAt && !book.coverDownloadedAt) {
-            book.coverImageUrl = await appService?.generateCoverImageUrl(book);
-          }
-          book.syncedAt = Date.now();
-          return book;
-        }),
-      );
-      // 批量下载封面
-      const needsCover = newLibrary.filter(
-        (book) => !book.deletedAt && book.uploadedAt && !book.coverDownloadedAt,
-      );
-      if (needsCover.length > 0) {
-        setIsSyncing(true);
-        try {
-          const batchSize = 10;
-          for (let i = 0; i < needsCover.length; i += batchSize) {
-            const batch = needsCover.slice(i, i + batchSize);
-            await appService?.downloadBookCovers(batch);
-            setSyncProgress(Math.min((i + batchSize) / needsCover.length, 1));
-          }
-        } finally {
-          setIsSyncing(false);
-        }
-      }
-      setLibrary(newLibrary);
-      appService?.saveLibraryBooks(newLibrary, { replace: true });
-      return;
-    }
+    // A cloud row for a demo book can only be a stale one pushed before #5049.
+    // Merging it back would write over the local demo row — and, because a
+    // delete doesn't bump `updatedAt`, the not-deleted cloud row wins the LWW
+    // tie and clears `deletedAt`, resurrecting a book the user just deleted
+    // (coverless, since its cover was never uploaded either).
+    const demoHashes = new Set(
+      useLibraryStore
+        .getState()
+        .library.filter(isDemoBook)
+        .map((book) => book.hash),
+    );
+    const cloudBooks = syncedBooks.filter((book) => !demoHashes.has(book.hash));
+    if (!cloudBooks.length) return;
 
     // Process old books first so that when we update the library the order is preserved
-    syncedBooks.sort((a, b) => a.updatedAt - b.updatedAt);
-    const bookHashesInSynced = new Set(syncedBooks.map((book) => book.hash));
+    cloudBooks.sort((a, b) => a.updatedAt - b.updatedAt);
+    const bookHashesInSynced = new Set(cloudBooks.map((book) => book.hash));
+    const syncedByHash = new Map(cloudBooks.map((book) => [book.hash, book]));
     const liveLibrary = useLibraryStore.getState().library;
     const oldBooks = liveLibrary.filter((book) => bookHashesInSynced.has(book.hash));
+    // Books whose cover must be (re)fetched: never-downloaded, or a newer cover
+    // edit arrived from another device (issue #4544). Captured before the
+    // download loop so the post-download merge can still tell which covers were
+    // refreshed (the loop mutates coverDownloadedAt).
     const oldBooksNeedsDownload = oldBooks.filter((book) => {
-      return !book.deletedAt && book.uploadedAt && !book.coverDownloadedAt;
+      const matchingBook = syncedByHash.get(book.hash);
+      return !!matchingBook && needsCoverRefresh(book, matchingBook);
     });
+    const coverRefreshHashes = new Set(oldBooksNeedsDownload.map((book) => book.hash));
 
     const processOldBook = async (oldBook: Book) => {
-      const matchingBook = syncedBooks.find((newBook) => newBook.hash === oldBook.hash);
+      const matchingBook = syncedByHash.get(oldBook.hash);
       if (matchingBook) {
-        if (!matchingBook.deletedAt && matchingBook.uploadedAt && !oldBook.coverDownloadedAt) {
+        if (coverRefreshHashes.has(oldBook.hash)) {
           oldBook.coverImageUrl = await appService?.generateCoverImageUrl(oldBook);
         }
         const mergedBook =
           matchingBook.updatedAt >= oldBook.updatedAt
             ? { ...oldBook, ...matchingBook, syncedAt: Date.now() }
             : { ...matchingBook, ...oldBook, syncedAt: Date.now() };
+        // Status is resolved by its own timestamp, independent of the row's
+        // updatedAt (which page-turn progress dominates) — see #4634.
+        const status = pickFresherReadingStatus(oldBook, matchingBook);
+        mergedBook.readingStatus = status.readingStatus;
+        mergedBook.readingStatusUpdatedAt = status.readingStatusUpdatedAt;
+        // Cover is likewise resolved by its own coverUpdatedAt, independent of
+        // the row's updatedAt — issue #4544.
+        const cover = pickFresherCover(oldBook, matchingBook);
+        mergedBook.coverHash = cover.coverHash;
+        mergedBook.coverUpdatedAt = cover.coverUpdatedAt;
+        // The metadata group merges on its own metadataUpdatedAt clock so a
+        // metadata edit survives losing whole-row LWW to page-turn progress
+        // (issue #5438). Null means neither side is fresher — the row-level
+        // winner already in mergedBook stands.
+        const meta = pickFresherMetadata(oldBook, matchingBook);
+        if (meta) {
+          mergedBook.title = meta.title;
+          mergedBook.author = meta.author;
+          mergedBook.tags = meta.tags;
+          mergedBook.metadata = meta.metadata;
+          mergedBook.metadataUpdatedAt = meta.metadataUpdatedAt;
+          // TTS reads primaryLanguage (not metadata.language); recompute it the
+          // same way the editing device did so the edit is effective here too.
+          if (meta.metadata) {
+            mergedBook.primaryLanguage = getPrimaryLanguage(meta.metadata.language);
+          }
+        }
         return mergedBook;
       }
       return oldBook;
@@ -229,13 +265,30 @@ export const useBooksSync = () => {
     appService?.saveLibraryBooks(updatedLibrary);
 
     const bookHashesInLibrary = new Set(updatedLibrary.map((book) => book.hash));
-    const newBooks = syncedBooks.filter(
+    // `uploadedAt` gates adoption so a peer never shelves a book whose file it
+    // cannot fetch. A feed book has no file to fetch — it is rebuilt from
+    // `metadata.feedUrl` — so it would never pass that gate and the
+    // subscription stayed stuck on the device that added it (issue #5307).
+    const newBooks = cloudBooks.filter(
       (newBook) =>
-        !bookHashesInLibrary.has(newBook.hash) && newBook.uploadedAt && !newBook.deletedAt,
+        !bookHashesInLibrary.has(newBook.hash) &&
+        (newBook.uploadedAt || isFeedBook(newBook)) &&
+        !newBook.deletedAt,
     );
 
     const processNewBook = async (newBook: Book) => {
-      newBook.coverImageUrl = await appService?.generateCoverImageUrl(newBook);
+      // A feed book has no cover in cloud storage; its cover is derived from the
+      // feed descriptor, so this device regenerates the same image locally.
+      newBook.coverImageUrl =
+        appService && isFeedBook(newBook)
+          ? await ensureFeedBookCover(appService, newBook)
+          : await appService?.generateCoverImageUrl(newBook);
+      // primaryLanguage is not a cloud column; without this the reader later
+      // guesses it from the parsed document, ignoring a language the user set
+      // in the synced metadata — TTS reads primaryLanguage (issue #5438).
+      if (newBook.metadata?.language) {
+        newBook.primaryLanguage = getPrimaryLanguage(newBook.metadata.language);
+      }
       newBook.syncedAt = Date.now();
       updatedLibrary.push(newBook);
     };

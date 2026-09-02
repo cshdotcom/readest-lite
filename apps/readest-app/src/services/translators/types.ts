@@ -6,10 +6,12 @@ export interface TranslationProvider {
   authRequired?: boolean;
   quotaExceeded?: boolean;
   /**
-   * When true, the provider carries inline markup (`<b>`, `<i>`, `<a>`, etc.)
-   * through translation and repositions tags onto the semantically matching
-   * words. When false (or absent), markup is stripped before translation
-   * to avoid emitting markup that lies about formatting.
+   * The upstream API carries inline HTML through translation, repositioning
+   * tags onto the semantically matching words in the target language. When set,
+   * the reader sends a paragraph's inline markup instead of its bare text so
+   * italics/bold/font-size runs survive (#1582); otherwise it sends plain text.
+   * Set this only for providers actually verified against the live API — a
+   * provider that echoes tags positionally would scramble the formatting.
    */
   preservesMarkup?: boolean;
   /**
@@ -26,6 +28,7 @@ export interface TranslationProvider {
     targetLang: string,
     token?: string | null,
     useCache?: boolean,
+    signal?: AbortSignal,
   ) => Promise<string[]>;
 }
 

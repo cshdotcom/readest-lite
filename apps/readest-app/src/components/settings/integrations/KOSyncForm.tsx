@@ -10,8 +10,14 @@ import { KOSyncClient } from '@/services/sync/KOSyncClient';
 import { KOSyncChecksumMethod, KOSyncStrategy } from '@/types/settings';
 import { debounce } from '@/utils/debounce';
 import { getOSPlatform } from '@/utils/misc';
+import {
+  formatCustomHeadersInput,
+  hasCustomHeaders,
+  parseCustomHeadersInput,
+} from '@/utils/customHeaders';
 import SubPageHeader from '../SubPageHeader';
 import { SectionTitle, SettingLabel, SettingsSelect } from '../primitives';
+import { Toggle } from '@/components/primitives/toggle';
 
 interface KOSyncFormProps {
   onBack: () => void;
@@ -28,6 +34,10 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [osName, setOsName] = useState('');
+  const [customHeadersInput, setCustomHeadersInput] = useState(
+    formatCustomHeadersInput(settings.kosync.customHeaders),
+  );
+  const [headerError, setHeaderError] = useState('');
 
   useEffect(() => {
     const formatOsName = (name: string): string => {
@@ -78,7 +88,39 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
     debouncedSaveDeviceName(newName);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedSaveCustomHeaders = useCallback(
+    debounce((input: string) => {
+      const parsed = parseCustomHeadersInput(input);
+      if (parsed.error) {
+        setHeaderError(parsed.error);
+        return;
+      }
+      setHeaderError('');
+      const kosync = {
+        ...settings.kosync,
+        customHeaders: hasCustomHeaders(parsed.headers) ? parsed.headers : undefined,
+      };
+      const newSettings = { ...settings, kosync };
+      setSettings(newSettings);
+      saveSettings(envConfig, newSettings);
+    }, 500),
+    [settings, setSettings, saveSettings, envConfig],
+  );
+
+  const handleCustomHeadersChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newInput = e.target.value;
+    setCustomHeadersInput(newInput);
+    debouncedSaveCustomHeaders(newInput);
+  };
+
   const handleConnect = async () => {
+    const parsedHeaders = parseCustomHeadersInput(customHeadersInput);
+    if (parsedHeaders.error) {
+      setHeaderError(parsedHeaders.error);
+      return;
+    }
+    setHeaderError('');
     setIsConnecting(true);
     const config = {
       ...settings.kosync,
@@ -87,6 +129,7 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
       userkey: md5(password),
       password,
       deviceName,
+      customHeaders: hasCustomHeaders(parsedHeaders.headers) ? parsedHeaders.headers : undefined,
       enabled: true,
     };
     const client = new KOSyncClient(config);
@@ -112,6 +155,7 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
     setSettings(newSettings);
     await saveSettings(envConfig, newSettings);
     setUsername('');
+    setHeaderError('');
     eventDispatcher.dispatch('toast', { message: _('Disconnected'), type: 'info' });
   };
 
@@ -162,12 +206,7 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
                   to match modern preferences-panel convention. */}
               <label className='flex min-h-14 items-center justify-between px-4'>
                 <SettingLabel>{_('Sync Server Connected')}</SettingLabel>
-                <input
-                  type='checkbox'
-                  className='toggle'
-                  checked={settings.kosync.enabled}
-                  onChange={handleToggleEnabled}
-                />
+                <Toggle checked={settings.kosync.enabled} onChange={handleToggleEnabled} />
               </label>
               {/* SettingsSelect handles the chromeless treatment, the
                   custom MdArrowDropDown icon at the trailing edge (so the
@@ -207,6 +246,32 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
                 />
               </div>
             </div>
+          </div>
+
+          <div className='space-y-1.5'>
+            <SectionTitle as='label' htmlFor='kosync-custom-headers' className='block'>
+              {_('Custom Headers (optional)')}
+            </SectionTitle>
+            <textarea
+              id='kosync-custom-headers'
+              value={customHeadersInput}
+              onChange={handleCustomHeadersChange}
+              placeholder={formatCustomHeadersInput({
+                'CF-Access-Client-Id': 'your-client-id',
+                'CF-Access-Client-Secret': 'your-client-secret',
+              })}
+              className='textarea textarea-bordered eink-bordered w-full font-mono text-sm placeholder:text-xs'
+              rows={4}
+              spellCheck={false}
+            />
+            <span className='label-text-alt text-base-content/60'>
+              {_('Add one header per line using "Header-Name: value".')}
+            </span>
+            {headerError && (
+              <div className='pt-0.5'>
+                <span className='label-text-alt text-error'>{headerError}</span>
+              </div>
+            )}
           </div>
 
           <div className='flex justify-end'>
@@ -278,6 +343,35 @@ const KOSyncForm: React.FC<KOSyncFormProps> = ({ onBack }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete='current-password'
               />
+            </div>
+
+            <div className='space-y-1.5'>
+              <SectionTitle as='label' htmlFor='kosync-custom-headers' className='block'>
+                {_('Custom Headers (optional)')}
+              </SectionTitle>
+              <textarea
+                id='kosync-custom-headers'
+                value={customHeadersInput}
+                onChange={(e) => {
+                  setCustomHeadersInput(e.target.value);
+                  setHeaderError('');
+                }}
+                placeholder={formatCustomHeadersInput({
+                  'CF-Access-Client-Id': 'your-client-id',
+                  'CF-Access-Client-Secret': 'your-client-secret',
+                })}
+                className='textarea textarea-bordered eink-bordered w-full font-mono text-sm placeholder:text-xs'
+                rows={4}
+                spellCheck={false}
+              />
+              <span className='label-text-alt text-base-content/60'>
+                {_('Add one header per line using "Header-Name: value".')}
+              </span>
+              {headerError && (
+                <div className='pt-0.5'>
+                  <span className='label-text-alt text-error'>{headerError}</span>
+                </div>
+              )}
             </div>
 
             <div className='flex justify-end pt-1'>
