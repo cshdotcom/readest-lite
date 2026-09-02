@@ -1,2 +1,3 @@
 // Lite stub — BookOrbit is not available in Lite
-export const bookOrbitProgressProvider = null;
+// Returns undefined (not null) to match KosyncProgressProvider | undefined type
+export const bookOrbitProgressProvider = undefined;
