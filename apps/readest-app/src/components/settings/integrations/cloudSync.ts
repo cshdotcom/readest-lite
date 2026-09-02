@@ -2,3 +2,4 @@
 export const activateCloudSync = (): void => {};
 export const deactivateCloudSync = (): void => {};
 export const isCloudSyncActive = (): boolean => false;
+export const persistCloudProviderEnabled = (): void => {};

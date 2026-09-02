@@ -57,3 +57,8 @@ export const getRemoteLocalFraction = async (
     return undefined;
   }
 };
+
+// v8.17.0: stubs for v0.12.1 KOSync additions
+export const isReportedByKOReader = (): boolean => false;
+export const resolveRemoteLocalFraction = (): number => 0;
+export const decideRemoteConflict = (): 'remote' | 'local' => 'local';
