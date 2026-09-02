@@ -13,6 +13,7 @@ import {
   ParagraphPresentation,
 } from '@/utils/paragraphPresentation';
 import { getTextSubRange } from '@/services/tts/wordHighlight';
+import { getBaseFontFamily } from '@/utils/style';
 import { loadShortcuts } from '@/helpers/shortcuts';
 import { matchesShortcut } from '@/utils/shortcutKeys';
 import TTSFollowIndicator, { TtsSyncStatus } from '../tts/TTSFollowIndicator';
@@ -24,8 +25,9 @@ const TTS_HIGHLIGHT_NAME = 'readest-tts-paragraph';
 
 interface ParagraphOverlayProps {
   bookKey: string;
-  dimOpacity: number;
   viewSettings?: ViewSettings;
+  /** Display scale on top of the reader's font size (#5246); 1 = book size. */
+  fontScale?: number;
   gridInsets?: Insets;
   /** Derived TTS-sync status driving the "following audio" indicator (#3235). */
   ttsSyncStatus?: TtsSyncStatus;
@@ -129,8 +131,8 @@ const SectionTransitionIndicator: React.FC<{
 
 const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   bookKey,
-  dimOpacity,
   viewSettings,
+  fontScale = 1,
   gridInsets = { top: 0, right: 0, bottom: 0, left: 0 },
   ttsSyncStatus = 'idle',
   onResumeTtsFollow,
@@ -162,13 +164,15 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
 
   const contentStyle = useMemo(() => {
     if (!viewSettings) return {};
-    const defaultFontFamily =
-      viewSettings.defaultFont?.toLowerCase() === 'serif'
-        ? `"${viewSettings.serifFont}", serif`
-        : `"${viewSettings.sansSerifFont}", sans-serif`;
+    // Resolve the same font chain as the RSVP overlay (custom + CJK +
+    // fallbacks); a bare serif/sans pair dropped the user's CJK/custom font,
+    // so CJK text fell back to the system font (#5246).
+    const defaultFontFamily = viewSettings.defaultFont
+      ? getBaseFontFamily(viewSettings)
+      : undefined;
     return {
       fontFamily: defaultFontFamily,
-      fontSize: `${viewSettings.defaultFontSize || 16}px`,
+      fontSize: `${(viewSettings.defaultFontSize || 16) * fontScale}px`,
       lineHeight: viewSettings.lineHeight || 1.6,
       letterSpacing: viewSettings.letterSpacing ? `${viewSettings.letterSpacing}px` : undefined,
       wordSpacing: viewSettings.wordSpacing ? `${viewSettings.wordSpacing}px` : undefined,
@@ -177,7 +181,7 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       fontKerning: 'normal',
       textRendering: 'optimizeLegibility',
     } as React.CSSProperties;
-  }, [viewSettings]);
+  }, [viewSettings, fontScale]);
 
   const activePresentation = paragraphs[0]?.presentation ?? undefined;
   const activeParagraph = paragraphs[0];
@@ -212,13 +216,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       marginInline: 'auto',
     } as React.CSSProperties;
   }, [appService?.hasSafeAreaInset, gridInsets.bottom, gridInsets.top, layoutContext.vertical]);
-  const surfaceStyle = useMemo(
-    () =>
-      ({
-        backgroundColor: 'oklch(var(--b1) / 0.14)',
-      }) as React.CSSProperties,
-    [],
-  );
   // `::highlight()` declaration matching the user's TTS highlight color/style so
   // the in-paragraph word/sentence highlight looks like normal mode (#3235).
   const ttsHighlightCss = useMemo(
@@ -548,6 +545,10 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       className={clsx(
         'fixed inset-0 z-40',
         'flex flex-col items-center justify-center',
+        // Solid page color, not a translucent blur of the book behind it — the
+        // blurred backdrop read as foreign chrome next to the rest of the app
+        // (#5275), and without the blur any translucency leaks ghost text.
+        'bg-base-100',
         // The dialog is focused programmatically (so it receives keys); it is not
         // a tab stop, so suppress the focus ring that would otherwise outline the
         // whole viewport.
@@ -556,9 +557,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
         isOverlayMounted ? 'opacity-100' : 'opacity-0',
       )}
       style={{
-        backgroundColor: `oklch(var(--b1) / ${Math.min(dimOpacity + 0.4, 0.92)})`,
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
         paddingTop: appService?.hasSafeAreaInset ? `${gridInsets.top}px` : undefined,
         paddingBottom: appService?.hasSafeAreaInset ? `${gridInsets.bottom * 0.33}px` : undefined,
       }}
@@ -616,12 +614,21 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
         {activeParagraph ? (
           <div
             className={clsx(
-              'relative rounded-[2rem]',
+              // No surface of its own: the paragraph sits on the page color, so
+              // there is nothing left to round off (#5275).
+              'relative',
               layoutContext.vertical
                 ? 'inline-flex items-center justify-center self-center overflow-visible'
                 : 'w-full overflow-auto',
             )}
-            style={{ ...frameStyle, ...surfaceStyle }}
+            // The frame carries the paragraph font too so its ch-based width
+            // cap resolves against the (scaled) text, widening the column as
+            // the text grows instead of squeezing it into the same box (#5246).
+            style={{
+              ...frameStyle,
+              fontFamily: contentStyle.fontFamily,
+              fontSize: contentStyle.fontSize,
+            }}
           >
             <AnimatedParagraph
               key={activeParagraph.id}

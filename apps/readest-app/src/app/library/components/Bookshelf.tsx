@@ -185,10 +185,12 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   const sortByAuto = settings.librarySortByAuto ?? true;
   const sortBy = resolveEffectivePrimarySort(storedSortBy, groupBy, sortByAuto);
   const sortBy2Raw = ensureLibrarySecondarySortByType(
-    searchParams?.get('sort2'),
-    settings.librarySortBy2 ?? 'none',
+    searchParams?.get('thenSort'),
+    settings.libraryThenSortBy ?? 'none',
   );
   const sortBy2 = resolveEffectiveSecondarySort(sortBy2Raw, groupBy);
+  const thenSortOrder =
+    searchParams?.get('thenOrder') || ((settings.libraryThenSortAscending ?? true) ? 'asc' : 'desc');
   const coverFit = searchParams?.get('cover') || settings.libraryCoverFit;
 
   const [loading, setLoading] = useState(false);
@@ -225,6 +227,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
       if (params.get('sort') === LibrarySortByType.Updated) params.delete('sort');
       if (params.get('order') === 'desc') params.delete('order');
+      if (params.get('thenOrder') === 'asc') params.delete('thenOrder');
       if (params.get('groupBy') === LibraryGroupByType.Group) params.delete('groupBy');
       if (params.get('cover') === 'crop') params.delete('cover');
       if (params.get('view') === 'grid') params.delete('view');
@@ -294,12 +297,14 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     // Sort books within each group
     // For series groups, series index is always ascending; sort direction applies to fallback only
     const sortAscending = sortOrder === 'asc';
+    const thenSortAscending = thenSortOrder === 'asc';
     const withinGroupSorter = createWithinGroupSorter(
       groupBy,
       sortBy,
       uiLanguage,
       sortAscending,
       sortBy2,
+      thenSortAscending,
     );
     groups.forEach((group) => {
       group.books.sort(withinGroupSorter);
@@ -307,14 +312,16 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
     // Sort ungrouped books - use within-group sorter if we're inside a group
     // (for series, this ensures books are sorted by series index)
-    const bookSorter = createBookSorter(sortBy, uiLanguage, sortBy2);
+    // `bookSorter` already carries both sort directions, so it is never multiplied
+    // by `sortOrderMultiplier` — that would flip the secondary key too (#5119).
+    const bookSorter = createBookSorter(sortBy, uiLanguage, sortBy2, sortAscending, thenSortAscending);
     if (groupId && groupBy !== LibraryGroupByType.Group && groupBy !== LibraryGroupByType.None) {
       ungroupedBooks.sort(withinGroupSorter);
       // When inside a group, books are already sorted correctly — return directly
       // to avoid the merge sort below overriding the within-group sort order
       return ungroupedBooks;
     } else {
-      ungroupedBooks.sort((a, b) => bookSorter(a, b) * sortOrderMultiplier);
+      ungroupedBooks.sort(bookSorter);
     }
 
     // Merge groups and ungrouped books, then sort them together
@@ -332,7 +339,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
       // If both are books, use book sorter
       if (!isAGroup && !isBGroup) {
-        return bookSorter(a, b) * sortOrderMultiplier;
+        return bookSorter(a, b);
       }
 
       // For series/author groups: compare sort values to interleave properly
@@ -349,7 +356,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     });
 
     return allItems;
-  }, [sortOrder, sortBy, sortBy2, groupBy, groupId, uiLanguage, currentBookshelfItems]);
+  }, [sortOrder, thenSortOrder, sortBy, sortBy2, groupBy, groupId, uiLanguage, currentBookshelfItems]);
 
   useEffect(() => {
     if (isImportingBook.current) return;

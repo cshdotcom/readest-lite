@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BookSearchMatch, BookSearchResult, SearchExcerpt } from '@/types/book';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
@@ -15,15 +15,24 @@ interface SearchResultItemProps {
   onSelectResult: (cfi: string) => void;
 }
 
+// The excerpt stores ~50 chars of context per side, but the sidebar row clamps
+// to three lines — clip the displayed lead-in so the match itself can never be
+// pushed past the clamp.
+const PRE_DISPLAY_LIMIT = 20;
+const clipPre = (pre: string) => {
+  const points = Array.from(pre);
+  return points.length > PRE_DISPLAY_LIMIT ? `…${points.slice(-PRE_DISPLAY_LIMIT).join('')}` : pre;
+};
+
 // nearby-words excerpts emphasize each matched word; other modes bold the single match span.
 const ExcerptBody: React.FC<{ excerpt: SearchExcerpt }> = ({ excerpt }) => {
   if (excerpt.segments) {
     return (
       <>
-        <span>{excerpt.pre}</span>
+        <span>{clipPre(excerpt.pre)}</span>
         {excerpt.segments.map((seg, i) =>
           seg.emphasized ? (
-            <span key={i} className='font-bold text-red-500'>
+            <span key={i} className='search-term-highlight'>
               {seg.text}
             </span>
           ) : (
@@ -36,8 +45,8 @@ const ExcerptBody: React.FC<{ excerpt: SearchExcerpt }> = ({ excerpt }) => {
   }
   return (
     <>
-      <span>{excerpt.pre}</span>
-      <span className='font-bold text-red-500'>{excerpt.match}</span>
+      <span>{clipPre(excerpt.pre)}</span>
+      <span className='search-term-highlight'>{excerpt.match}</span>
       <span>{excerpt.post}</span>
     </>
   );
@@ -79,6 +88,118 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({
     </li>
   );
 };
+
+interface ChapterSectionProps {
+  bookKey: string;
+  label: string;
+  subitems: BookSearchMatch[];
+  nearestCfi: string | null;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onSelectResult: (cfi: string) => void;
+}
+
+const ChapterSection: React.FC<ChapterSectionProps> = ({
+  bookKey,
+  label,
+  subitems,
+  nearestCfi,
+  isExpanded,
+  onToggle,
+  onSelectResult,
+}) => {
+  const matchCount = subitems.length;
+  const headerRef = useRef<HTMLHeadingElement>(null);
+  const wasStuckRef = useRef<boolean>(false);
+
+  const handleToggle = useCallback(() => {
+    if (isExpanded && headerRef.current) {
+      const header = headerRef.current;
+      const container = header.closest('.search-results') as HTMLElement | null;
+      if (container) {
+        // Detect if the header is currently stuck at the top of the scroll container.
+        // Compare visual positions (getBoundingClientRect) rather than offsetTop,
+        // because sticky stacking can offset the header from the container's top.
+        const headerRect = header.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        wasStuckRef.current = headerRect.top <= containerRect.top + 1;
+      }
+    }
+    onToggle();
+  }, [isExpanded, onToggle]);
+
+  // useLayoutEffect runs synchronously after DOM mutations but before paint,
+  // avoiding a visible flash when we adjust scroll position.
+  useLayoutEffect(() => {
+    if (isExpanded) return;
+    if (!wasStuckRef.current) return;
+    const header = headerRef.current;
+    if (!header) return;
+    const container = header.closest('.search-results') as HTMLElement | null;
+    if (!container) return;
+    // Recalculate the header's position after the collapse (DOM has already
+    // updated) and scroll so the collapsed header sits at the top of the viewport.
+    const headerRect = header.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const headerOffset = headerRect.top - containerRect.top + container.scrollTop;
+    container.scrollTop = headerOffset;
+  }, [isExpanded]);
+
+  return (
+    <ul>
+      {/* The sticky band carries the surface color so results scrolling underneath
+          stay occluded; the button inside owns the hover and focus affordances. */}
+      <h3
+        ref={headerRef}
+        className='not-eink:bg-base-200 eink:bg-base-100 sticky top-0 z-10 font-normal'
+      >
+        <button
+          type='button'
+          className='not-eink:hover:bg-base-300 focus-visible:ring-base-content/15 flex w-full select-none items-center justify-between rounded px-1 py-1 text-start focus-visible:outline-none focus-visible:ring-2'
+          onClick={handleToggle}
+          aria-expanded={isExpanded}
+        >
+          <span className='flex min-w-0 items-center gap-1.5'>
+            <svg
+              viewBox='0 0 8 10'
+              width='8'
+              height='10'
+              className={clsx(
+                'text-base-content not-eink:transition-transform shrink-0',
+                isExpanded ? 'rotate-90' : 'rotate-0',
+              )}
+              style={{ transformOrigin: 'center' }}
+              fill='currentColor'
+              aria-hidden='true'
+              focusable='false'
+            >
+              <polygon points='0 0, 8 5, 0 10' />
+            </svg>
+            <span className='truncate'>{label}</span>
+          </span>
+          <span className='text-base-content/60 ms-2 shrink-0 whitespace-nowrap text-xs'>
+            {matchCount}
+          </span>
+        </button>
+      </h3>
+      {isExpanded && (
+        <ul>
+          {subitems.map((item, index) => (
+            <SearchResultItem
+              key={`${index}-${item.cfi}`}
+              bookKey={bookKey}
+              cfi={item.cfi}
+              excerpt={item.excerpt}
+              isNearest={item.cfi === nearestCfi}
+              onSelectResult={onSelectResult}
+            />
+          ))}
+        </ul>
+      )}
+    </ul>
+  );
+};
+
 interface SearchResultsProps {
   bookKey: string;
   results: BookSearchResult[] | BookSearchMatch[];
@@ -91,6 +212,23 @@ const SearchResults: React.FC<SearchResultsProps> = ({ bookKey, results, onSelec
   const { getSearchNavState } = useSidebarStore();
   const progress = getProgress(bookKey);
   const { searchProgress, searchError } = getSearchNavState(bookKey);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+
+  // Starting a search resets progress to 0 while the previous results stay
+  // mounted until the first new hit arrives. Sections are keyed by index+label,
+  // so a reused key would otherwise come back collapsed for results the reader
+  // has never seen.
+  useEffect(() => {
+    if (searchProgress === 0) setCollapsedSections(new Set());
+  }, [searchProgress]);
+
+  const toggleSection = useCallback((sectionKey: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(sectionKey)) next.add(sectionKey);
+      return next;
+    });
+  }, []);
 
   const nearestCfi = useMemo(() => {
     const allCfis: string[] = [];
@@ -122,26 +260,22 @@ const SearchResults: React.FC<SearchResultsProps> = ({ bookKey, results, onSelec
   }
 
   return (
-    <div className='search-results overflow-y-auto p-2 font-sans text-sm font-light'>
+    <div className='search-results overflow-y-auto px-2 font-sans text-sm font-light'>
       <ul className='px-2'>
         {results.map((result, index) => {
           if ('subitems' in result) {
+            const sectionKey = `${index}-${result.label}`;
             return (
-              <ul key={`${index}-${result.label}`}>
-                <h3 className='line-clamp-1 font-normal'>{result.label}</h3>
-                <ul>
-                  {result.subitems.map((item, index) => (
-                    <SearchResultItem
-                      key={`${index}-${item.cfi}`}
-                      bookKey={bookKey}
-                      cfi={item.cfi}
-                      excerpt={item.excerpt}
-                      isNearest={item.cfi === nearestCfi}
-                      onSelectResult={onSelectResult}
-                    />
-                  ))}
-                </ul>
-              </ul>
+              <ChapterSection
+                key={sectionKey}
+                bookKey={bookKey}
+                label={result.label}
+                subitems={result.subitems}
+                nearestCfi={nearestCfi}
+                isExpanded={!collapsedSections.has(sectionKey)}
+                onToggle={() => toggleSection(sectionKey)}
+                onSelectResult={onSelectResult}
+              />
             );
           } else {
             return (

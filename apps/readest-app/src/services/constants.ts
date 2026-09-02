@@ -128,7 +128,8 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   librarySortBy: LibrarySortByType.Updated,
   librarySortAscending: false,
   librarySortByAuto: true,
-  librarySortBy2: 'none',
+  libraryThenSortBy: 'none',
+  libraryThenSortAscending: true,
   libraryGroupBy: LibraryGroupByType.Group,
   libraryCoverFit: 'crop',
   libraryAutoColumns: true,
@@ -374,6 +375,7 @@ export const DEFAULT_TTS_CONFIG: TTSConfig = {
   ttsHighlightOptions: { style: 'highlight', color: '#808080' },
   ttsHighlightGranularity: 'word',
   ttsMediaMetadata: 'sentence',
+  ttsPlayerStyle: 'full',
 };
 
 export const DEFAULT_TRANSLATOR_CONFIG: TranslatorConfig = {

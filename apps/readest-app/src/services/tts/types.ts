@@ -4,6 +4,8 @@ export type TTSHighlightGranularity = 'word' | 'sentence';
 
 export type TTSMediaMetadataMode = 'sentence' | 'paragraph' | 'chapter';
 
+export type TTSPlayerStyle = 'full' | 'minimal';
+
 export type TTSHighlightOptions = {
   style: 'highlight' | 'underline' | 'strikethrough' | 'squiggly' | 'outline';
   color: string;

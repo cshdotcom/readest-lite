@@ -2,6 +2,7 @@ import { BookMetadata } from '@/libs/document';
 import { TTSHighlightOptions } from '@/services/tts/types';
 import { TTSHighlightGranularity } from '@/services/tts/types';
 import { TTSMediaMetadataMode } from '@/services/tts/types';
+import { TTSPlayerStyle } from '@/services/tts/types';
 import type { AnnotationLinkType } from '@/utils/deeplink';
 import { AnnotationToolType } from './annotator';
 
@@ -316,6 +317,9 @@ export interface TTSConfig {
   ttsHighlightOptions: TTSHighlightOptions;
   ttsHighlightGranularity: TTSHighlightGranularity;
   ttsMediaMetadata: TTSMediaMetadataMode;
+  // 'full' (default) is the 0.11.18 card with cover + title + timestamps; 'minimal'
+  // is chrome-free — no cover, no titles, plain glyphs (#5170, refined in #5310).
+  ttsPlayerStyle: TTSPlayerStyle;
 }
 
 export interface TranslatorConfig {
