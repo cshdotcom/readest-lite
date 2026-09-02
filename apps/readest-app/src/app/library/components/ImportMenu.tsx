@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { MdLink, MdRssFeed, MdDownload } from 'react-icons/md';
+import { MdLink, MdRssFeed, MdDownload, MdLanguage, MdMenuBook } from 'react-icons/md';
 import { IoFileTray } from 'react-icons/io5';
 import { LuLibrary } from 'react-icons/lu';
 import { useEnv } from '@/context/EnvContext';
