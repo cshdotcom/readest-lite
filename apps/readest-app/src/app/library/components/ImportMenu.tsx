@@ -8,21 +8,27 @@ import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
 
 export interface ImportMenuProps {
+  menuClassName?: string;
   setIsDropdownOpen?: (open: boolean) => void;
   onImportBooksFromFiles: () => void;
   onImportBooksFromDirectory?: () => void;
   onImportBookFromUrl?: () => void;
   onDownloadFromUrl?: () => void;
+  onImportFromWebBrowser?: () => void;
+  onImportBookFromNovelUrl?: () => void;
   onOpenCatalogManager: () => void;
   onOpenFeeds: () => void;
 }
 
 const ImportMenu: React.FC<ImportMenuProps> = ({
+  menuClassName,
   setIsDropdownOpen,
   onImportBooksFromFiles,
   onImportBooksFromDirectory,
   onImportBookFromUrl,
   onDownloadFromUrl,
+  onImportFromWebBrowser,
+  onImportBookFromNovelUrl,
   onOpenCatalogManager,
   onOpenFeeds,
 }) => {
@@ -61,7 +67,7 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
 
   return (
     <Menu
-      className={clsx('dropdown-content bg-base-100 rounded-box !relative z-[1] mt-3 p-2 shadow')}
+      className={clsx('dropdown-content bg-base-100 rounded-box !relative z-[1] mt-3 p-2 shadow', menuClassName)}
       onCancel={() => setIsDropdownOpen?.(false)}
     >
       <MenuItem
