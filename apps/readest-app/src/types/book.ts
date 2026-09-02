@@ -218,6 +218,10 @@ export interface BookLayout {
   hideScrollbar: boolean;
   webtoonMode: boolean;
   autoScrollSpeed: number;
+  /** v0.12.1: Scroll direction for scrolled mode */
+  scrolledDirection: 'vertical' | 'horizontal';
+  /** v0.12.1: Auto-scroll running state (resume on reopen) */
+  autoScrollRunning: boolean;
 }
 
 export interface BookStyle {

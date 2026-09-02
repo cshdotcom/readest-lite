@@ -269,6 +269,8 @@ export const DEFAULT_BOOK_LAYOUT: BookLayout = {
   hideScrollbar: false,
   webtoonMode: false,
   autoScrollSpeed: 100,
+  scrolledDirection: 'vertical',
+  autoScrollRunning: false,
 };
 
 export const DEFAULT_BOOK_LANGUAGE: BookLanguage = {
