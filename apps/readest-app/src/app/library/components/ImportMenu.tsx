@@ -7,7 +7,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
 
-interface ImportMenuProps {
+export interface ImportMenuProps {
   setIsDropdownOpen?: (open: boolean) => void;
   onImportBooksFromFiles: () => void;
   onImportBooksFromDirectory?: () => void;
