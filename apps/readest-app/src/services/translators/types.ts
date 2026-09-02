@@ -6,6 +6,13 @@ export interface TranslationProvider {
   authRequired?: boolean;
   quotaExceeded?: boolean;
   /**
+   * When true, the provider carries inline markup (`<b>`, `<i>`, `<a>`, etc.)
+   * through translation and repositions tags onto the semantically matching
+   * words. When false (or absent), markup is stripped before translation
+   * to avoid emitting markup that lies about formatting.
+   */
+  preservesMarkup?: boolean;
+  /**
    * Marks a provider as temporarily unavailable. Disabled providers are
    * filtered out of `getTranslators()` / `getTranslator()`, so the UI never
    * lists them and the fallback logic in `useTranslator` skips over them.
