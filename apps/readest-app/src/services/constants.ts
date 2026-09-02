@@ -157,6 +157,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   kosync: DEFAULT_KOSYNC_SETTINGS,
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
+  bookorbit: { enabled: false },
   webdav: DEFAULT_WEBDAV_SETTINGS,
   googleDrive: { enabled: false },
   s3: { enabled: false },
