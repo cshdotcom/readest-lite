@@ -390,3 +390,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
     set({ transfers: restoredTransfers, isQueuePaused });
   },
 }));
+
+// v8.12.1: Filter helper for failed/cancelled transfers
+export const isFailedLikeTransfer = (t: { status: string; cancelReason?: string }): boolean =>
+  t.status === 'failed' || (t.status === 'cancelled' && t.cancelReason !== 'policy');

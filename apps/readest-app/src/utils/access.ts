@@ -124,3 +124,6 @@ export const getActualStorageUsage = async (userId: string): Promise<number> => 
 // v8.12: Cloud sync is always allowed in Lite (no premium gate)
 export const CLOUD_SYNC_REQUIRES_PREMIUM = false;
 export const isCloudSyncAllowed = (_plan: UserPlan): boolean => true;
+
+// v8.12.1: TTS cache is always allowed in Lite
+export const isTTSCacheAllowed = (): boolean => true;

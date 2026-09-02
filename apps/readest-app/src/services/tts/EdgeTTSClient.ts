@@ -554,3 +554,5 @@ export class EdgeTTSClient implements TTSClient {
     this.#voices = [];
   }
 }
+
+export const DEFAULT_SENTENCE_GAP_SEC = 0.5;
