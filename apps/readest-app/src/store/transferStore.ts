@@ -35,6 +35,8 @@ export interface TransferItem {
   completedAt?: number;
   priority: number; // Lower = higher priority
   isBackground: boolean;
+  /** v0.12.1: Why the transfer was cancelled ('user' = explicit, 'policy' = sync gate) */
+  cancelReason?: 'user' | 'policy';
 }
 
 interface TransferState {
