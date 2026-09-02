@@ -83,6 +83,7 @@ interface ReaderStore {
     pageinfo: PageInfo,
     timeinfo: TimeInfo,
     range: Range,
+    fraction: number,
   ) => void;
   getProgress: (key: string) => BookProgress | null;
   setView: (key: string, view: FoliateView) => void;
@@ -406,6 +407,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     pageinfo: PageInfo,
     timeinfo: TimeInfo,
     range: Range,
+    fraction: number,
   ) => {
     const id = key.split('-')[0]!;
     const bookData = useBookDataStore.getState().booksData[id];
@@ -470,6 +472,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       index: section.current,
       range,
       page: pageInfo.current + 1,
+      fraction,
     } as BookProgress);
   },
   setBookmarkRibbonVisibility: (key: string, visible: boolean) =>
