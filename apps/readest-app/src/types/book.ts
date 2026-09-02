@@ -477,8 +477,10 @@ export interface BookSearchResult {
 
 // v0.12.1: Library full-text search types (PR #5389)
 export interface SearchResultLocator {
-  cfi: string;
-  range: Range;
+  section: number;
+  start: number;
+  end: number;
+  runs?: { start: number; end: number }[];
 }
 
 export interface LibrarySearchMatch {
