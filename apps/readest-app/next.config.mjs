@@ -55,6 +55,7 @@ const nextConfig = {
       ...config.resolve.alias,
       nunjucks: 'nunjucks/browser/nunjucks.js',
       fflate: path.resolve(__dirname, 'node_modules/fflate'),
+      'marked-katex-extension': path.resolve(__dirname, 'src/utils/marked-katex-stub/index.ts'),
       ...(appPlatform !== 'web' ? { '@tursodatabase/database-wasm': false } : {}),
     };
     // 客户端构建时把 server-only 模块设为空（避免 'fs' not found）
