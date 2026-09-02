@@ -475,6 +475,23 @@ export interface BookSearchResult {
   progress?: number;
 }
 
+// v0.12.1: Library full-text search types (PR #5389)
+export interface SearchResultLocator {
+  cfi: string;
+  range: Range;
+}
+
+export interface LibrarySearchMatch {
+  locator: SearchResultLocator;
+  excerpt: SearchExcerpt;
+}
+
+export interface LibrarySearchSectionResult {
+  index: number;
+  label: string;
+  subitems: LibrarySearchMatch[];
+}
+
 export const BOOK_CONFIG_SCHEMA_VERSION = 1;
 
 export interface BookConfig {
