@@ -126,4 +126,4 @@ export const CLOUD_SYNC_REQUIRES_PREMIUM = false;
 export const isCloudSyncAllowed = (_plan: UserPlan): boolean => true;
 
 // v8.12.1: TTS cache is always allowed in Lite
-export const isTTSCacheAllowed = (): boolean => true;
+export const isTTSCacheAllowed = (_plan?: string): boolean => true;
