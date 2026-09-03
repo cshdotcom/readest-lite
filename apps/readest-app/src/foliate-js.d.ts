@@ -35,5 +35,6 @@ declare module 'foliate-js/tts.js' {
 }
 
 declare module 'foliate-js/text-walker.js' {
-  export const textWalker: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const textWalker: any;
 }
