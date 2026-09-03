@@ -119,7 +119,10 @@ export abstract class BaseAppService implements AppService {
     await this.fs.removeFile(`${path}-wal`, base).catch(() => {});
   }
 
-  protected async runMigrations(lastMigrationVersion: number): Promise<void> {
+  protected async runMigrations(
+    lastMigrationVersion: number,
+    settings?: SystemSettings,
+  ): Promise<void> {
     if (lastMigrationVersion < 20251124) {
       try {
         await this.migrate20251124();
