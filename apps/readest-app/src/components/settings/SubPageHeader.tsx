@@ -14,7 +14,7 @@ interface SubPageHeaderProps {
    */
   description?: React.ReactNode;
   /** Click handler for the parent breadcrumb (returns to list view). */
-  onBack: () => void;
+  onBack?: () => void;
   /** Optional trailing content (e.g. Edit / Delete toggles). */
   rightSlot?: React.ReactNode;
 }
@@ -45,7 +45,7 @@ const SubPageHeader: React.FC<SubPageHeaderProps> = ({
         <div className='flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight'>
           <button
             type='button'
-            onClick={onBack}
+            onClick={onBack ?? (() => {})}
             className='hover:text-primary transition-colors duration-150 focus-visible:underline focus-visible:outline-none'
           >
             {parentLabel}
