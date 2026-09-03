@@ -9,5 +9,7 @@ declare module 'react-colorful' {
     color?: string;
     onChange?: (color: string) => void;
     className?: string;
+    prefixed?: boolean;
+    [key: string]: unknown;
   }>;
 }
