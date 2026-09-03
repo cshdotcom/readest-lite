@@ -408,10 +408,10 @@ export interface SystemSettings {
   };
   webdav: WebDAVSettings;
   /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */
-  googleDrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string };
-  s3: { enabled: boolean; endpoint?: string; region?: string; bucket?: string; accessKeyId?: string; secretAccessKey?: string; lastSyncedAt?: number; strategy?: string; deviceId?: string };
-  onedrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string; accountLabel?: string };
-  icloud: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string };
+  googleDrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string; syncProgress?: boolean; syncNotes?: boolean; syncBooks?: boolean; fullSync?: boolean; accountLabel?: string };
+  s3: { enabled: boolean; endpoint?: string; region?: string; bucket?: string; accessKeyId?: string; secretAccessKey?: string; lastSyncedAt?: number; strategy?: string; deviceId?: string; syncProgress?: boolean; syncNotes?: boolean; syncBooks?: boolean; fullSync?: boolean };
+  onedrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string; accountLabel?: string; syncProgress?: boolean; syncNotes?: boolean; syncBooks?: boolean; fullSync?: boolean };
+  icloud: { enabled: boolean; lastSyncedAt?: number; strategy?: string; deviceId?: string; syncProgress?: boolean; syncNotes?: boolean; syncBooks?: boolean; fullSync?: boolean };
 
   aiSettings: AISettings;
   /**
