@@ -1,35 +1,34 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { corsAllMethods, runMiddleware } from '@/utils/cors';
-import { createSupabaseAdminClient } from '@/utils/supabase';
-import { validateUserAndToken } from '@/utils/access';
+import { prismaClient } from '@/utils/db';
+import { getAuthUser } from '@/utils/localAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  await runMiddleware(req, res, corsAllMethods);
-
-  if (req.method !== 'DELETE') {
+  if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
   try {
-    const { user, token } = await validateUserAndToken(req.headers['authorization']);
-    if (!user || !token) {
-      return res.status(403).json({ error: 'Not authenticated' });
-    }
+    // Delete all books for this user via Prisma
+    // Also delete related book_configs and book_notes (cascade)
+    await prismaClient.$transaction([
+      prismaClient.bookNote.deleteMany({ where: { userId: user.id } }),
+      prismaClient.bookConfig.deleteMany({ where: { userId: user.id } }),
+      prismaClient.book.deleteMany({ where: { userId: user.id } }),
+    ]);
 
-    // Hard delete rather than a `deleted_at` tombstone: a tombstone would pull
-    // down to every other signed-in device and clear its local library too.
-    // `book_configs` / `book_notes` / `files` key off `auth.users`, not `books`,
-    // so nothing here cascades — their rows are left behind, keyed by
-    // `book_hash`, and line up again if the same book is ever re-added.
-    const supabaseAdmin = createSupabaseAdminClient();
-    const { error } = await supabaseAdmin.from('books').delete().eq('user_id', user.id);
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.status(200).json({ message: 'Cloud library deleted successfully' });
+    return res.status(200).json({ success: true });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Something went wrong' });
+    console.error('Delete all books error:', error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
