@@ -1,21 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prismaClient } from '@/utils/db';
-import { getAuthUser } from '@/utils/localAuth';
+import { validateAdmin } from '@/utils/localAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const user = await getAuthUser(req);
-  if (!user) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  if (user.role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
   try {
+    const { user } = await validateAdmin(req.headers.authorization);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     // Delete all books for this user via Prisma
     // Also delete related book_configs and book_notes (cascade)
     await prismaClient.$transaction([
