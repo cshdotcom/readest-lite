@@ -121,7 +121,7 @@ export abstract class BaseAppService implements AppService {
 
   protected async runMigrations(
     lastMigrationVersion: number,
-    settings?: SystemSettings,
+    _settings?: SystemSettings,
   ): Promise<void> {
     if (lastMigrationVersion < 20251124) {
       try {
