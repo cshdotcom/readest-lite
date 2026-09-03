@@ -15,7 +15,7 @@ export class Database {
     return [] as T;
   }
   async batch(_stmts?: unknown[]): Promise<QueryResult[]> { return []; }
-  close(): void {}
+  close(_path?: string): void {}
   path: string = '';
 }
 export type LoadOptions = string | Record<string, unknown>;
