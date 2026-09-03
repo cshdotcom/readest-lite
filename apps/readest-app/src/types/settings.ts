@@ -394,6 +394,8 @@ export interface SystemSettings {
   kosync: KOSyncSettings;
   readwise: ReadwiseSettings;
   hardcover: HardcoverSettings;
+  /** v0.12.1: Readest Cloud settings (Lite stub — not available) */
+  readestCloud?: { enabled?: boolean; disabledAt?: number };
   /** v0.12.1: BookOrbit settings (Lite stub — not available) */
   bookorbit: {
     enabled: boolean;
