@@ -238,4 +238,4 @@ export async function fetchImageAsBase64(
   }
 }
 
-export const galleryFileName = (book: { hash: string }): string => `cover-${book.hash}.png`;
+export const galleryFileName = (filename: string, now: number = Date.now()): string => filename;
