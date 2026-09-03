@@ -336,6 +336,12 @@ export interface TTSConfig {
   // 'full' (default) is the 0.11.18 card with cover + title + timestamps; 'minimal'
   // is chrome-free — no cover, no titles, plain glyphs (#5170, refined in #5310).
   ttsPlayerStyle: TTSPlayerStyle;
+  /** v0.12.1: Sentence gap in seconds (PR #5309 TTS gap scaling) */
+  ttsSentenceGap: number;
+  /** v0.12.1: Paragraph gap in seconds */
+  ttsParagraphGap: number;
+  /** v0.12.1: Use recorded narration (Media Overlays) when available (#5480) */
+  ttsUseNarration?: boolean;
 }
 
 export interface TranslatorConfig {

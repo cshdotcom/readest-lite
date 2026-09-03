@@ -397,6 +397,9 @@ export const DEFAULT_TTS_CONFIG: TTSConfig = {
   ttsHighlightGranularity: 'word',
   ttsMediaMetadata: 'sentence',
   ttsPlayerStyle: 'full',
+  ttsSentenceGap: 0.5,
+  ttsParagraphGap: 1.0,
+  ttsUseNarration: false,
 };
 
 export const DEFAULT_TRANSLATOR_CONFIG: TranslatorConfig = {
