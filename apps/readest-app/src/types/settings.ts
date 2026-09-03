@@ -84,6 +84,10 @@ export interface KOSyncSettings {
   deviceName: string;
   checksumMethod: KOSyncChecksumMethod;
   strategy: KOSyncStrategy;
+  /** v0.12.1: Custom HTTP headers for KOSync requests */
+  customHeaders?: Record<string, string>;
+  /** v0.12.1: Send document metadata in progress uploads */
+  sendMetadata?: boolean;
 }
 
 export interface ReadwiseSettings {
