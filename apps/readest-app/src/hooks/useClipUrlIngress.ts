@@ -107,6 +107,9 @@ export function useClipUrlIngress() {
         if (!book) {
           book = await clipPageWithSignInFallback(url, _, appService);
         }
+        if (!book) {
+          throw new Error('No book content could be loaded');
+        }
         const { library } = useLibraryStore.getState();
         const { settings } = useSettingsStore.getState();
         const ingested = await ingestFile(
