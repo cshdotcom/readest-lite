@@ -360,6 +360,10 @@ export interface NoteExportConfig {
   includeTimestamp: boolean;
   includeChapterSeparator: boolean;
   linkType: AnnotationLinkType;
+  /** v0.12.1: Cover image in annotation exports (#5435) */
+  includeCoverImage?: boolean;
+  /** v0.12.1: Export format — markdown, text, or JSON (#5440) */
+  exportFormat: NoteExportFormat;
   noteSeparator: string;
   useCustomTemplate: boolean;
   customTemplate: string;
