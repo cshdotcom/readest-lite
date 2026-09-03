@@ -2,4 +2,8 @@
 import type { ConvertedBook } from './conversion/types';
 export const clipSignIn = async (): Promise<void> => {};
 export const isClipCancelled = (_e?: unknown): boolean => false;
-export const clipPageWithSignInFallback = async (): Promise<ConvertedBook | null> => null;
+export const clipPageWithSignInFallback = async (
+  _url: string,
+  _t: unknown,
+  _appService: unknown,
+): Promise<ConvertedBook | null> => null;
