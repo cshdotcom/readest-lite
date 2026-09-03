@@ -1,4 +1,9 @@
 declare module 'marked-katex-extension' {
-  const markedKatex: (options?: Record<string, unknown>) => unknown;
+  import type { MarkedExtension } from 'marked';
+  const markedKatex: (options?: {
+    throwOnError?: boolean;
+    output?: 'mathml' | 'html' | 'htmlAndMathml';
+    [key: string]: unknown;
+  }) => MarkedExtension;
   export default markedKatex;
 }
