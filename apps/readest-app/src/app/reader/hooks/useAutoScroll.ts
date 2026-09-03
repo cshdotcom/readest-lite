@@ -22,7 +22,7 @@ export interface AutoScrollState {
   active: boolean;
   paused: boolean;
   speed: number;
-  setSpeed: (speed: number) => void;
+  setSpeed: (speed: number, _animate?: boolean) => void;
   togglePause: () => void;
   adjustSpeed: (dir: 1 | -1) => void;
   stop: () => void;
@@ -176,7 +176,7 @@ export const useAutoScroll = (
     active,
     paused,
     speed,
-    setSpeed: (s: number) => setSpeed(s),
+    setSpeed: (s: number, _a?: boolean) => setSpeed(s),
     togglePause,
     adjustSpeed,
     stop: () => scrollerRef.current?.stop(),
