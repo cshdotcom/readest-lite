@@ -9,6 +9,7 @@ type TTSScrubberProps = {
   bookKey: string;
   isEink: boolean;
   onSeek: (seconds: number) => Promise<void>;
+  onSeekPreview?: (seconds: number) => void;
   onGetPlaybackInfo: () => TTSPlaybackInfo | null;
 };
 
