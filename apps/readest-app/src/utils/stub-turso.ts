@@ -2,14 +2,14 @@
 export interface QueryResult {
   rowsAffected: number;
   lastInsertRowid: number | bigint;
-  lastInsertId?: number;
+  lastInsertId: number;
   rows?: unknown[];
   columns?: string[];
 }
 export class Database {
   static load(_opts?: string | Record<string, unknown>): Database { return new Database(); }
   async execute(_sql?: string, _params?: unknown[]): Promise<QueryResult> {
-    return { rowsAffected: 0, lastInsertRowid: 0 };
+    return { rowsAffected: 0, lastInsertRowid: 0, lastInsertId: 0 };
   }
   async select<T = unknown[]>(_sql?: string, _params?: unknown[]): Promise<T> {
     return [] as T;
