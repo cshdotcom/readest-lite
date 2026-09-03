@@ -1,3 +1,6 @@
 import React from 'react';
-const BookOrbitForm: React.FC = () => null;
+interface BookOrbitFormProps {
+  onBack?: () => void;
+}
+const BookOrbitForm: React.FC<BookOrbitFormProps> = () => null;
 export default BookOrbitForm;

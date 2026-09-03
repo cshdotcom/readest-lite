@@ -1,3 +1,6 @@
 import React from 'react';
-const OneDriveForm: React.FC = () => null;
+interface OneDriveFormProps {
+  onBack?: () => void;
+}
+const OneDriveForm: React.FC<OneDriveFormProps> = () => null;
 export default OneDriveForm;

@@ -1,3 +1,6 @@
 import React from 'react';
-const S3Form: React.FC = () => null;
+interface S3FormProps {
+  onBack?: () => void;
+}
+const S3Form: React.FC<S3FormProps> = () => null;
 export default S3Form;

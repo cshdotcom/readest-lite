@@ -1,3 +1,6 @@
 import React from 'react';
-const ICloudForm: React.FC = () => null;
+interface ICloudFormProps {
+  onBack?: () => void;
+}
+const ICloudForm: React.FC<ICloudFormProps> = () => null;
 export default ICloudForm;
