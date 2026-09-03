@@ -32,6 +32,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "types/**/*.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "raw-loader.d.ts",
