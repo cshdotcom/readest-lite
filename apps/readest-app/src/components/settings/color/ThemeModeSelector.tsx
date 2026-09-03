@@ -7,8 +7,8 @@ import { useAtmosphereStore } from '@/store/atmosphereStore';
 import { SettingLabel } from '../primitives';
 
 interface ThemeModeSelectorProps {
-  themeMode: 'auto' | 'light' | 'dark';
-  onThemeModeChange: (mode: 'auto' | 'light' | 'dark') => void;
+  themeMode: 'auto' | 'light' | 'dark' | 'ambient';
+  onThemeModeChange: (mode: 'auto' | 'light' | 'dark' | 'ambient') => void;
 }
 
 const ThemeModeSelector: React.FC<ThemeModeSelectorProps> = ({ themeMode, onThemeModeChange }) => {
