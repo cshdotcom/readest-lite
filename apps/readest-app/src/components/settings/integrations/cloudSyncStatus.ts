@@ -8,4 +8,6 @@ export const getReadestCloudRowStatus = (
   _t: unknown,
   _opts: { signedIn: boolean; planLoading: boolean; plan?: string; [key: string]: unknown },
 ): string => '';
-export const canToggleCloudProvider = (): boolean => false;
+export const canToggleCloudProvider = (
+  _opts?: { isPremium?: boolean; isConfigured?: boolean; isEnabled?: boolean; [key: string]: unknown },
+): boolean => false;
