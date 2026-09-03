@@ -408,10 +408,10 @@ export interface SystemSettings {
   };
   webdav: WebDAVSettings;
   /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */
-  googleDrive: { enabled: boolean; lastSyncedAt?: number };
-  s3: { enabled: boolean; lastSyncedAt?: number };
-  onedrive: { enabled: boolean; lastSyncedAt?: number };
-  icloud: { enabled: boolean; lastSyncedAt?: number };
+  googleDrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string };
+  s3: { enabled: boolean; lastSyncedAt?: number; strategy?: string };
+  onedrive: { enabled: boolean; lastSyncedAt?: number; strategy?: string };
+  icloud: { enabled: boolean; lastSyncedAt?: number; strategy?: string };
 
   aiSettings: AISettings;
   /**
