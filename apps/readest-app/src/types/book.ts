@@ -485,7 +485,8 @@ export interface SearchExcerpt {
   pre: string;
   match: string;
   post: string;
-  segments?: { pre: string; match: string; post: string; emphasized?: boolean; text?: string }[];
+  /** v0.12.1: nearby-words cluster window split into matched (emphasized) words and gaps */
+  segments?: { text: string; emphasized: boolean }[];
 }
 
 export interface BookSearchMatch {
