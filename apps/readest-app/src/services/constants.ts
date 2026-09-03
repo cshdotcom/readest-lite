@@ -421,6 +421,7 @@ export const DEFAULT_NOTE_EXPORT_CONFIG: NoteExportConfig = {
   // the web. Inlined platform check avoids a circular import with
   // environment.ts, which imports from this module.
   linkType: process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri' ? 'app' : 'web',
+  exportFormat: 'markdown',
   noteSeparator: '\n\n',
   useCustomTemplate: false,
   customTemplate: '',

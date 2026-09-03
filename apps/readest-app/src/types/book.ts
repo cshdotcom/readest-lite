@@ -346,6 +346,9 @@ export interface TranslatorConfig {
   ttsReadAloudText: string;
 }
 
+/** v0.12.1: Export format for annotations (PR #5440 JSON export) */
+export type NoteExportFormat = 'markdown' | 'text' | 'json';
+
 export interface NoteExportConfig {
   includeTitle: boolean;
   includeAuthor: boolean;
