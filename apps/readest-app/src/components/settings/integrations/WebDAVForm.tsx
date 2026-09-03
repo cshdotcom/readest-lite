@@ -40,7 +40,7 @@ import SyncHistoryPanel from './SyncHistoryPanel';
 import WebDAVBrowsePane from './WebDAVBrowsePane';
 
 interface WebDAVFormProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 /**
