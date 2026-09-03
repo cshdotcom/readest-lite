@@ -470,7 +470,7 @@ export interface BookSearchConfig {
   scope: 'book' | 'section';
   mode: SearchMode;
   matchCase: boolean;
-  matchWholeWords: boolean;
+  matchWholeWords?: boolean;
   matchDiacritics: boolean;
   nearbyWords?: number;
   index?: number;
