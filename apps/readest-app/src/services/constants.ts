@@ -171,7 +171,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   },
   webdav: DEFAULT_WEBDAV_SETTINGS,
   googleDrive: { enabled: false },
-  s3: { enabled: false },
+  s3: { enabled: false, endpoint: '', bucket: '', accessKeyId: '', secretAccessKey: '' },
   onedrive: { enabled: false },
   icloud: { enabled: false },
   aiSettings: DEFAULT_AI_SETTINGS,
