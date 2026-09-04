@@ -7,6 +7,7 @@
 export interface ConnectGoogleDriveResult {
   ok: boolean;
   error?: string;
+  accountLabel?: string;
 }
 
 export const runGoogleDriveConnect = async (): Promise<ConnectGoogleDriveResult> => ({

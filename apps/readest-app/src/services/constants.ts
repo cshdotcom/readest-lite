@@ -164,6 +164,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
     userkey: '',
     deviceId: '',
     deviceName: '',
+    strategy: 'prompt' as const,
     syncProgress: false,
     syncNotes: false,
     syncStats: false,

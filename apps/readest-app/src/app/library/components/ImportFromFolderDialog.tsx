@@ -82,7 +82,7 @@ export interface ImportFromFolderResult {
    * {@link readInPlace} (auto-import reads books in place), so it is forced
    * `false` whenever `readInPlace` is off. Defaults to `false`.
    */
-  autoImport: boolean;
+  autoImport?: boolean;
 }
 
 interface ImportFromFolderDialogProps {

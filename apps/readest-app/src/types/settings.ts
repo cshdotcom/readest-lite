@@ -265,6 +265,7 @@ export type SyncCategory =
   | 'font'
   | 'texture'
   | 'opds_catalog'
+  | 'abs_server'
   | 'settings'
   | 'credentials'
   | 'stats';
@@ -277,6 +278,7 @@ export const SYNC_CATEGORIES: readonly SyncCategory[] = [
   'font',
   'texture',
   'opds_catalog',
+  'abs_server',
   'settings',
   'stats',
   'credentials',
@@ -432,10 +434,12 @@ export interface SystemSettings {
     password?: string;
     deviceId: string;
     deviceName: string;
+    strategy: KOSyncStrategy;
     syncProgress: boolean;
     syncNotes: boolean;
     syncStats: boolean;
     syncBookStates: boolean;
+    customHeaders?: Record<string, string>;
   };
   webdav: WebDAVSettings;
   /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */

@@ -7,6 +7,7 @@
 export interface ConnectOneDriveResult {
   ok: boolean;
   error?: string;
+  accountLabel?: string;
 }
 
 export const runOneDriveConnect = async (): Promise<ConnectOneDriveResult> => ({

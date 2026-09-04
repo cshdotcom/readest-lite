@@ -218,7 +218,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     groupName: string;
   } | null>(null);
   const [booksTransferProgress, setBooksTransferProgress] = useState<{
-    [key: string]: number | null;
+    [key: string]: number;
   }>({});
   const [pendingNavigationBookIds, setPendingNavigationBookIds] = useState<string[] | null>(null);
   const isInitiating = useRef(false);

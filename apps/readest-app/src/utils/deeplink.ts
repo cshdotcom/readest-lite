@@ -122,15 +122,25 @@ export const parseAnnotationDeepLink = (url: string): AnnotationDeepLink | null 
 };
 
 // v8.12: parseBookDeepLink for useOpenBookLink hook
-export const parseBookDeepLink = (url: string): { bookHash: string } | null => {
+// v0.12.6: optional `autoplay` flag for Android Auto cold-resume (Lite never
+// actually sends it but the type is needed for useOpenBookLink compatibility).
+export const parseBookDeepLink = (
+  url: string,
+): { bookHash: string; autoplay?: boolean } | null => {
   try {
     const parsed = new URL(url);
     const segments = parsed.pathname.split('/').filter(Boolean);
     // readest://book/{hash} or https://.../o/book/{hash}
     if (segments.length >= 2 && segments[0] === 'book') {
+      if (parsed.searchParams.get('autoplay') === 'tts') {
+        return { bookHash: segments[1]!, autoplay: true };
+      }
       return { bookHash: segments[1]! };
     }
     if (segments.length >= 3 && segments[0] === 'o' && segments[1] === 'book') {
+      if (parsed.searchParams.get('autoplay') === 'tts') {
+        return { bookHash: segments[2]!, autoplay: true };
+      }
       return { bookHash: segments[2]! };
     }
   } catch {
