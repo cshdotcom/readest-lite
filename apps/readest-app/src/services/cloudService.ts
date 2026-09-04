@@ -92,6 +92,7 @@ export async function uploadFileToCloud(
   handleProgress: ProgressHandler,
   hash: string,
   temp: boolean = false,
+  _media?: string,
 ): Promise<string | undefined> {
   console.log('Uploading file:', lfp, 'to', cfp);
   const file = await fs.openFile(lfp, base, cfp);
