@@ -8,6 +8,7 @@ export interface DBBook {
   author: string;
   group_id?: string;
   group_name?: string;
+  group_updated_at?: string | null;
   tags?: string[];
   progress?: [number, number];
   reading_status?: string;
@@ -16,6 +17,7 @@ export interface DBBook {
   cover_updated_at?: string | null;
 
   metadata?: string | null;
+  metadata_updated_at?: string | null;
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
