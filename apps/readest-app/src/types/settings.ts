@@ -125,6 +125,8 @@ export interface S3Settings {
   strategy?: KOSyncStrategy;
   deviceId?: string;
   lastSyncedAt?: number;
+  /** v0.12.1: When the user picked this provider */
+  providerSelectedAt?: number;
 }
 
 export interface WebDAVSettings {
