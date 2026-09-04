@@ -58,6 +58,8 @@ interface FileSyncState {
   beginSync: (kind: FileSyncBackendKind, initialLabel: string) => boolean;
   updateProgress: (kind: FileSyncBackendKind, label: string, detail?: string | null) => void;
   endSync: (kind: FileSyncBackendKind) => void;
+  /** v0.12.1: Switch to a different backend mid-session (used by cloud sync status) */
+  switchSync: (kind: FileSyncBackendKind, label: string) => void;
 }
 
 export const useFileSyncStore = create<FileSyncState>((set, get) => ({
@@ -101,6 +103,15 @@ export const useFileSyncStore = create<FileSyncState>((set, get) => ({
     set((s) => ({
       activeKind: s.activeKind === kind ? null : s.activeKind,
       byKind: { ...s.byKind, [kind]: IDLE },
+    })),
+
+  switchSync: (kind, label) =>
+    set((s) => ({
+      activeKind: kind,
+      byKind: {
+        ...s.byKind,
+        [kind]: { isSyncing: true, progressLabel: label, progressDetail: null },
+      },
     })),
 }));
 
