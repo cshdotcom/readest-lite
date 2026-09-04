@@ -54,4 +54,6 @@ export interface LocalStore {
   markBooksUploaded(hashes: string[], uploadedAt: number): Promise<void>;
   /** v0.12.1: Mark books as downloaded (file-sync tracking) */
   markBooksDownloaded(hashes: string[], downloadedAt: number): Promise<void>;
+  /** v0.12.1: Delete a book's local files (file-sync deletion) */
+  deleteBookLocally(book: Book): Promise<void>;
 }
