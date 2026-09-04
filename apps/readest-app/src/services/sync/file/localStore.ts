@@ -50,4 +50,8 @@ export interface LocalStore {
   addBookToLibrary(book: Book): Promise<void>;
   /** Persist refreshed metadata for a book already in the local library. */
   updateBookMetadata(book: Book): Promise<void>;
+  /** v0.12.1: Mark books as uploaded (file-sync tracking) */
+  markBooksUploaded(hashes: string[], uploadedAt: number): Promise<void>;
+  /** v0.12.1: Mark books as downloaded (file-sync tracking) */
+  markBooksDownloaded(hashes: string[], downloadedAt: number): Promise<void>;
 }
