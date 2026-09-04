@@ -2,7 +2,7 @@
 //
 // The lock screen is the primary surface for background TTS: metadata,
 // position state, and transport handlers must keep working after the reader
-// (and its hooks) unmount. This bridge binds to a TTSController directly —
+// (and its hooks) unmount. This bridge binds to a PlaybackSource directly —
 // its listeners ride controller events, not React lifecycles — and is the
 // SOLE owner of media-session handlers from the moment a session starts.
 //
@@ -18,7 +18,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { getOSPlatform } from '@/utils/misc';
 import { notifyCarPlayState } from './carPlaySession';
 import { SILENCE_DATA } from './TTSData';
-import type { TTSController } from './TTSController';
+import type { PlaybackSource } from '@/services/playback/playbackSource';
 import type { TTSMark, TTSMediaMetadataMode } from './types';
 
 export interface TTSMediaBridgeMeta {
@@ -27,6 +27,11 @@ export interface TTSMediaBridgeMeta {
   author: string;
   coverImageUrl: string | null;
   metadataMode: TTSMediaMetadataMode;
+  // False when this session's audio plays through a WebView media element, so
+  // the native media session leaves audio focus alone — see
+  // MediaSessionState.ownsAudioFocus. Defaults to true: TTS (WebAudio or the
+  // platform engine) and native narration render outside the WebView.
+  ownsAudioFocus?: boolean;
   // Live section label while the reader is mounted; returns undefined when
   // the supplying hook is dead (headless) — the bridge then keeps the last
   // known label rather than freezing on a stale store read.
@@ -92,7 +97,7 @@ type BridgeMediaSession = TauriMediaSession | MediaSession;
 export class TTSMediaBridge {
   #resolveMediaSession: () => BridgeMediaSession | null;
   #mediaSession: BridgeMediaSession | null = null;
-  #controller: TTSController | null = null;
+  #controller: PlaybackSource | null = null;
   #meta: TTSMediaBridgeMeta | null = null;
   // Cover fetched once per bind as a data URL. iOS navigator.mediaSession only
   // renders lock-screen / CarPlay artwork from a fetchable URL, and the book
@@ -128,7 +133,7 @@ export class TTSMediaBridge {
     return this.#controller !== null;
   }
 
-  async bind(controller: TTSController, meta: TTSMediaBridgeMeta): Promise<void> {
+  async bind(controller: PlaybackSource, meta: TTSMediaBridgeMeta): Promise<void> {
     if (this.#controller === controller) {
       // Re-bind on adopt: refresh the meta (new bookKey / live label source)
       // without re-registering listeners or re-activating the session.
@@ -162,6 +167,7 @@ export class TTSMediaBridge {
     if (mediaSession instanceof TauriMediaSession) {
       await mediaSession.setActive({
         active: true,
+        ownsAudioFocus: meta.ownsAudioFocus ?? true,
         // bookKey is `${hash}-${uniqueId()}`; the hash alone addresses the book
         // for a readest://book/{hash} resume deep link from the car.
         bookHash: meta.bookKey.split('-')[0],

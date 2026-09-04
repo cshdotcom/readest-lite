@@ -1,0 +1,593 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { act, cleanup, renderHook } from '@testing-library/react';
+
+const h = vi.hoisted(() => {
+  // Zustand-like store mock. Supports both destructure form `store()`
+  // and selector form `store((s) => s.method)` since the production code
+  // now uses per-field selectors to avoid whole-store subscriptions.
+  const makeStore = <T,>(state: T) => {
+    const fn = <R,>(selector?: (s: T) => R) => (selector ? selector(state) : state) as R | T;
+    (fn as unknown as { getState: () => T }).getState = () => state;
+    return fn as {
+      (): T;
+      <R>(selector: (s: T) => R): R;
+      getState: () => T;
+    };
+  };
+
+  const book = {
+    hash: 'h1',
+    format: 'PDF',
+    metaHash: 'm1',
+    updatedAt: 2000,
+    progress: [5, 100] as [number, number],
+  };
+  const config = {
+    progress: [5, 100] as [number, number],
+    location: 'cfi-loc',
+    updatedAt: 1000,
+  };
+  const libraryBook = { hash: 'h1', updatedAt: 2000, progress: [5, 100] as [number, number] };
+
+  return {
+    makeStore,
+    book,
+    config,
+    libraryBook,
+    user: { id: 'u1' },
+    syncConfigsMock: vi.fn(async () => {}),
+    syncBooksMock: vi.fn(async () => {}),
+    saveConfigMock: vi.fn(async () => {}),
+    setViewSettingsMock: vi.fn(),
+    recreateViewerMock: vi.fn(),
+    cfiCompareMock: vi.fn((_a: string, _b: string) => 0),
+    getCFIFromXPointerMock: vi.fn(async (..._args: unknown[]) => ''),
+    view: {
+      renderer: { getContents: () => [], primaryIndex: 0 },
+      goTo: vi.fn(),
+      goToFraction: vi.fn(),
+    },
+    state: {
+      syncedConfigs: [] as unknown[] | null,
+      progress: { location: 'cfi-loc' } as { location: string; fraction?: number } | null,
+      viewSettings: { proofreadRules: [] } as {
+        proofreadRules: unknown[];
+        referencePageCount?: number;
+      } | null,
+      bookDoc: {} as unknown,
+    },
+    eventListeners: new Map<string, Set<(e: CustomEvent) => void>>(),
+  };
+});
+
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ user: h.user }),
+}));
+
+vi.mock('@/hooks/useSync', () => ({
+  useSync: () => ({
+    syncedConfigs: h.state.syncedConfigs,
+    syncConfigs: h.syncConfigsMock,
+    syncBooks: h.syncBooksMock,
+  }),
+}));
+
+vi.mock('@/hooks/useTranslation', () => ({
+  useTranslation: () => (s: string) => s,
+}));
+
+vi.mock('@/context/EnvContext', () => ({
+  useEnv: () => ({ envConfig: {} }),
+}));
+
+vi.mock('@/store/bookDataStore', () => ({
+  useBookDataStore: h.makeStore({
+    getConfig: () => h.config,
+    setConfig: vi.fn(),
+    saveConfig: h.saveConfigMock,
+    getBookData: () => ({ book: h.book, bookDoc: h.state.bookDoc }),
+  }),
+}));
+
+vi.mock('@/store/readerStore', () => ({
+  useReaderStore: h.makeStore({
+    getView: () => h.view,
+    getProgress: () => h.state.progress,
+    getViewSettings: () => h.state.viewSettings,
+    setViewSettings: h.setViewSettingsMock,
+    recreateViewer: h.recreateViewerMock,
+    setHoveredBookKey: vi.fn(),
+    getViewState: () => ({ previewMode: false }),
+  }),
+}));
+
+// useProgressSync now reads progress reactively from readerProgressStore
+// (see store/readerProgressStore.ts for rationale).
+vi.mock('@/store/readerProgressStore', () => ({
+  useBookProgress: () => h.state.progress,
+  getBookProgress: () => h.state.progress,
+}));
+
+vi.mock('@/store/settingsStore', () => ({
+  useSettingsStore: h.makeStore({ settings: { globalViewSettings: {} } }),
+}));
+
+vi.mock('@/store/libraryStore', () => ({
+  useLibraryStore: h.makeStore({ library: [h.libraryBook] }),
+}));
+
+vi.mock('@/utils/serializer', () => ({
+  serializeConfig: () =>
+    JSON.stringify({
+      progress: [5, 100],
+      location: 'cfi-loc',
+      audiobook: {
+        version: 1,
+        files: [{ path: 'h1/audiobook/private.m4b' }],
+        chapters: [],
+        mappings: [],
+        createdAt: 1,
+      },
+    }),
+}));
+
+vi.mock('@/utils/xcfi', () => ({
+  getCFIFromXPointer: (...args: unknown[]) => h.getCFIFromXPointerMock(...args),
+  getXPointerFromCFI: vi.fn(async () => ({ xpointer: '' })),
+}));
+
+vi.mock('@/libs/document', () => ({
+  CFI: { compare: (a: string, b: string) => h.cfiCompareMock(a, b) },
+}));
+
+vi.mock('@/utils/event', () => ({
+  eventDispatcher: {
+    on: (name: string, fn: (e: CustomEvent) => void) => {
+      const set = h.eventListeners.get(name) ?? new Set();
+      set.add(fn);
+      h.eventListeners.set(name, set);
+    },
+    off: (name: string, fn: (e: CustomEvent) => void) => {
+      h.eventListeners.get(name)?.delete(fn);
+    },
+    dispatch: (name: string, detail: unknown) => {
+      const listeners = h.eventListeners.get(name);
+      if (!listeners) return;
+      const event = new CustomEvent(name, { detail });
+      for (const fn of [...listeners]) fn(event);
+    },
+  },
+}));
+
+import { useProgressSync } from '@/app/reader/hooks/useProgressSync';
+import { SYNC_PROGRESS_INTERVAL_SEC } from '@/services/constants';
+
+const flushAutoSync = async () => {
+  await act(async () => {
+    vi.advanceTimersByTime(SYNC_PROGRESS_INTERVAL_SEC * 1000 + 100);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+};
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  h.syncConfigsMock.mockClear();
+  h.syncBooksMock.mockClear();
+  h.saveConfigMock.mockClear();
+  h.setViewSettingsMock.mockClear();
+  h.recreateViewerMock.mockClear();
+  h.view.goTo.mockClear();
+  h.view.goToFraction.mockClear();
+  h.cfiCompareMock.mockReset();
+  h.cfiCompareMock.mockReturnValue(0);
+  h.getCFIFromXPointerMock.mockReset();
+  h.getCFIFromXPointerMock.mockResolvedValue('');
+  h.book.format = 'PDF';
+  h.state.syncedConfigs = [];
+  h.state.progress = { location: 'cfi-loc' };
+  h.state.viewSettings = { proofreadRules: [] };
+  h.state.bookDoc = {};
+  h.eventListeners.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
+
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+};
+
+const advance = async (ms: number) => {
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await flushMicrotasks();
+  });
+};
+
+const pullCallCount = () =>
+  h.syncConfigsMock.mock.calls.filter((c) => (c as unknown[])[3] === 'pull').length;
+const pushCallCount = () =>
+  h.syncConfigsMock.mock.calls.filter((c) => (c as unknown[])[3] === 'push').length;
+
+describe('useProgressSync', () => {
+  test('auto-sync push only hits the configs lane; the server piggybacks books.progress', async () => {
+    // Issue #4198 used to be fixed by a second syncBooks call from the
+    // reader so that other devices' library pull-to-refresh would see fresh
+    // progress while a reader stayed open. The /api/sync POST handler now
+    // updates books.progress + books.updated_at off the same configs push,
+    // so the reader-side syncBooks round-trip is gone.
+    renderHook(() => useProgressSync('h1-view1'));
+    await flushAutoSync();
+
+    expect(h.syncConfigsMock).toHaveBeenCalledWith(expect.any(Array), 'h1', 'm1', 'push');
+    expect(h.syncBooksMock).not.toHaveBeenCalled();
+  });
+
+  test('does not upload the device-local audiobook association', async () => {
+    renderHook(() => useProgressSync('h1-view1'));
+    await flushAutoSync();
+
+    const push = h.syncConfigsMock.mock.calls.find((call) => (call as unknown[])[3] === 'push') as
+      | unknown[]
+      | undefined;
+    expect((push?.[0] as unknown[])?.[0]).not.toHaveProperty('audiobook');
+  });
+
+  test('retries the first pull on failure with backoff, then releases the gate', async () => {
+    // Pull failure is simulated by a mock that resolves without ever flipping
+    // h.state.syncedConfigs to a non-null array — the same observable state
+    // as a real pullChanges that threw and skipped setSyncResult. Without
+    // retries the configs sync would be stuck on this single failed attempt
+    // for the whole reader session (handleAutoSync only re-arms on
+    // progress.location changes), so the user's progress never reaches the
+    // server until they reopen the book.
+    h.state.syncedConfigs = null;
+    const { rerender } = renderHook(() => useProgressSync('h1-view1'));
+
+    // Initial attempt fires from the [progress] effect on mount.
+    await advance(0);
+    expect(pullCallCount()).toBe(1);
+
+    // First backoff = 1500ms.
+    await advance(1500);
+    expect(pullCallCount()).toBe(2);
+
+    // Second backoff = 4000ms.
+    await advance(4000);
+    expect(pullCallCount()).toBe(3);
+
+    // Third backoff = 10000ms.
+    await advance(10000);
+    expect(pullCallCount()).toBe(4);
+
+    // Gate released after exhausted retries — a subsequent location change
+    // takes the push branch instead of queueing another pull. Simulate the
+    // user paginating: mutate the shared progress state and force a render
+    // so the [progress?.location] effect re-arms handleAutoSync.
+    h.state.progress = { location: 'cfi-loc-next' };
+    rerender();
+    await advance(SYNC_PROGRESS_INTERVAL_SEC * 1000 + 100);
+    expect(pushCallCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  test('a successful pull cancels the pending retry chain', async () => {
+    // Render with the default mock (syncedConfigs = [], which the [syncedConfigs]
+    // effect treats as a successful empty pull → configPulled flips on mount).
+    renderHook(() => useProgressSync('h1-view1'));
+
+    await advance(0);
+    const initialPulls = pullCallCount();
+
+    // Wait past every retry window — nothing should fire because the gate
+    // is already open and the retry timer was cancelled.
+    await advance(20000);
+    expect(pullCallCount()).toBe(initialPulls);
+  });
+
+  test('discards a malformed synced location instead of navigating to it', async () => {
+    // An empty-start range CFI left by the cfi-inert skip-link bug. compare()
+    // returns -1 so it would "win" and drive a goTo if it were not discarded.
+    h.cfiCompareMock.mockReturnValue(-1);
+    h.state.syncedConfigs = [
+      { bookHash: 'h1', metaHash: 'm1', location: 'epubcfi(/6/24!/4,,/20/1:58)', updatedAt: 3000 },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    // The malformed remote location is discarded so it can't move the reader.
+    // (Config is no longer merged from sync — only reading progress drives
+    // navigation — so the local position is left untouched.)
+    expect(h.view.goTo).not.toHaveBeenCalled();
+  });
+
+  test('navigates to a well-formed newer synced location', async () => {
+    h.cfiCompareMock.mockReturnValue(-1);
+    h.state.syncedConfigs = [
+      { bookHash: 'h1', metaHash: 'm1', location: 'epubcfi(/6/24!/4/20/1:58)', updatedAt: 3000 },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.view.goTo).toHaveBeenCalledWith('epubcfi(/6/24!/4/20/1:58)');
+  });
+
+  test('sync-book-progress event resets and re-runs the pull chain', async () => {
+    h.state.syncedConfigs = null;
+    renderHook(() => useProgressSync('h1-view1'));
+
+    await advance(0);
+    // Let one backoff fire, then user invokes a manual refresh.
+    await advance(1500);
+    const callsBeforeRefresh = pullCallCount();
+    expect(callsBeforeRefresh).toBe(2);
+
+    act(() => {
+      const listeners = h.eventListeners.get('sync-book-progress');
+      listeners?.forEach((fn) =>
+        fn(new CustomEvent('sync-book-progress', { detail: { bookKey: 'h1-view1' } })),
+      );
+    });
+    await flushMicrotasks();
+    // The refresh issues a fresh pull immediately.
+    expect(pullCallCount()).toBe(callsBeforeRefresh + 1);
+
+    // And the retry chain restarts from delay[0].
+    await advance(1500);
+    expect(pullCallCount()).toBe(callsBeforeRefresh + 2);
+  });
+
+  test('merges synced book-scope proofread rules into local config by id', async () => {
+    // Local has a book rule; the remote config carries a different book rule
+    // plus a library-scope rule (which must be ignored — it syncs separately
+    // via the settings replica). After the pull both book rules should be
+    // merged into local viewSettings, persisted, and the live view refreshed.
+    h.cfiCompareMock.mockReturnValue(0);
+    h.state.viewSettings = {
+      proofreadRules: [{ id: 'local', scope: 'book', pattern: 'a', updatedAt: 100 }],
+    };
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        viewSettings: {
+          proofreadRules: [
+            { id: 'remote', scope: 'book', pattern: 'b', updatedAt: 200 },
+            { id: 'lib', scope: 'library', pattern: 'c', updatedAt: 200 },
+          ],
+        },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).toHaveBeenCalledTimes(1);
+    const mergedRules = (
+      h.setViewSettingsMock.mock.calls[0]![1] as { proofreadRules: { id: string }[] }
+    ).proofreadRules;
+    // Both book rules merged; the library-scope rule is excluded.
+    expect(mergedRules.map((r) => r.id).sort()).toEqual(['local', 'remote']);
+    expect(h.saveConfigMock).toHaveBeenCalledTimes(1);
+    expect(h.recreateViewerMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #5716: a reference page count typed on one device never reached the
+  // others, because the pull applies only proofreadRules out of a remote
+  // config's viewSettings. The count describes the book's print edition, so it
+  // has to travel like reading state does.
+  test('adopts a synced reference page count into local view settings', async () => {
+    h.cfiCompareMock.mockReturnValue(0);
+    h.state.viewSettings = { proofreadRules: [] };
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: 5000,
+        viewSettings: { referencePageCount: 350 },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).toHaveBeenCalledTimes(1);
+    const applied = h.setViewSettingsMock.mock.calls[0]![1] as { referencePageCount?: number };
+    expect(applied.referencePageCount).toBe(350);
+    expect(h.saveConfigMock).toHaveBeenCalledTimes(1);
+    // The footer reads the count straight off viewSettings, so there is no
+    // reason to tear down and rebuild the view the way a rule change needs.
+    expect(h.recreateViewerMock).not.toHaveBeenCalled();
+  });
+
+  test('a peer without a reference page count never clears the local one', async () => {
+    h.cfiCompareMock.mockReturnValue(0);
+    h.state.viewSettings = { proofreadRules: [], referencePageCount: 350 };
+    h.state.syncedConfigs = [{ bookHash: 'h1', metaHash: 'm1', updatedAt: 5000, viewSettings: {} }];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).not.toHaveBeenCalled();
+    expect(h.saveConfigMock).not.toHaveBeenCalled();
+  });
+
+  test('an equal config timestamp keeps the local page count', async () => {
+    // Pinned on both backends so they can never pick different winners for the
+    // same pair of configs; the file-sync twin lives in sync/file/merge.test.ts.
+    h.cfiCompareMock.mockReturnValue(0);
+    h.state.viewSettings = { proofreadRules: [], referencePageCount: 350 };
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: h.config.updatedAt,
+        viewSettings: { referencePageCount: 400 },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).not.toHaveBeenCalled();
+    expect(h.saveConfigMock).not.toHaveBeenCalled();
+  });
+
+  test('does not rewrite the config when neither side has a page count', async () => {
+    // An unset key and a 0 both mean "no count". Treating them as different
+    // would rewrite viewSettings and bump updatedAt on every single book open.
+    h.cfiCompareMock.mockReturnValue(0);
+    h.state.viewSettings = { proofreadRules: [] };
+    h.state.syncedConfigs = [{ bookHash: 'h1', metaHash: 'm1', updatedAt: 5000, viewSettings: {} }];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).not.toHaveBeenCalled();
+    expect(h.saveConfigMock).not.toHaveBeenCalled();
+  });
+
+  test('does not touch the view when synced proofread rules match local', async () => {
+    h.cfiCompareMock.mockReturnValue(0);
+    const rule = { id: 'same', scope: 'book', pattern: 'a', updatedAt: 100 };
+    h.state.viewSettings = { proofreadRules: [rule] };
+    h.state.syncedConfigs = [
+      { bookHash: 'h1', metaHash: 'm1', viewSettings: { proofreadRules: [rule] } },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setViewSettingsMock).not.toHaveBeenCalled();
+    expect(h.saveConfigMock).not.toHaveBeenCalled();
+    expect(h.recreateViewerMock).not.toHaveBeenCalled();
+  });
+
+  test('sync-book-progress flushes the pending cloud push on book close', async () => {
+    // Reproduces issue #4532: the reader is closed inside the 3s auto-sync
+    // debounce window, so the pending Readest cloud push would otherwise be
+    // dropped on unmount and never reach the cloud.
+    // Mount: the empty pull settles and opens the gate (configPulled = true).
+    const { rerender } = renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+    expect(pushCallCount()).toBe(0);
+
+    // User paginates to a new position — this arms the 3s auto-sync debounce.
+    h.state.progress = { location: 'cfi-loc-next' };
+    await act(async () => {
+      rerender();
+      await flushMicrotasks();
+    });
+    // The debounce has not fired yet, so nothing has been pushed.
+    expect(pushCallCount()).toBe(0);
+
+    // Closing the reader dispatches sync-book-progress within the debounce
+    // window — before the 3s timer would have fired.
+    await act(async () => {
+      const listeners = h.eventListeners.get('sync-book-progress');
+      listeners?.forEach((fn) =>
+        fn(new CustomEvent('sync-book-progress', { detail: { bookKey: 'h1-view1' } })),
+      );
+      await flushMicrotasks();
+    });
+
+    // The pending push is flushed immediately — Device A's last local position
+    // reaches the cloud before the reader tears down.
+    expect(pushCallCount()).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// Issue #5625. The Readest KOReader plugin pushes `progress` + `xpointer` and
+// never a `location`, so the CREngine XPointer is the ONLY precise handle on
+// the remote position. When converting it throws — a chapter whose XHTML isn't
+// well-formed used to make `createDocument()` hand back a body-less
+// `parsererror` document — the rejection escaped `applyRemoteProgress`
+// entirely: the reader stayed put, the proofread merge never ran, and the
+// debounced auto-push then overwrote the newer Kobo position with the older
+// local one.
+describe('useProgressSync — KOReader-origin config (#5625)', () => {
+  // [current, total] as CREngine paginates it, matching the reported payload.
+  const KO_PROGRESS: [number, number] = [176, 411];
+  const KO_FRACTION = 176 / 411;
+  const koConfig = (extra: Record<string, unknown> = {}) => ({
+    bookHash: 'h1',
+    metaHash: 'm1',
+    progress: KO_PROGRESS,
+    xpointer: '/body/DocFragment[14]/body/p[45]/text().0',
+    updatedAt: 3000,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    h.book.format = 'EPUB';
+    h.state.progress = { location: 'cfi-loc', fraction: 0.05 };
+  });
+
+  test('feeds the KOReader page fraction in as the DocFragment drift anchor', async () => {
+    h.state.syncedConfigs = [koConfig()];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.getCFIFromXPointerMock).toHaveBeenCalledTimes(1);
+    expect(h.getCFIFromXPointerMock.mock.calls[0]![4]).toBeCloseTo(KO_FRACTION, 6);
+  });
+
+  test('does not anchor on the percentage when the remote config carries its own CFI', async () => {
+    // A Readest-origin config: its xpointer was derived from that same CFI, so
+    // the nominal DocFragment is already exact and its [page, total] is
+    // foliate's pagination, not CREngine's — re-anchoring on it would move the
+    // target to the wrong section.
+    h.state.syncedConfigs = [koConfig({ location: 'epubcfi(/6/24!/4/20/1:58)' })];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.getCFIFromXPointerMock.mock.calls[0]![4]).toBeUndefined();
+  });
+
+  test('a failed XPointer conversion still lets the rest of the pull run', async () => {
+    h.getCFIFromXPointerMock.mockRejectedValue(new Error('Failed to convert XPointer'));
+    h.state.viewSettings = {
+      proofreadRules: [{ id: 'local', scope: 'book', pattern: 'a', updatedAt: 100 }],
+    };
+    h.state.syncedConfigs = [
+      koConfig({
+        viewSettings: {
+          proofreadRules: [{ id: 'remote', scope: 'book', pattern: 'b', updatedAt: 200 }],
+        },
+      }),
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    // The throw used to reject applyRemoteProgress before this point.
+    expect(h.setViewSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('falls back to the reported fraction when the XPointer cannot be converted', async () => {
+    h.getCFIFromXPointerMock.mockRejectedValue(new Error('Failed to convert XPointer'));
+    h.state.syncedConfigs = [koConfig()];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.view.goToFraction).toHaveBeenCalledTimes(1);
+    expect(h.view.goToFraction.mock.calls[0]![0]).toBeCloseTo(KO_FRACTION, 6);
+  });
+
+  test('never walks the reader backwards on that fallback', async () => {
+    // Local is already past the Kobo position; an approximate jump would be a
+    // regression, and the auto-push will carry the local position forward.
+    h.getCFIFromXPointerMock.mockRejectedValue(new Error('Failed to convert XPointer'));
+    h.state.progress = { location: 'cfi-loc', fraction: 0.9 };
+    h.state.syncedConfigs = [koConfig()];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.view.goToFraction).not.toHaveBeenCalled();
+  });
+
+  test('prefers the converted CFI over the approximate fraction', async () => {
+    h.getCFIFromXPointerMock.mockResolvedValue('epubcfi(/6/30!/4/90/1:0)');
+    h.cfiCompareMock.mockReturnValue(-1);
+    h.state.syncedConfigs = [koConfig()];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.view.goTo).toHaveBeenCalledWith('epubcfi(/6/30!/4/90/1:0)');
+    expect(h.view.goToFraction).not.toHaveBeenCalled();
+  });
+});

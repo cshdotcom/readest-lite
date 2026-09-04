@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useEffect, useRef } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useSpatialNavigation } from '@/app/reader/hooks/useSpatialNavigation';
 import { useReaderStore } from '@/store/readerStore';
@@ -11,6 +11,7 @@ import { useDeviceControlStore } from '@/store/deviceStore';
 import { eventDispatcher } from '@/utils/event';
 import type { FooterBarProps, NavigationHandlers, FooterBarChildProps } from './types';
 import { debounce } from '@/utils/debounce';
+import { isForcedMobileLayout } from '../../utils/mobileLayout';
 import { RSVPControl } from '../rsvp';
 import MobileFooterBar from './MobileFooterBar';
 import DesktopFooterBar from './DesktopFooterBar';
@@ -28,7 +29,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const _ = useTranslation();
   const { appService } = useEnv();
   const { getConfig, setConfig, getBookData } = useBookDataStore();
-  const { hoveredBookKey, setHoveredBookKey } = useReaderStore();
+  const { hoveredBookKey, setHoveredBookKey, bottomBarTab, setBottomBarTab } = useReaderStore();
   const { getView, getViewState, getProgress, getViewSettings } = useReaderStore();
   const { isSideBarVisible, isSideBarPinned, setSideBarVisible } = useSidebarStore();
   const { acquireBackKeyInterception, releaseBackKeyInterception } = useDeviceControlStore();
@@ -40,8 +41,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const progress = getProgress(bookKey);
   const viewSettings = getViewSettings(bookKey);
 
-  const [userSelectedTab, setUserSelectedTab] = useState('');
-  const actionTab = hoveredBookKey === bookKey ? userSelectedTab : '';
+  const actionTab = hoveredBookKey === bookKey ? bottomBarTab : '';
   const isVisible = hoveredBookKey === bookKey;
 
   const docs = view?.renderer.getContents() ?? [];
@@ -101,7 +101,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
 
   const handleSetActionTab = useCallback(
     (tab: string) => {
-      setUserSelectedTab((prevTab) => (prevTab === tab ? '' : tab));
+      setBottomBarTab(bottomBarTab === tab ? '' : tab);
 
       if (tab === 'tts') {
         if (viewState?.ttsEnabled) {
@@ -127,8 +127,10 @@ const FooterBar: React.FC<FooterBarProps> = ({
     [
       config,
       bookKey,
+      bottomBarTab,
       viewState?.ttsEnabled,
       setConfig,
+      setBottomBarTab,
       setSideBarVisible,
       setHoveredBookKey,
       handleSpeakText,
@@ -195,12 +197,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const footerBarRef = useRef<HTMLDivElement>(null);
   useSpatialNavigation(footerBarRef, isVisible);
 
-  // Force the mobile footer bar on mobile tablets/foldables in portrait mode
-  // where the viewport width exceeds the `sm:` (640px) breakpoint. Phones
-  // (innerWidth < 640) are intentionally excluded so their styling and panel
-  // slide-down animation remain exactly as before — see #3742 / #3746.
-  const forceMobileLayout =
-    !!appService?.isMobile && window.innerWidth >= 640 && window.innerWidth <= window.innerHeight;
+  const forceMobileLayout = isForcedMobileLayout(appService?.isMobile);
 
   const commonProps: FooterBarChildProps = {
     bookKey,
@@ -228,7 +225,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
     !isSideBarVisible && appService?.hasRoundedWindow && 'rounded-window-bottom-left',
     isHoveredAnim && 'hover-bar-anim',
     !forceMobileLayout &&
-      (needHorizontalScroll ? 'sm:!bottom-3 sm:!h-10 sm:justify-end' : 'sm:justify-center'),
+      (needHorizontalScroll ? 'sm:bottom-3! sm:h-10! sm:justify-end' : 'sm:justify-center'),
     isVisible
       ? 'pointer-events-auto translate-y-0 opacity-100'
       : forceMobileLayout
@@ -246,7 +243,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
         tabIndex={-1}
         className={clsx(
           'absolute bottom-0 left-0 z-10 flex h-[52px] w-full',
-          needHorizontalScroll && 'sm:!bottom-3 sm:!h-7',
+          needHorizontalScroll && 'sm:bottom-3! sm:h-7!',
           isMobile || pointerInDoc ? 'pointer-events-none' : '',
         )}
         onMouseEnter={() => !isMobile && setHoveredBookKey(bookKey)}

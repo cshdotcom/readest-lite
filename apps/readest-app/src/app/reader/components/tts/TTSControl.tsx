@@ -39,6 +39,7 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
   const isEink = viewSettings?.isEink ?? false;
   const playerStyle = viewSettings?.ttsPlayerStyle ?? 'full';
   const hasTimeline = tts.ttsClientsInited && tts.handleSupportsPlaybackInfo();
+  const audioTransport = tts.ttsClientsInited && tts.audioTransport;
   const miniPlayerMounted = tts.showIndicator && !showPlayerSheet;
   const miniPlayerVisible = useMiniPlayerAutoHide(bookKey, playerStyle, miniPlayerMounted);
 
@@ -105,9 +106,11 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
         <TTSMiniPlayer
           bookKey={bookKey}
           isPlaying={tts.isPlaying}
+          buffering={tts.buffering}
           isEink={isEink}
           visible={miniPlayerVisible}
           hasTimeline={hasTimeline}
+          audioTransport={audioTransport}
           timeoutTimestamp={tts.timeoutTimestamp}
           chapterRemainingSec={tts.chapterRemainingSec}
           gridInsets={gridInsets}
@@ -126,6 +129,7 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
           ttsLang={tts.ttsLang}
           isPlaying={tts.isPlaying}
           hasTimeline={hasTimeline}
+          audioTransport={audioTransport}
           timeoutOption={tts.timeoutOption}
           timeoutTimestamp={tts.timeoutTimestamp}
           chapterRemainingSec={tts.chapterRemainingSec}
@@ -134,8 +138,6 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
           onBackward={tts.handleBackward}
           onForward={tts.handleForward}
           onSetRate={tts.handleSetRate}
-          onSetSentenceGap={tts.handleSetSentenceGap}
-          onSetParagraphGap={tts.handleSetParagraphGap}
           onGetVoices={tts.handleGetVoices}
           onSetVoice={tts.handleSetVoice}
           onGetVoiceId={tts.handleGetVoiceId}
@@ -143,6 +145,12 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
           onSeek={tts.handleSeekTo}
           onSeekPreview={tts.handleSeekPreview}
           onGetPlaybackInfo={tts.handleGetPlaybackInfo}
+          supportsLyrics={tts.supportsLyrics}
+          buffering={tts.buffering}
+          onGetLyrics={tts.handleGetLyrics}
+          onGetActiveIndex={tts.handleGetLyricActiveIndex}
+          onGetLyricPage={tts.handleGetLyricPage}
+          onPlayFromLyric={tts.handlePlayFromLyric}
           downloads={downloads}
           activeSectionIndex={activeSectionIndex}
         />

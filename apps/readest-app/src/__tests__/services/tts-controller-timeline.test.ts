@@ -1,0 +1,372 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { TTSController } from '@/services/tts/TTSController';
+import { TTSClient, TTSMessageEvent } from '@/services/tts/TTSClient';
+import { recordMeasuredDuration } from '@/services/tts/ttsDuration';
+import { FoliateView } from '@/types/view';
+
+// --- Heavy clients replaced with light fakes (same pattern as the main
+// controller suite); foliate tts.js provides a REAL-shaped getSentences fake
+// that yields ranges from a jsdom document.
+
+const makeMockClient = (name: string): TTSClient => ({
+  name,
+  initialized: true,
+  init: vi.fn().mockResolvedValue(true),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+  speak: vi.fn().mockImplementation(async function* (): AsyncIterable<TTSMessageEvent> {
+    yield { code: 'end', message: 'done' };
+  }),
+  pause: vi.fn().mockResolvedValue(true),
+  resume: vi.fn().mockResolvedValue(true),
+  stop: vi.fn().mockResolvedValue(undefined),
+  setPrimaryLang: vi.fn(),
+  setRate: vi.fn().mockResolvedValue(undefined),
+  setPitch: vi.fn().mockResolvedValue(undefined),
+  setVoice: vi.fn().mockResolvedValue(undefined),
+  getAllVoices: vi.fn().mockResolvedValue([]),
+  getVoices: vi.fn().mockResolvedValue([]),
+  getGranularities: vi.fn().mockReturnValue(['sentence']),
+  getCapabilities: vi.fn().mockReturnValue({
+    wordBoundaries: true,
+    mediaClock: true,
+    gapControl: true,
+    liveRateChange: false,
+  }),
+  getVoiceId: vi.fn().mockReturnValue('timeline-ctrl-voice'),
+  getSpeakingLang: vi.fn().mockReturnValue('en'),
+  getChunkPosition: vi.fn().mockReturnValue(0.5),
+});
+
+vi.mock('@/services/tts/WebSpeechClient', () => ({
+  WebSpeechClient: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    Object.assign(this, makeMockClient('web-speech'), {
+      // Faithful to the real client: the OS renders the audio, so there is no
+      // media clock — which is what gates the timeline and the scrubber.
+      getCapabilities: vi.fn().mockReturnValue({
+        wordBoundaries: false,
+        mediaClock: false,
+        gapControl: false,
+        liveRateChange: false,
+      }),
+    });
+  }),
+}));
+
+vi.mock('@/services/tts/EdgeTTSClient', () => ({
+  EdgeTTSClient: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    Object.assign(this, makeMockClient('edge-tts'));
+  }),
+}));
+
+vi.mock('@/services/tts/NativeTTSClient', () => ({
+  NativeTTSClient: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    Object.assign(this, makeMockClient('native'));
+  }),
+}));
+
+vi.mock('@/services/tts/TTSUtils', () => ({
+  TTSUtils: {
+    getPreferredClient: vi.fn().mockReturnValue('edge-tts'),
+    setPreferredClient: vi.fn(),
+    setPreferredVoice: vi.fn(),
+    getPreferredVoice: vi.fn().mockReturnValue(null),
+  },
+}));
+
+vi.mock('foliate-js/overlayer.js', () => ({
+  Overlayer: { highlight: 'highlightFn' },
+}));
+
+// Sentences of the fake section; ends avoid foliate's short-word
+// abbreviation merge so counts stay predictable.
+const S0 = 'The opening sentence of the chapter reads aloud smoothly.';
+const S1 = 'A following sentence continues the passage without pause.';
+const S2 = 'The final sentence wraps the paragraph completely together.';
+
+let sectionDoc: Document;
+let sentenceRanges: Range[] = [];
+
+const buildSectionDoc = () => {
+  const parser = new DOMParser();
+  sectionDoc = parser.parseFromString(
+    `<!DOCTYPE html><html lang="en"><body><p id="p">${S0} ${S1} ${S2}</p></body></html>`,
+    'text/html',
+  );
+  const textNode = sectionDoc.getElementById('p')!.firstChild!;
+  const full = textNode.textContent!;
+  sentenceRanges = [S0, S1, S2].map((s) => {
+    const start = full.indexOf(s);
+    const range = sectionDoc.createRange();
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + s.length);
+    return range;
+  });
+};
+
+vi.mock('foliate-js/tts.js', () => ({
+  TTS: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    Object.assign(this, {
+      start: vi.fn().mockReturnValue('<speak>hello</speak>'),
+      resume: vi.fn().mockReturnValue('<speak>hello</speak>'),
+      // End-of-section after one paragraph so auto-advance terminates instead
+      // of looping the controller forever in tests.
+      next: vi.fn().mockReturnValue(undefined),
+      prev: vi.fn().mockReturnValue(undefined),
+      from: vi.fn().mockReturnValue('<speak>from</speak>'),
+      setMark: vi.fn().mockImplementation(() => sentenceRanges[0]!.cloneRange()),
+      getLastRange: vi.fn().mockImplementation(() => sentenceRanges[0]!.cloneRange()),
+      doc: null,
+    });
+  }),
+  getSentences: vi.fn().mockImplementation(function* () {
+    for (let i = 0; i < sentenceRanges.length; i++) {
+      yield { blockIndex: 0, markName: String(i), range: sentenceRanges[i]! };
+    }
+  }),
+}));
+
+vi.mock('foliate-js/text-walker.js', () => ({ textWalker: vi.fn() }));
+
+vi.mock('@/utils/ssml', () => ({
+  filterSSMLWithLang: vi.fn((ssml: string) => ssml),
+  parseSSMLMarks: vi.fn(() => ({
+    plainText: 'hello',
+    marks: [{ offset: 0, name: '0', text: 'hello', language: 'en' }],
+  })),
+}));
+
+vi.mock('@/utils/node', () => ({ createRejectFilter: vi.fn(() => () => 1) }));
+vi.mock('@/utils/lang', () => ({
+  isValidLang: vi.fn(() => true),
+  isCJKLang: vi.fn(() => false),
+}));
+
+const makeView = () => {
+  const contents = {
+    doc: sectionDoc,
+    index: 0,
+    overlayer: { add: vi.fn(), remove: vi.fn() },
+  };
+  return {
+    book: { sections: [{ createDocument: vi.fn().mockResolvedValue(sectionDoc) }] },
+    renderer: { getContents: () => [contents], primaryIndex: 0 },
+    language: { isCJK: false },
+    getCFI: vi.fn().mockReturnValue('epubcfi(/6/2!/4/2)'),
+    getCFIProgress: vi.fn().mockResolvedValue({
+      fraction: 0.05,
+      section: { current: 4, total: 12 },
+      location: { current: 2, next: 3, total: 30 },
+      time: { section: 60, total: 900 },
+    }),
+    resolveCFI: vi.fn().mockReturnValue({ anchor: () => sentenceRanges[0] }),
+    tts: null,
+  } as unknown as FoliateView;
+};
+
+describe('TTSController section timeline', () => {
+  let controller: TTSController;
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    buildSectionDoc();
+    controller = new TTSController(null, makeView());
+    await controller.init();
+    await controller.initViewTTS(0);
+  });
+
+  test('ensureTimeline builds lazily for the edge client and caches per section', async () => {
+    const timeline = await controller.ensureTimeline();
+    expect(timeline).not.toBeNull();
+    expect(timeline!.length).toBe(3);
+    expect(await controller.ensureTimeline()).toBe(timeline);
+  });
+
+  test('getPlaybackInfo composes sentence position with the chunk clock', async () => {
+    recordMeasuredDuration('timeline-ctrl-voice', S0, 4);
+    recordMeasuredDuration('timeline-ctrl-voice', S1, 6);
+    await controller.ensureTimeline();
+    // getLastRange resolves to sentence 0; client chunk position is 0.5s.
+    const info = controller.getPlaybackInfo();
+    expect(info).not.toBeNull();
+    expect(info!.position).toBeCloseTo(0.5, 5);
+    expect(info!.duration).toBeGreaterThan(10);
+    expect(info!.measuredFraction).toBeGreaterThan(0);
+  });
+
+  test('getPlaybackInfo is null before the timeline is built (reserved-slot state)', () => {
+    expect(controller.getPlaybackInfo()).toBeNull();
+  });
+
+  test('getPlaybackInfo is null for clients without a media clock', async () => {
+    await controller.setVoice('', 'en'); // empty voice id: falls through to web client
+    controller.ttsClient = controller.ttsWebClient;
+    expect(await controller.ensureTimeline()).toBeNull();
+    expect(controller.getPlaybackInfo()).toBeNull();
+  });
+
+  test('seekToTime snaps to the sentence and speaks from its range while playing', async () => {
+    recordMeasuredDuration('timeline-ctrl-voice', S0, 4);
+    recordMeasuredDuration('timeline-ctrl-voice', S1, 6);
+    await controller.ensureTimeline();
+    controller.state = 'playing';
+    await controller.seekToTime(5); // inside sentence 1
+    const tts = controller.view.tts as unknown as { from: ReturnType<typeof vi.fn> };
+    expect(tts.from).toHaveBeenCalledTimes(1);
+    const arg = tts.from.mock.calls[0]![0] as Range;
+    expect(arg.toString()).toBe(S1);
+  });
+
+  test('seekToTime while paused stays paused and still navigates', async () => {
+    await controller.ensureTimeline();
+    controller.state = 'paused';
+    await controller.seekToTime(0);
+    expect(controller.state).toBe('forward-paused');
+    const tts = controller.view.tts as unknown as { from: ReturnType<typeof vi.fn> };
+    expect(tts.from).toHaveBeenCalled();
+  });
+
+  test('seekToTime past the end clamps to the last sentence', async () => {
+    await controller.ensureTimeline();
+    controller.state = 'playing';
+    await controller.seekToTime(9999);
+    const tts = controller.view.tts as unknown as { from: ReturnType<typeof vi.fn> };
+    const arg = tts.from.mock.calls[0]![0] as Range;
+    expect(arg.toString()).toBe(S2);
+  });
+
+  test('setRate rescales the timeline', async () => {
+    recordMeasuredDuration('timeline-ctrl-voice', S0, 4);
+    recordMeasuredDuration('timeline-ctrl-voice', S1, 4);
+    recordMeasuredDuration('timeline-ctrl-voice', S2, 4);
+    const timeline = await controller.ensureTimeline();
+    const before = timeline!.getDuration();
+    await controller.setRate(2);
+    expect(timeline!.getDuration()).toBeCloseTo(before / 2, 5);
+  });
+
+  test('shutdown drops the timeline', async () => {
+    await controller.ensureTimeline();
+    await controller.shutdown();
+    expect(controller.getPlaybackInfo()).toBeNull();
+  });
+});
+
+// Lyric view (#5755): the player draws the section's sentences as scrollable
+// lines only when the engine aligns audio to them. Everything below reads the
+// SAME timeline the scrubber uses, addressed by ordinal instead of by seconds.
+describe('TTSController lyrics', () => {
+  let controller: TTSController;
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    buildSectionDoc();
+    controller = new TTSController(null, makeView());
+    await controller.init();
+    await controller.initViewTTS(0);
+  });
+
+  test('supportsLyrics requires both a media clock and real text timing', async () => {
+    expect(controller.supportsLyrics()).toBe(true);
+
+    // A chapter-only audiobook pairing: exact audio clock, no sentence
+    // alignment — the plain cover player, not lyrics.
+    (controller.ttsClient.getCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
+      wordBoundaries: false,
+      mediaClock: true,
+      gapControl: false,
+      liveRateChange: true,
+      textHighlight: false,
+    });
+    expect(controller.supportsLyrics()).toBe(false);
+
+    // A direct-speak engine has no clock to seek with at all.
+    controller.ttsClient = controller.ttsWebClient;
+    expect(controller.supportsLyrics()).toBe(false);
+    expect(await controller.getLyrics()).toBeNull();
+  });
+
+  test('getLyrics returns one normalized line per timeline sentence', async () => {
+    const lyrics = await controller.getLyrics();
+    expect(lyrics).not.toBeNull();
+    expect(lyrics!.sectionIndex).toBe(0);
+    expect(lyrics!.lines).toEqual([S0, S1, S2]);
+  });
+
+  test('getCurrentLyricIndex falls back to the last spoken range', async () => {
+    expect(controller.getCurrentLyricIndex()).toBe(-1); // no timeline yet
+    await controller.ensureTimeline();
+    expect(controller.getCurrentLyricIndex()).toBe(0);
+  });
+
+  test('seekToLyric speaks from that line, even from a parked session', async () => {
+    await controller.ensureTimeline();
+    controller.state = 'paused';
+    await controller.seekToLyric(2);
+    const tts = controller.view.tts as unknown as { from: ReturnType<typeof vi.fn> };
+    expect(tts.from).toHaveBeenCalledTimes(1);
+    expect((tts.from.mock.calls[0]![0] as Range).toString()).toBe(S2);
+    // The play button means "read from here": it never leaves the session parked.
+    await vi.waitFor(() => expect(controller.state).toBe('playing'));
+  });
+
+  test('seekToLyric ignores an ordinal the section does not have', async () => {
+    await controller.ensureTimeline();
+    await controller.seekToLyric(99);
+    const tts = controller.view.tts as unknown as { from: ReturnType<typeof vi.fn> };
+    expect(tts.from).not.toHaveBeenCalled();
+  });
+
+  test('isBuffering covers the wait between handing over an utterance and hearing it', async () => {
+    await controller.ensureTimeline();
+    expect(controller.isBuffering()).toBe(false);
+
+    // A client that accepts the utterance and stays silent — synthesis in
+    // flight, or a recording still loading.
+    let release: (() => void) | null = null;
+    const audible = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    (controller.ttsClient.speak as ReturnType<typeof vi.fn>).mockImplementation(async function* (
+      _ssml: string,
+      _signal: AbortSignal,
+      preload?: boolean,
+    ) {
+      if (preload) return;
+      await audible;
+      yield { code: 'boundary', message: 'first chunk', mark: '0' };
+    });
+
+    await controller.seekToLyric(1);
+    await vi.waitFor(() => expect(controller.isBuffering()).toBe(true));
+
+    release!();
+    await vi.waitFor(() => expect(controller.isBuffering()).toBe(false));
+  });
+
+  test('isBuffering stays false while the session is not playing', async () => {
+    await controller.ensureTimeline();
+    controller.state = 'playing';
+    await controller.pause();
+    expect(controller.isBuffering()).toBe(false);
+  });
+
+  test('getLyricPage resolves the line to the page number the footer shows', async () => {
+    await controller.ensureTimeline();
+    const view = controller.view as unknown as {
+      getCFIProgress: ReturnType<typeof vi.fn>;
+      book: { rendition?: { layout?: string } };
+    };
+    expect(await controller.getLyricPage(1)).toEqual({ current: 2, next: 3, total: 30 });
+    expect(view.getCFIProgress).toHaveBeenCalledWith('epubcfi(/6/2!/4/2)');
+
+    // Fixed-layout books number pages by section, matching FooterBar.
+    view.book.rendition = { layout: 'pre-paginated' };
+    expect(await controller.getLyricPage(1)).toEqual({ current: 4, total: 12 });
+  });
+
+  test('getLyricPage is null before the timeline exists and for unknown lines', async () => {
+    expect(await controller.getLyricPage(0)).toBeNull();
+    await controller.ensureTimeline();
+    expect(await controller.getLyricPage(99)).toBeNull();
+  });
+});

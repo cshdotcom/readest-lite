@@ -21,6 +21,8 @@ import {
   type BookContextMenuItemId,
 } from '@/app/library/utils/libraryUtils';
 import { md5Fingerprint } from '@/utils/md5';
+import { isTauriAppPlatform } from '@/services/environment';
+import { isLocalSendEnabled } from '@/services/localsend/devicePrefs';
 import BookItem from './BookItem';
 import GroupItem from './GroupItem';
 import BookContextMenuPopup, { type BookContextMenuItem } from './BookContextMenuPopup';
@@ -121,11 +123,11 @@ interface BookshelfItemProps {
   mode: LibraryViewModeType;
   item: Book | BooksGroup;
   coverFit: LibraryCoverFitType;
-  isSelectMode?: boolean;
+  isSelectMode: boolean;
   itemSelected: boolean;
   transferProgress: number | null;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  toggleSelection?: (hash: string) => void;
+  toggleSelection: (hash: string) => void;
   handleGroupBooks: () => void;
   handleBookDownload: (
     book: Book,
@@ -133,11 +135,11 @@ interface BookshelfItemProps {
   ) => Promise<boolean>;
   handleBookUpload: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleBookDelete: (book: Book, syncBooks?: boolean) => Promise<boolean>;
-  handleSetSelectMode?: (selectMode: boolean) => void;
+  handleSetSelectMode: (selectMode: boolean) => void;
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
   handleUpdateReadingStatus: (book: Book, status: ReadingStatus | undefined) => void;
-  showTimeRemaining?: boolean;
+  showTimeRemaining: boolean;
 }
 
 const BookshelfItem: React.FC<BookshelfItemProps> = ({
@@ -171,7 +173,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   const handleBookClick = useCallback(
     async (book: Book) => {
       if (isSelectMode) {
-        toggleSelection?.(book.hash);
+        toggleSelection(book.hash);
         return;
       }
       await openBook(book);
@@ -182,7 +184,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   const handleGroupClick = useCallback(
     (group: BooksGroup) => {
       if (isSelectMode) {
-        toggleSelection?.(group.id);
+        toggleSelection(group.id);
       } else {
         handleLibraryNavigation(group.id);
       }
@@ -203,16 +205,16 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
       select: {
         text: itemSelected ? _('Deselect Book') : _('Select Book'),
         action: async () => {
-          if (!isSelectMode) handleSetSelectMode?.(true);
-          toggleSelection?.(book.hash);
+          if (!isSelectMode) handleSetSelectMode(true);
+          toggleSelection(book.hash);
         },
       },
       group: {
         text: _('Group Books'),
         action: async () => {
-          if (!isSelectMode) handleSetSelectMode?.(true);
+          if (!isSelectMode) handleSetSelectMode(true);
           if (!itemSelected) {
-            toggleSelection?.(book.hash);
+            toggleSelection(book.hash);
           }
           handleGroupBooks();
         },
@@ -280,6 +282,13 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           eventDispatcher.dispatch('show-share-dialog', { book });
         },
       },
+      sendNearby: {
+        text: _('Send to Nearby Device'),
+        action: async () => {
+          // LocalSendManager hosts the device picker and resolves the file.
+          eventDispatcher.dispatch('localsend-send-books', { books: [book] });
+        },
+      },
       delete: {
         text: _('Delete'),
         action: async () => {
@@ -287,7 +296,9 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         },
       },
     };
-    return getBookContextMenuItemIds(book).map((id) => itemOptions[id]);
+    return getBookContextMenuItemIds(book, {
+      localSend: isTauriAppPlatform() && isLocalSendEnabled(),
+    }).map((id) => itemOptions[id]);
   };
 
   const buildGroupMenuItems = (group: BooksGroup): BookContextMenuItem[] => {
@@ -297,16 +308,16 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
       {
         text: itemSelected ? _('Deselect Group') : _('Select Group'),
         action: async () => {
-          if (!isSelectMode) handleSetSelectMode?.(true);
-          toggleSelection?.(group.id);
+          if (!isSelectMode) handleSetSelectMode(true);
+          toggleSelection(group.id);
         },
       },
       {
         text: _('Group Books'),
         action: async () => {
-          if (!isSelectMode) handleSetSelectMode?.(true);
+          if (!isSelectMode) handleSetSelectMode(true);
           if (!itemSelected) {
-            toggleSelection?.(group.id);
+            toggleSelection(group.id);
           }
           handleGroupBooks();
         },
@@ -369,12 +380,12 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   const handleSelectItem = useCallback(
     throttle(() => {
       if (!isSelectMode) {
-        handleSetSelectMode?.(true);
+        handleSetSelectMode(true);
       }
       if ('format' in item) {
-        toggleSelection?.((item as Book).hash);
+        toggleSelection((item as Book).hash);
       } else {
-        toggleSelection?.((item as BooksGroup).id);
+        toggleSelection((item as BooksGroup).id);
       }
     }, 100),
     [isSelectMode],

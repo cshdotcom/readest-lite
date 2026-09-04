@@ -123,6 +123,10 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
     );
   };
 
+  const handleToggleHideCovers = async () => {
+    await saveSysSettings(envConfig, 'libraryHideCovers', !settings.libraryHideCovers);
+  };
+
   const handleSetColumns = async (value: number) => {
     await saveSysSettings(envConfig, 'libraryColumns', value);
     await saveSysSettings(envConfig, 'libraryAutoColumns', false);
@@ -191,7 +195,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
         <MenuItem
           key={option.value}
           label={option.label}
-          buttonClass='min-h-8 !py-1'
+          buttonClass='min-h-8 py-1!'
           toggled={viewMode === option.value}
           onClick={() => handleSetViewMode(option.value as LibraryViewModeType)}
           transient
@@ -202,19 +206,19 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem
         label={_('Columns')}
-        buttonClass='min-h-8 !py-1'
+        buttonClass='min-h-8 py-1!'
         labelClass='text-sm sm:text-xs'
         disabled
       />
       <MenuItem
         label={_('Auto')}
-        buttonClass='min-h-10 !py-2'
+        buttonClass='min-h-10 py-2!'
         toggled={autoColumns}
         disabled={viewMode === 'list'}
         siblings={
           <NumberInput
-            className='!h-10 !p-0 !pe-1 !ps-0'
-            inputClassName={`!p-0 text-center text-base sm:text-sm !w-10 !h-6 !pe-0 ${autoColumns ? 'opacity-50' : ''}`}
+            className='h-10! p-0! pe-1! ps-0!'
+            inputClassName={`p-0! text-center text-base sm:text-sm w-10! h-6! pe-0! ${autoColumns ? 'opacity-50' : ''}`}
             label={''}
             value={columns}
             disabled={viewMode === 'list'}
@@ -230,7 +234,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem
         label={_('Book Covers')}
-        buttonClass='min-h-8 !py-1'
+        buttonClass='min-h-8 py-1!'
         labelClass='text-sm sm:text-xs'
         disabled
       />
@@ -238,18 +242,28 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
         <MenuItem
           key={option.value}
           label={option.label}
-          buttonClass='min-h-8 !py-1'
+          buttonClass='min-h-8 py-1!'
           toggled={coverFit === option.value}
           onClick={() => handleToggleCropCovers(option.value as LibraryCoverFitType)}
           transient
         />
       ))}
 
+      {/* Hide covers */}
+      <hr aria-hidden='true' className='border-base-200 my-1' />
+      <MenuItem
+        label={_('Hide covers')}
+        buttonClass='min-h-8 py-1!'
+        toggled={settings.libraryHideCovers}
+        onClick={handleToggleHideCovers}
+        transient
+      />
+
       {/* Recently read shelf */}
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem
         label={_('Show recently read')}
-        buttonClass='min-h-8 !py-1'
+        buttonClass='min-h-8 py-1!'
         toggled={settings.libraryRecentShelfEnabled}
         onClick={handleToggleRecentShelf}
         transient
@@ -257,13 +271,13 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
 
       {/* Group By - Collapsible */}
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('Group by...')} detailsOpen={true} buttonClass='py-[4px]'>
+      <MenuItem label={_('Group by...')} detailsOpen={true} buttonClass='py-1!'>
         <ul className='ms-0 flex flex-col ps-0 before:hidden'>
           {groupByOptions.map((option) => (
             <MenuItem
               key={option.value}
               label={option.label}
-              buttonClass='min-h-8 !py-1'
+              buttonClass='min-h-8 py-1!'
               toggled={groupBy === option.value}
               onClick={() => handleSetGroupBy(option.value as LibraryGroupByType)}
               transient
@@ -274,7 +288,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
 
       {/* Sort By - Collapsible */}
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('Sort by...')} detailsOpen={false} buttonClass='py-[4px]'>
+      <MenuItem label={_('Sort by...')} detailsOpen={false} buttonClass='py-1!'>
         <ul className='ms-0 flex flex-col ps-0 before:hidden'>
           {sortByOptions.map((option) => {
             const isImplicit = primaryIsImplicit && option.value === primaryEffective;
@@ -283,7 +297,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
               <MenuItem
                 key={option.value}
                 label={isImplicit ? `${option.label} (${_('Auto')})` : option.label}
-                buttonClass='min-h-8 !py-1'
+                buttonClass='min-h-8 py-1!'
                 toggled={toggled}
                 onClick={() => handleSetSortBy(option.value as LibrarySortByType)}
                 transient
@@ -295,7 +309,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
             <MenuItem
               key={option.value.toString()}
               label={option.label}
-              buttonClass='min-h-8 !py-1'
+              buttonClass='min-h-8 py-1!'
               toggled={isAscending === option.value}
               onClick={() => handleSetSortAscending(option.value)}
               transient
@@ -306,7 +320,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
 
       {/* Then by - secondary sort, collapsible */}
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('Then by...')} detailsOpen={false} buttonClass='py-[4px]'>
+      <MenuItem label={_('Then by...')} detailsOpen={false} buttonClass='py-1!'>
         <ul className='ms-0 flex flex-col ps-0 before:hidden'>
           {thenSortByOptions.map((option) => {
             const isImplicit = secondaryIsImplicit && option.value === secondaryEffective;
@@ -315,7 +329,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
               <MenuItem
                 key={option.value}
                 label={isImplicit ? `${option.label} (${_('Auto')})` : option.label}
-                buttonClass='min-h-8 !py-1'
+                buttonClass='min-h-8 py-1!'
                 toggled={isExplicit || isImplicit}
                 onClick={() => handleSetThenSortBy(option.value)}
                 transient
@@ -329,7 +343,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
                 <MenuItem
                   key={option.value.toString()}
                   label={option.label}
-                  buttonClass='min-h-8 !py-1'
+                  buttonClass='min-h-8 py-1!'
                   toggled={isThenAscending === option.value}
                   onClick={() => handleSetThenSortAscending(option.value)}
                   transient

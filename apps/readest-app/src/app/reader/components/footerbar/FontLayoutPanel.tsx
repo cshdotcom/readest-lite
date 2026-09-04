@@ -2,8 +2,10 @@ import clsx from 'clsx';
 import React, { useCallback } from 'react';
 import { TbBoxMargin } from 'react-icons/tb';
 import { RxLineHeight } from 'react-icons/rx';
+import { PiGear } from 'react-icons/pi';
 import { useEnv } from '@/context/EnvContext';
 import { useReaderStore } from '@/store/readerStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { saveViewSettings } from '@/helpers/settings';
 import Slider from '@/components/Slider';
@@ -44,7 +46,8 @@ export const FontLayoutPanel: React.FC<FontLayoutPanelProps> = ({
 }) => {
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
-  const { getView, getViewSettings } = useReaderStore();
+  const { getView, getViewSettings, setHoveredBookKey } = useReaderStore();
+  const { setSettingsDialogBookKey, setSettingsDialogOpen, setRequestedPanel } = useSettingsStore();
   const viewSettings = getViewSettings(bookKey);
   const view = getView(bookKey);
 
@@ -87,6 +90,19 @@ export const FontLayoutPanel: React.FC<FontLayoutPanelProps> = ({
     [envConfig, bookKey],
   );
 
+  const handleOpenSettings = useCallback(() => {
+    setHoveredBookKey('');
+    setSettingsDialogBookKey(bookKey);
+    setRequestedPanel('Font');
+    setSettingsDialogOpen(true);
+  }, [
+    bookKey,
+    setHoveredBookKey,
+    setSettingsDialogBookKey,
+    setRequestedPanel,
+    setSettingsDialogOpen,
+  ]);
+
   const getMarginProgressValue = useCallback((marginPx: number, gapPercent: number) => {
     const { MAX_MARGIN_PX, MAX_GAP_PERCENT, MARGIN_RATIO } = MARGIN_CONSTANTS;
     return (marginPx / MAX_MARGIN_PX + gapPercent / MAX_GAP_PERCENT) * MARGIN_RATIO;
@@ -96,9 +112,13 @@ export const FontLayoutPanel: React.FC<FontLayoutPanelProps> = ({
     'footerbar-font-mobile not-eink:bg-base-200 eink:bg-base-100 absolute flex w-full flex-col items-center gap-y-8 px-4 transition-all',
     'eink:border-base-content eink:border-t',
     !forceMobileLayout && 'sm:hidden',
+    // Paddings stay constant in both states (the slide is transform-only) so
+    // offsetHeight always reports the panel's settled height; the TTS mini
+    // player measures it to stack above the expanded panel.
+    'pb-4 pt-8',
     actionTab === 'font'
-      ? 'pointer-events-auto translate-y-0 pb-4 pt-8 ease-out'
-      : 'pointer-events-none invisible translate-y-full overflow-hidden pb-0 pt-0 ease-in',
+      ? 'pointer-events-auto translate-y-0 ease-out'
+      : 'pointer-events-none invisible translate-y-full overflow-hidden ease-in',
   );
 
   return (
@@ -146,6 +166,17 @@ export const FontLayoutPanel: React.FC<FontLayoutPanelProps> = ({
           onChange={handleLineHeightChange}
         />
       </div>
+      {/* -mt-4 halves the container's gap-y-8 above this row: the sliders are
+          peers of each other, this is a trailing escape hatch and reads better
+          tucked closer. `self-end` follows `dir`, so it mirrors in RTL. */}
+      <button
+        type='button'
+        className='btn btn-ghost btn-sm text-base-content/70 -mt-4 h-8 min-h-8 gap-1.5 self-end px-2 font-normal'
+        onClick={handleOpenSettings}
+      >
+        <PiGear size={16} />
+        {_('More Settings')}
+      </button>
     </div>
   );
 };

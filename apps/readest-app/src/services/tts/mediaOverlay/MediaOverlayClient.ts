@@ -10,18 +10,30 @@
 // pars in a paragraph are contiguous audio, and re-seeking between them would
 // put an audible seam in the middle of a narrated sentence.
 //
-// On iOS Tauri the clock is an in-process AVPlayer (NativeNarrationPlayer):
-// HTMLAudioElement is interrupted when TTSMediaBridge claims the app's
-// non-mixable .playback session — the same constraint that moved Edge TTS to
-// NativeAudioPlayer. Everywhere else a plain HTMLAudioElement is enough.
+// On mobile Tauri the clock is an in-process native player
+// (NativeNarrationPlayer). iOS needs it so TTSMediaBridge and narration share
+// one playback session; Android needs it so multi-hour local files can stream
+// from disk without buffering the whole audiobook through the WebView.
+// Desktop and web use a plain HTMLAudioElement.
+//
+// A source whose recording is split across several files (an Audiobookshelf
+// item's tracks) hands over a track list instead, and MultiTrackNarrationClock
+// presents those files as one timeline on top of the same per-platform player.
 
 import type { BookDoc } from '@/libs/document';
+import { HtmlAudioClock } from '@/services/audiobook/AudiobookClock';
 import { getOSPlatform, stubTranslation as _ } from '@/utils/misc';
 import { parseSSMLMarks } from '@/utils/ssml';
 import type { TTSCapabilities, TTSClient, TTSMessageEvent } from '../TTSClient';
 import type { TTSController } from '../TTSController';
 import type { TTSGranularity, TTSVoice, TTSVoicesGroup } from '../types';
 import type { MediaOverlaySection, NarrationPar } from './MediaOverlaySection';
+import {
+  MultiTrackNarrationClock,
+  type NarrationTrack,
+  type NarrationTrackPlayer,
+} from './MultiTrackNarrationClock';
+import type { NarrationClock } from './NarrationClock';
 import { NativeNarrationPlayer } from './NativeNarrationPlayer';
 
 export const MEDIA_OVERLAY_CLIENT_NAME = 'media-overlay';
@@ -49,7 +61,8 @@ const HANDOVER_GRACE_MS = 1000;
 // Inline of isTauriAppPlatform(): importing @/services/environment pulls the
 // app-service graph into unit tests that only need the platform bit.
 const isNativeNarrationPlatform = (): boolean =>
-  getOSPlatform() === 'ios' && process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri';
+  ['android', 'ios'].includes(getOSPlatform()) &&
+  process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri';
 
 // Container blobs come out of the zip with no MIME type, and a media element
 // given a typeless blob URL refuses to decode it ("Format error"), so the type
@@ -80,16 +93,57 @@ interface ClipRun {
   pars: NarrationPar[];
 }
 
-// Minimal clock surface shared by HTMLAudioElement and NativeNarrationPlayer.
-interface NarrationClock {
-  currentTime: number;
-  playbackRate: number;
-  readonly paused: boolean;
-  play(): Promise<void>;
-  pause(): void;
-  addEventListener(type: 'ended' | 'error' | 'timeupdate', fn: () => void): void;
-  removeEventListener(type: 'ended' | 'error' | 'timeupdate', fn: () => void): void;
+export interface NarrationAudioSource {
+  narrator?: string;
+  textHighlight?: boolean;
+  loadBlob: (href: string) => Promise<Blob>;
+  resolveUrl?: (href: string) => Promise<string | null>;
+  resolvePath?: (href: string) => Promise<string | null>;
+  // A recording split across several streamable files, timed on one global
+  // clock. Takes precedence over the single-file resolvers when it returns
+  // tracks.
+  resolveTracks?: (href: string) => Promise<NarrationTrack[] | null>;
 }
+
+const seekClock = async (audio: NarrationClock, seconds: number): Promise<void> => {
+  // A native or multi-file seek is async (plugin invoke, file switch);
+  // assigning currentTime alone can race with play() and start from the
+  // previous playhead.
+  if (audio.seek) await audio.seek(seconds);
+  else audio.currentTime = seconds;
+};
+
+const setClockRate = async (audio: NarrationClock, rate: number): Promise<void> => {
+  if (audio.setRate) await audio.setRate(rate);
+  else audio.playbackRate = rate;
+};
+
+// The shared native player as a per-track player: each track loads by URL
+// under the same href, so the native session survives file switches.
+const nativeTrackPlayer = (player: NativeNarrationPlayer, href: string): NarrationTrackPlayer => ({
+  get currentTime() {
+    return player.currentTime;
+  },
+  set currentTime(seconds: number) {
+    player.currentTime = seconds;
+  },
+  get playbackRate() {
+    return player.playbackRate;
+  },
+  set playbackRate(rate: number) {
+    player.playbackRate = rate;
+  },
+  get paused() {
+    return player.paused;
+  },
+  load: (url, startAt) => player.loadPath(href, url, startAt),
+  play: () => player.play(),
+  pause: () => player.pause(),
+  seek: (seconds) => player.seek(seconds),
+  setRate: (rate) => player.setRate(rate),
+  addEventListener: (type, fn) => player.addEventListener(type, fn),
+  removeEventListener: (type, fn) => player.removeEventListener(type, fn),
+});
 
 // Consecutive pars sharing an audio file. Normally one run per block; a run
 // boundary means the publisher split the paragraph across files.
@@ -108,7 +162,7 @@ export class MediaOverlayClient implements TTSClient {
   initialized = false;
   controller?: TTSController;
 
-  #book: BookDoc | null = null;
+  #source: NarrationAudioSource | null = null;
   #section: MediaOverlaySection | null = null;
   #native = isNativeNarrationPlatform();
   #player: NativeNarrationPlayer | null = null;
@@ -117,6 +171,7 @@ export class MediaOverlayClient implements TTSClient {
   #objectUrl: string | null = null;
   #audioLoad: { href: string; promise: Promise<NarrationClock> } | null = null;
   #currentPar: NarrationPar | null = null;
+  #nextChunkPosition: number | null = null;
   #handoverTimer: ReturnType<typeof setTimeout> | null = null;
   #rate = 1;
   #lang = 'en';
@@ -141,7 +196,21 @@ export class MediaOverlayClient implements TTSClient {
   // session, independently of the section, so the voice list can name the
   // narrator before any section has been indexed.
   attachBook(book: BookDoc | null): void {
-    this.#book = book;
+    this.attachSource(
+      book?.loadBlob
+        ? {
+            narrator: book.media?.narrator,
+            loadBlob: (href) => book.loadBlob!(href),
+          }
+        : null,
+    );
+  }
+
+  // External audiobook files use the same clock and clip machinery as EPUB
+  // Media Overlays; only the blob provider and narrator label differ.
+  attachSource(source: NarrationAudioSource | null): void {
+    this.#source = source;
+    this.#nextChunkPosition = null;
   }
 
   // The narration index for the section now playing; rebuilt on every section
@@ -151,7 +220,7 @@ export class MediaOverlayClient implements TTSClient {
   }
 
   #narratorName(): string {
-    return this.#book?.media?.narrator?.trim() || _('Book narration');
+    return this.#source?.narrator?.trim() || _('Book narration');
   }
 
   // Concurrent callers share one load. Playback and the controller's
@@ -172,15 +241,39 @@ export class MediaOverlayClient implements TTSClient {
   }
 
   async #loadAudio(href: string): Promise<NarrationClock> {
-    if (!this.#book?.loadBlob) throw new Error('Book cannot load narration audio');
+    if (!this.#source) throw new Error('Book cannot load narration audio');
 
-    const blob = audioBlobWithType(href, await this.#book.loadBlob(href));
+    const tracks = await this.#source.resolveTracks?.(href).catch(() => null);
+    if (tracks?.length) {
+      let player: NarrationTrackPlayer;
+      if (this.#native && this.#player) {
+        // Same reasoning as the native branch below: never #releaseAudio here.
+        this.#cancelHandover();
+        this.#audio?.destroy?.();
+        player = nativeTrackPlayer(this.#player, href);
+      } else {
+        this.#releaseAudio();
+        player = new HtmlAudioClock();
+      }
+      const clock = new MultiTrackNarrationClock(tracks, player);
+      await clock.setRate(this.#rate);
+      this.#audio = clock;
+      this.#audioHref = href;
+      this.#objectUrl = null;
+      return clock;
+    }
 
     if (this.#native && this.#player) {
+      const path = await this.#source.resolvePath?.(href).catch(() => null);
       // Keep any prior native session's file until the new one is staged; load()
       // replaces the AVPlayer item. Do not call #releaseAudio (that aborts).
       this.#cancelHandover();
-      await this.#player.load(href, blob, 0);
+      if (path) {
+        await this.#player.loadPath(href, path, 0);
+      } else {
+        const blob = audioBlobWithType(href, await this.#source.loadBlob(href));
+        await this.#player.load(href, blob, 0);
+      }
       this.#player.playbackRate = this.#rate;
       this.#player.pause();
       this.#audio = this.#player;
@@ -189,8 +282,14 @@ export class MediaOverlayClient implements TTSClient {
       return this.#player;
     }
 
+    const directUrl = await this.#source.resolveUrl?.(href).catch(() => null);
     this.#releaseAudio();
-    const url = URL.createObjectURL(blob);
+    let url = directUrl ?? null;
+    if (!url) {
+      const blob = audioBlobWithType(href, await this.#source.loadBlob(href));
+      url = URL.createObjectURL(blob);
+      this.#objectUrl = url;
+    }
     const audio = new Audio();
     audio.src = url;
     // Speed changes must not raise the narrator's pitch.
@@ -198,7 +297,6 @@ export class MediaOverlayClient implements TTSClient {
     audio.playbackRate = this.#rate;
     this.#audio = audio;
     this.#audioHref = href;
-    this.#objectUrl = url;
     return audio;
   }
 
@@ -222,6 +320,7 @@ export class MediaOverlayClient implements TTSClient {
   #releaseAudio(): void {
     this.#cancelHandover();
     this.#audio?.pause();
+    this.#audio?.destroy?.();
     if (this.#objectUrl) URL.revokeObjectURL(this.#objectUrl);
     this.#audio = null;
     this.#audioHref = null;
@@ -323,7 +422,10 @@ export class MediaOverlayClient implements TTSClient {
       return;
     }
 
-    for (const run of toRuns(pars)) {
+    const runs = toRuns(pars);
+    const requestedStart = this.#nextChunkPosition;
+    this.#nextChunkPosition = null;
+    for (const [runIndex, run] of runs.entries()) {
       if (signal.aborted) return;
 
       let audio: NarrationClock;
@@ -336,8 +438,7 @@ export class MediaOverlayClient implements TTSClient {
       if (signal.aborted) return;
 
       this.#cancelHandover();
-      if (this.#native && this.#player) await this.#player.setRate(this.#rate);
-      else audio.playbackRate = this.#rate;
+      await setClockRate(audio, this.#rate);
       // Sequential narration needs no seeking: Media Overlay clips are contiguous
       // and in document order, so the element can simply keep rolling while
       // boundaries are reported as the clock passes each clip. Seeking to
@@ -346,14 +447,15 @@ export class MediaOverlayClient implements TTSClient {
       // the paragraph's first word ("me me"). Move the playhead only for a real
       // discontinuity: session start, a sentence skip, a scrub, a new audio file.
       const first = run.pars[0]!;
+      const requestedPosition =
+        runIndex === 0 && requestedStart !== null
+          ? first.clipBegin + Math.min(Math.max(requestedStart, 0), first.clipEnd - first.clipBegin)
+          : null;
       const alreadyRolling =
         audio.currentTime >= first.clipBegin - CLIP_CONTINUITY_TOLERANCE_SEC &&
         audio.currentTime < first.clipEnd;
-      if (!alreadyRolling) {
-        // Native seek is async (plugin invoke); assigning currentTime alone can
-        // race with play() and start from the previous playhead.
-        if (this.#native && this.#player) await this.#player.seek(first.clipBegin);
-        else audio.currentTime = first.clipBegin;
+      if (requestedPosition !== null || !alreadyRolling) {
+        await seekClock(audio, requestedPosition ?? first.clipBegin);
       }
       try {
         await audio.play();
@@ -439,10 +541,10 @@ export class MediaOverlayClient implements TTSClient {
     // Await the native set-rate invoke: assigning playbackRate alone was
     // fire-and-forget, so stop→setRate→start (and live changes) raced play()
     // and left AVPlayer at the previous rate until the next voice switch.
-    if (this.#native && this.#player) {
+    if (this.#audio) {
+      await setClockRate(this.#audio, rate);
+    } else if (this.#native && this.#player) {
       await this.#player.setRate(rate);
-    } else if (this.#audio) {
-      this.#audio.playbackRate = rate;
     }
   }
 
@@ -469,7 +571,7 @@ export class MediaOverlayClient implements TTSClient {
   }
 
   #voices(): TTSVoice[] {
-    if (!this.#book) return [];
+    if (!this.#source) return [];
     return [{ id: MEDIA_OVERLAY_VOICE_ID, name: this.#narratorName(), lang: this.#lang }];
   }
 
@@ -488,7 +590,12 @@ export class MediaOverlayClient implements TTSClient {
       gapControl: false,
       liveRateChange: true,
       continuousTimeline: true,
+      textHighlight: this.#source?.textHighlight !== false,
     };
+  }
+
+  setNextChunkPosition(seconds: number): void {
+    this.#nextChunkPosition = Number.isFinite(seconds) ? Math.max(seconds, 0) : null;
   }
 
   getChunkPosition(): number | null {
@@ -507,6 +614,15 @@ export class MediaOverlayClient implements TTSClient {
     return Math.min(Math.max(elapsed / duration, 0), 1);
   }
 
+  async seekToChunkPosition(seconds: number): Promise<boolean> {
+    const audio = this.#audio;
+    const par = this.#currentPar;
+    if (!audio || !par) return false;
+    const within = Math.min(Math.max(seconds, 0), par.clipEnd - par.clipBegin);
+    await seekClock(audio, par.clipBegin + within);
+    return true;
+  }
+
   getVoiceId(): string {
     return MEDIA_OVERLAY_VOICE_ID;
   }
@@ -517,13 +633,12 @@ export class MediaOverlayClient implements TTSClient {
 
   async shutdown(): Promise<void> {
     this.initialized = false;
+    const player = this.#player;
+    this.#player = null;
     this.#releaseAudio();
-    if (this.#player) {
-      await this.#player.shutdown();
-      this.#player = null;
-    }
+    if (player) await player.shutdown();
     this.#currentPar = null;
     this.#section = null;
-    this.#book = null;
+    this.#source = null;
   }
 }

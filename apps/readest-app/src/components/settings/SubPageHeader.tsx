@@ -14,7 +14,7 @@ interface SubPageHeaderProps {
    */
   description?: React.ReactNode;
   /** Click handler for the parent breadcrumb (returns to list view). */
-  onBack?: () => void;
+  onBack: () => void;
   /** Optional trailing content (e.g. Edit / Delete toggles). */
   rightSlot?: React.ReactNode;
 }
@@ -45,15 +45,12 @@ const SubPageHeader: React.FC<SubPageHeaderProps> = ({
         <div className='flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight'>
           <button
             type='button'
-            onClick={onBack ?? (() => {})}
-            className='hover:text-primary transition-colors duration-150 focus-visible:underline focus-visible:outline-none'
+            onClick={onBack}
+            className='hover:text-primary transition-colors duration-150 focus-visible:underline focus-visible:outline-hidden'
           >
             {parentLabel}
           </button>
-          <MdChevronRight
-            aria-hidden='true'
-            className='text-base-content/40 h-5 w-5 flex-shrink-0'
-          />
+          <MdChevronRight aria-hidden='true' className='text-base-content/40 h-5 w-5 shrink-0' />
           <span className='text-base-content/70 truncate'>{currentLabel}</span>
         </div>
         {rightSlot}

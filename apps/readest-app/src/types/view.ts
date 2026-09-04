@@ -26,6 +26,9 @@ export interface Renderer extends HTMLElement {
   atStart: boolean;
   atEnd: boolean;
   containerPosition: number;
+  // Sub-pixel remainder of the scroll position, rendered as a transform on the
+  // scrollport because scroll offsets themselves quantize to whole CSS pixels.
+  subpixelOffset: number;
   scrollProp: 'scrollLeft' | 'scrollTop';
   sideProp: 'width' | 'height';
   pageColors?: {
@@ -85,7 +88,7 @@ export interface FoliateView extends HTMLElement {
   isOverflowY: () => boolean;
   goLeft: () => void;
   goRight: () => void;
-  getCFI: (index: number, range: Range) => string;
+  getCFI: (index: number, range?: Range) => string;
   getCFIProgress: (cfi: string) => Promise<{
     fraction: number;
     section: { current: number; total: number };

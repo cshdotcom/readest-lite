@@ -131,6 +131,11 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
           book.groupId = undefined;
           book.groupName = undefined;
           book.updatedAt = Date.now();
+          // Group membership merges on its own clock so an unrelated row bump
+          // on a peer cannot clobber this edit (#5911). A removal MUST be
+          // stamped: an unstamped ungrouped row is treated as "never knew
+          // about the group" and loses to a grouped peer by design.
+          book.groupUpdatedAt = book.updatedAt;
         }
       }
     });
@@ -152,10 +157,12 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
             book.groupName = groupName;
             book.groupId = getGroupId(book.groupName);
             book.updatedAt = Date.now();
+            book.groupUpdatedAt = book.updatedAt;
           } else if (book.groupName?.startsWith(oldGroupName + '/')) {
             book.groupName = book.groupName.replace(oldGroupName, groupName);
             book.groupId = getGroupId(book.groupName);
             book.updatedAt = Date.now();
+            book.groupUpdatedAt = book.updatedAt;
           }
         });
 
@@ -208,6 +215,7 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
           book.groupId = selectedGroup.id;
           book.groupName = selectedGroup.name;
           book.updatedAt = Date.now();
+          book.groupUpdatedAt = book.updatedAt;
         }
       }
     });
@@ -305,13 +313,13 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
                   }
                   e.stopPropagation();
                 }}
-                className='input input-ghost w-full border-0 px-2 text-base !outline-none sm:text-sm'
+                className='input input-ghost w-full border-0 px-2 text-base outline-hidden! sm:text-sm'
               />
               <button
                 className={clsx(
                   'btn btn-ghost settings-content hover:bg-transparent',
                   'flex h-[1.3em] min-h-[1.3em] items-end p-0',
-                  editGroupName ? '' : 'btn-disabled !bg-opacity-0',
+                  editGroupName ? '' : 'btn-disabled bg-transparent!',
                 )}
                 onClick={() => handleConfirmCreateGroup()}
               >
@@ -328,13 +336,13 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
           <div className='mt-4 flex flex-wrap items-center gap-2 text-base'>
             <button
               onClick={handleNavigateBack}
-              className='hover:bg-base-300 flex items-center gap-1 rounded px-2 py-1'
+              className='hover:bg-base-300 flex items-center gap-1 rounded-sm px-2 py-1'
             >
               <IoMdArrowBack size={iconSize} />
             </button>
             <button
               onClick={() => handleNavigateToPath(undefined)}
-              className='hover:bg-base-300 rounded px-2 py-1'
+              className='hover:bg-base-300 rounded-sm px-2 py-1'
             >
               {_('All')}
             </button>
@@ -344,11 +352,11 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
                 <React.Fragment key={index}>
                   <MdChevronRight size={iconSize} className='text-neutral-content' />
                   {isLast ? (
-                    <span className='truncate rounded px-2 py-1'>{crumb.name}</span>
+                    <span className='truncate rounded-sm px-2 py-1'>{crumb.name}</span>
                   ) : (
                     <button
                       onClick={() => handleNavigateToPath(crumb.path)}
-                      className='hover:bg-base-300 truncate rounded px-2 py-1'
+                      className='hover:bg-base-300 truncate rounded-sm px-2 py-1'
                     >
                       {crumb.name}
                     </button>

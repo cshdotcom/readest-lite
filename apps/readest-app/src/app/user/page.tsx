@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
@@ -10,25 +10,49 @@ import { useThemeStore } from '@/store/themeStore';
 import { useQuotaStats } from '@/hooks/useQuotaStats';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUserActions } from '@/hooks/useUserActions';
+import { useAvailablePlans } from '@/hooks/useAvailablePlans';
+import type { PlanType } from '@/types/quota';
 import { navigateToLibrary } from '@/utils/nav';
 import { eventDispatcher } from '@/utils/event';
+import { isTauriAppPlatform } from '@/services/environment';
+import { getPlanDetails } from './utils/plan';
 import { Toast } from '@/components/Toast';
+import {
+  purchaseIAPProduct,
+  restoreIAPPurchases,
+  verifyApplePurchaseProducts,
+  verifyGooglePurchaseProducts,
+  getSubscriptionSuccessUrl as getIAPSubscriptionSuccessUrl,
+} from '@/libs/payment/iap/client';
+import { isPurchaseProduct } from '@/libs/payment/iap/utils';
+import {
+  createStripeCheckoutSession,
+  redirectToStripeCheckout,
+  createStripePortalSession,
+  redirectToStripePortal,
+  handleStripeCheckoutError,
+  getSubscriptionSuccessUrl as getStripeSubscriptionSuccessUrl,
+  type StripeAvailablePlan,
+} from '@/libs/payment/stripe/client';
 import LegalLinks from '@/components/LegalLinks';
+import Spinner from '@/components/Spinner';
 import ProfileHeader from './components/Header';
 import UserInfo from './components/UserInfo';
 import UsageStats from './components/UsageStats';
+import PlansComparison from './components/PlansComparison';
 import AccountActions from './components/AccountActions';
 import StorageManager from './components/StorageManager';
 import SharedLinksSection from './components/SharedLinksSection';
 import { SyncPassphraseSection } from './components/SyncPassphraseSection';
 import { SyncCategoriesSection } from './components/SyncCategoriesSection';
-import UserManagement from './components/UserManagement';
-import DownloadTasks from './components/DownloadTasks';
-import ReadingStatsCard from './components/ReadingStatsCard';
+import Checkout from './components/Checkout';
 
-// Readest Lite — 用户中心。
-// Pro 体系已删除：移除 PlansComparison / Checkout / Stripe / IAP / useAvailablePlans。
-// 保留：账号信息、用量统计、账号操作（登出/改邮箱/删账号）、存储管理、共享链接、同步设置。
+type CheckoutState = {
+  clientSecret: string;
+  sessionId: string;
+  planName: string;
+};
+
 const ProfilePage = () => {
   const _ = useTranslation();
   const router = useRouter();
@@ -36,12 +60,19 @@ const ProfilePage = () => {
   const { token, user, refresh } = useAuth();
   const { safeAreaInsets, isRoundedWindow } = useThemeStore();
 
+  const [loading, setLoading] = useState(false);
+  const [showEmbeddedCheckout, setShowEmbeddedCheckout] = useState(false);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showSharedLinksManager, setShowSharedLinksManager] = useState(false);
   const searchParams = useSearchParams();
   const [showSyncManager, setShowSyncManager] = useState(
     () => searchParams?.get('section') === 'sync',
   );
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>({
+    clientSecret: '',
+    sessionId: '',
+    planName: '',
+  });
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -61,12 +92,32 @@ const ProfilePage = () => {
 
   useTheme({ systemUIVisible: false });
 
-  const { quotas } = useQuotaStats();
-  const { handleLogout, handleResetPassword, handleUpdateEmail, handleConfirmDelete } =
-    useUserActions();
+  const { quotas, userProfilePlan = 'free' } = useQuotaStats();
+  const {
+    handleLogout,
+    handleResetPassword,
+    handleUpdateEmail,
+    handleConfirmDelete,
+    handleDeleteAllBooks,
+  } = useUserActions();
+
+  const { availablePlans, iapAvailable } = useAvailablePlans({
+    hasIAP: appService?.hasIAP || false,
+    onError: useCallback(
+      (message: string) => {
+        eventDispatcher.dispatch('toast', {
+          type: 'info',
+          message: _(message),
+        });
+      },
+      [_],
+    ),
+  });
 
   const handleGoBack = () => {
-    if (showStorageManager) {
+    if (showEmbeddedCheckout) {
+      setShowEmbeddedCheckout(false);
+    } else if (showStorageManager) {
       setShowStorageManager(false);
       refresh();
     } else if (showSharedLinksManager) {
@@ -78,15 +129,156 @@ const ProfilePage = () => {
     }
   };
 
+  const handleStripeSubscribe = async (productId?: string, planType: PlanType = 'subscription') => {
+    if (!productId) return;
+
+    setLoading(true);
+    try {
+      const { sessionId, clientSecret, url } = await createStripeCheckoutSession(
+        productId,
+        planType,
+      );
+
+      const foundPlan = availablePlans.find((plan) => plan.productId === productId);
+
+      if (!foundPlan) {
+        throw new Error(`Plan not found for product ID: ${productId}`);
+      }
+
+      const selectedPlan = foundPlan as StripeAvailablePlan;
+      const planName = selectedPlan.product?.name || selectedPlan.productName;
+
+      const isEmbeddedCheckout = isTauriAppPlatform();
+      if (isEmbeddedCheckout && sessionId && clientSecret) {
+        setShowEmbeddedCheckout(true);
+        setCheckoutState({
+          planName,
+          clientSecret,
+          sessionId,
+        });
+      } else {
+        await redirectToStripeCheckout(url);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      handleStripeCheckoutError(errorMessage);
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Failed to create checkout session'),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckoutSuccess = useCallback(
+    (sessionId: string) => {
+      setShowEmbeddedCheckout(false);
+      router.push(getStripeSubscriptionSuccessUrl(sessionId));
+    },
+    [router],
+  );
+
+  const handleIAPSubscribe = async (productId?: string) => {
+    if (!productId) return;
+
+    setLoading(true);
+    try {
+      const purchase = await purchaseIAPProduct(productId);
+      if (purchase) {
+        router.push(getIAPSubscriptionSuccessUrl(purchase));
+      }
+    } catch (error) {
+      console.error('IAP purchase error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleIAPRestorePurchase = async () => {
+    setLoading(true);
+    try {
+      const purchases = await restoreIAPPurchases();
+      if (purchases.length > 0) {
+        // Restored one-time purchases (storage add-ons) may still be
+        // unconsumed on Google Play, blocking repurchase; re-verifying lets
+        // the server consume them. On iOS, restore is the only flow that can
+        // record a purchase whose original verification never reached the
+        // server, so re-verify those too.
+        await verifyGooglePurchaseProducts(purchases);
+        await verifyApplePurchaseProducts(purchases);
+        const restoredSubscriptions = purchases
+          .filter((p) => !isPurchaseProduct(p.productId))
+          .sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+        const purchase = restoredSubscriptions[0];
+
+        if (purchase) {
+          router.push(getIAPSubscriptionSuccessUrl(purchase));
+        } else if (purchases.some((p) => isPurchaseProduct(p.productId))) {
+          eventDispatcher.dispatch('toast', {
+            type: 'info',
+            message: _('Purchases restored successfully.'),
+          });
+        } else {
+          throw new Error('No subscription found in restored purchases');
+        }
+      } else {
+        eventDispatcher.dispatch('toast', {
+          type: 'info',
+          message: _('No purchases found to restore.'),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to restore purchases:', error);
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Failed to restore purchases.'),
+      });
+    }
+    setLoading(false);
+  };
+
+  const handleManageSubscription = async () => {
+    setLoading(true);
+    try {
+      const url = await createStripePortalSession();
+      await redirectToStripePortal(url);
+    } catch (error) {
+      console.error('Error creating portal session:', error);
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Failed to manage subscription.'),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteWithMessage = () => {
     handleConfirmDelete(_('Failed to delete user. Please try again later.'));
   };
 
-  const handleManageStorage = () => setShowStorageManager(true);
-  const handleManageSharedLinks = () => setShowSharedLinksManager(true);
-  const handleManageSync = () => setShowSyncManager(true);
+  const handleDeleteAllBooksWithMessage = () => {
+    handleDeleteAllBooks(
+      _('All books deleted.'),
+      _('Failed to delete books. Please try again later.'),
+    );
+  };
 
-  if (!mounted) return null;
+  const handleManageStorage = () => {
+    setShowStorageManager(true);
+  };
+
+  const handleManageSharedLinks = () => {
+    setShowSharedLinksManager(true);
+  };
+  const handleManageSync = () => {
+    setShowSyncManager(true);
+  };
+
+  if (!mounted) {
+    return null;
+  }
 
   if (!user || !token || !appService) {
     return (
@@ -103,6 +295,8 @@ const ProfilePage = () => {
   const avatarUrl = user?.user_metadata?.['picture'] || user?.user_metadata?.['avatar_url'];
   const userFullName = user?.user_metadata?.['full_name'] || '-';
   const userEmail = user?.email || '';
+  const userPlanDetails =
+    getPlanDetails(userProfilePlan, availablePlans) || getPlanDetails('free', availablePlans);
 
   return (
     <div
@@ -113,77 +307,91 @@ const ProfilePage = () => {
     >
       <div
         className={clsx('flex h-full w-full flex-col items-center overflow-y-auto')}
-        style={{ paddingTop: `${safeAreaInsets?.top || 0}px` }}
+        style={{
+          paddingTop: `${safeAreaInsets?.top || 0}px`,
+        }}
       >
         <ProfileHeader onGoBack={handleGoBack} />
         <div className='w-full min-w-60 max-w-4xl py-10'>
-          <div className='sm:bg-base-200 overflow-hidden rounded-lg sm:p-6 sm:shadow-md'>
-            <div className='flex flex-col gap-y-8'>
-              <div className='flex flex-col gap-y-8 px-6'>
-                <UserInfo
-                  avatarUrl={avatarUrl}
-                  userFullName={userFullName}
-                  userEmail={userEmail}
-                  planDetails={null}
-                />
-
-                {!showStorageManager && !showSharedLinksManager && !showSyncManager && (
-                  <UsageStats quotas={quotas} />
-                )}
-              </div>
-
-              {showStorageManager ? (
-                <div className='flex flex-col gap-y-8 px-6'>
-                  <StorageManager />
-                </div>
-              ) : showSharedLinksManager ? (
-                <div className='flex flex-col gap-y-8 px-6'>
-                  <SharedLinksSection />
-                </div>
-              ) : showSyncManager ? (
-                <div className='flex flex-col gap-y-8 px-6'>
-                  <SyncCategoriesSection />
-                  <SyncPassphraseSection />
-                </div>
-              ) : (
-                <div className='flex flex-col gap-y-8 px-6'>
-                  {/* 管理员可见用户管理 */}
-                  {(user as unknown as { userRole?: string })?.userRole === 'admin' && (
-                    <UserManagement />
-                  )}
-                  {/* v8.10: 阅读统计卡片（横向滚动 + 点击弹出详情 Modal） */}
-                  <ReadingStatsCard />
-                  {/* v8.7: 下载任务（所有用户可见，跨设备同步） */}
-                  <DownloadTasks />
-                  <AccountActions
-                    userPlan={'pro'}
-                    iapAvailable={false}
-                    onLogout={handleLogout}
-                    onResetPassword={handleResetPassword}
-                    onUpdateEmail={handleUpdateEmail}
-                    onConfirmDelete={handleDeleteWithMessage}
-                    onRestorePurchase={() => {
-                      eventDispatcher.dispatch('toast', {
-                        type: 'info',
-                        message: _('In-app purchases are not available in Readest Lite.'),
-                      });
-                    }}
-                    onManageSubscription={() => {
-                      eventDispatcher.dispatch('toast', {
-                        type: 'info',
-                        message: _('Subscription management is not available in Readest Lite.'),
-                      });
-                    }}
-                    onManageStorage={handleManageStorage}
-                    onManageSharedLinks={handleManageSharedLinks}
-                    onManageSync={handleManageSync}
-                  />
-                </div>
-              )}
-
-              <LegalLinks />
+          {loading && (
+            <div className='fixed inset-0 z-50 flex items-center justify-center'>
+              <Spinner loading className='text-gray-900' />
             </div>
-          </div>
+          )}
+          {showEmbeddedCheckout ? (
+            <div className='bg-base-100 rounded-lg p-4'>
+              <Checkout
+                clientSecret={checkoutState.clientSecret}
+                sessionId={checkoutState.sessionId}
+                planName={checkoutState.planName}
+                onSuccess={handleCheckoutSuccess}
+              />
+            </div>
+          ) : (
+            <div className='sm:bg-base-200 overflow-hidden rounded-lg sm:p-6 sm:shadow-md'>
+              <div className='flex flex-col gap-y-8'>
+                <div className='flex flex-col gap-y-8 px-6'>
+                  <UserInfo
+                    avatarUrl={avatarUrl}
+                    userFullName={userFullName}
+                    userEmail={userEmail}
+                    planDetails={userPlanDetails}
+                  />
+
+                  {!showStorageManager && !showSharedLinksManager && !showSyncManager && (
+                    <UsageStats quotas={quotas} />
+                  )}
+                </div>
+
+                {showStorageManager ? (
+                  <div className='flex flex-col gap-y-8 px-6'>
+                    <StorageManager />
+                  </div>
+                ) : showSharedLinksManager ? (
+                  <div className='flex flex-col gap-y-8 px-6'>
+                    <SharedLinksSection />
+                  </div>
+                ) : showSyncManager ? (
+                  <div className='flex flex-col gap-y-8 px-6'>
+                    <SyncCategoriesSection />
+                    <SyncPassphraseSection />
+                  </div>
+                ) : (
+                  <>
+                    <div className='flex flex-col gap-y-8 sm:px-6'>
+                      <PlansComparison
+                        availablePlans={availablePlans}
+                        userPlan={userProfilePlan}
+                        onSubscribe={
+                          appService.hasIAP && iapAvailable
+                            ? handleIAPSubscribe
+                            : handleStripeSubscribe
+                        }
+                      />
+                    </div>
+                    <div className='flex flex-col gap-y-8 px-6'>
+                      <AccountActions
+                        userPlan={userProfilePlan}
+                        iapAvailable={iapAvailable}
+                        onLogout={handleLogout}
+                        onResetPassword={handleResetPassword}
+                        onUpdateEmail={handleUpdateEmail}
+                        onConfirmDelete={handleDeleteWithMessage}
+                        onConfirmDeleteAllBooks={handleDeleteAllBooksWithMessage}
+                        onRestorePurchase={handleIAPRestorePurchase}
+                        onManageSubscription={handleManageSubscription}
+                        onManageStorage={handleManageStorage}
+                        onManageSharedLinks={handleManageSharedLinks}
+                        onManageSync={handleManageSync}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <LegalLinks />
+              </div>
+            </div>
+          )}
         </div>
         <Toast />
       </div>

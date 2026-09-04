@@ -16,8 +16,7 @@ import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomOPDSStore } from '@/store/customOPDSStore';
-import { transferManager } from '@/services/transferManager';
-import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
+import { queueOPDSBookUploads } from '@/services/opds/cloudUpload';
 import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { useTheme } from '@/hooks/useTheme';
 import { useLibrary } from '@/hooks/useLibrary';
@@ -656,10 +655,8 @@ export default function BrowserPage() {
                 console.error('OPDS: failed to update source map:', sourceMapError);
               }
             }
-            if (user && book && !book.uploadedAt && isReadestCloudStorageActive(settings)) {
-              setTimeout(() => {
-                transferManager.queueUpload(book);
-              }, 3000);
+            if (book) {
+              queueOPDSBookUploads(!!user, useSettingsStore.getState().settings, [book]);
             }
             setLibrary(library);
             appService.saveLibraryBooks(library);
@@ -1091,18 +1088,18 @@ export default function BrowserPage() {
         title={_('Add to My Catalogs')}
         onClose={() => setShowAddCatalog(false)}
         boxClassName='sm:max-w-md sm:h-auto'
-        contentClassName='!px-6 !py-4'
+        contentClassName='px-6! py-4!'
       >
         <div className='flex flex-col gap-4 pt-2'>
-          <div className='form-control'>
-            <label className='label'>
-              <span className='label-text font-medium text-sm'>{_('Catalog Name')}</span>
+          <div className='flex flex-col'>
+            <label className='flex select-none items-center justify-between px-1 py-2'>
+              <span className='text-sm font-medium text-sm'>{_('Catalog Name')}</span>
             </label>
             <input
               type='text'
               value={newCatalogName}
               onChange={(e) => setNewCatalogName(e.target.value)}
-              className='input input-bordered eink-bordered w-full'
+              className='input eink-bordered w-full'
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newCatalogName.trim()) {

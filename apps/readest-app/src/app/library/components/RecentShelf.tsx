@@ -19,15 +19,21 @@ interface RecentShelfProps {
   // Mirror the bookshelf grid's column model so covers are the same size.
   autoColumns: boolean;
   fixedColumns: number;
-  isSelectMode?: boolean;
-  selectedBooks?: ReadonlySet<string>;
+  isSelectMode: boolean;
+  selectedBooks: ReadonlySet<string>;
   onOpenBook: (book: Book) => void;
-  toggleSelection?: (hash: string) => void;
-  handleSetSelectMode?: (selectMode: boolean) => void;
+  toggleSelection: (hash: string) => void;
+  handleSetSelectMode: (selectMode: boolean) => void;
   handleBookUpload: (book: Book) => void;
   handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
-  showTimeRemaining?: boolean;
+  showTimeRemaining: boolean;
+  /**
+   * Cover transfer progress by book hash. A book can appear here and in the
+   * grid at once, so both have to read the same map — otherwise the strip
+   * offers a Download button for a book the grid already shows downloading.
+   */
+  transferProgress: { [key: string]: number };
 }
 
 /**
@@ -51,7 +57,7 @@ type RecentSlideProps = Pick<
   | 'handleBookDownload'
   | 'showBookDetailsModal'
   | 'showTimeRemaining'
-> & { book: Book; bookSelected: boolean };
+> & { book: Book; bookSelected: boolean; transferProgress: number | null };
 
 const RecentSlide: React.FC<RecentSlideProps> = ({
   book,
@@ -65,13 +71,14 @@ const RecentSlide: React.FC<RecentSlideProps> = ({
   handleBookDownload,
   showBookDetailsModal,
   showTimeRemaining,
+  transferProgress,
 }) => {
   // Same select vocabulary as the grid (`BookshelfItem`): long-press enters
   // select mode and selects; while in select mode a tap toggles instead of
   // opening the book.
   const handleSelect = () => {
-    if (!isSelectMode) handleSetSelectMode?.(true);
-    toggleSelection?.(book.hash);
+    if (!isSelectMode) handleSetSelectMode(true);
+    toggleSelection(book.hash);
   };
 
   const handleActivate = () => {
@@ -121,7 +128,7 @@ const RecentSlide: React.FC<RecentSlideProps> = ({
             coverFit={coverFit}
             isSelectMode={isSelectMode}
             bookSelected={bookSelected}
-            transferProgress={null}
+            transferProgress={transferProgress}
             handleBookUpload={handleBookUpload}
             handleBookDownload={handleBookDownload}
             showBookDetailsModal={showBookDetailsModal}
@@ -154,6 +161,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
   handleBookDownload,
   showBookDetailsModal,
   showTimeRemaining,
+  transferProgress,
 }) => {
   const _ = useTranslation();
   // `--rs-cols` mirrors the grid's column count: the responsive ladder
@@ -235,7 +243,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 book={book}
                 coverFit={coverFit}
                 isSelectMode={isSelectMode}
-                bookSelected={selectedBooks?.has(book.hash) ?? false}
+                bookSelected={selectedBooks.has(book.hash)}
                 onOpenBook={onOpenBook}
                 toggleSelection={toggleSelection}
                 handleSetSelectMode={handleSetSelectMode}
@@ -243,6 +251,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 handleBookDownload={handleBookDownload}
                 showBookDetailsModal={showBookDetailsModal}
                 showTimeRemaining={showTimeRemaining}
+                transferProgress={transferProgress[book.hash] ?? null}
               />
             ))}
           </div>
@@ -253,7 +262,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
             aria-label={_('Scroll left')}
             onClick={() => scrollByPage(-1)}
             style={{ top: coverCenter ?? '50%' }}
-            className='eink-bordered bg-base-100 border-base-content/10 hover:border-base-content/30 absolute start-2 -translate-y-1/2 rounded-full border p-1 shadow-sm transition-colors duration-200'
+            className='eink-bordered bg-base-100 border-base-content/10 hover:border-base-content/30 absolute start-2 -translate-y-1/2 rounded-full border p-1 shadow-xs transition-colors duration-200'
           >
             <MdChevronLeft
               size={20}
@@ -267,7 +276,7 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
             aria-label={_('Scroll right')}
             onClick={() => scrollByPage(1)}
             style={{ top: coverCenter ?? '50%' }}
-            className='eink-bordered bg-base-100 border-base-content/10 hover:border-base-content/30 absolute end-2 -translate-y-1/2 rounded-full border p-1 shadow-sm transition-colors duration-200'
+            className='eink-bordered bg-base-100 border-base-content/10 hover:border-base-content/30 absolute end-2 -translate-y-1/2 rounded-full border p-1 shadow-xs transition-colors duration-200'
           >
             <MdChevronRight
               size={20}

@@ -16,6 +16,8 @@ import { Book } from '@/types/book';
 import { SHARE_DEFAULT_EXPIRATION_DAYS, SHARE_EXPIRATION_DAYS } from '@/services/constants';
 import { ShareApiError, createShare, revokeShare } from '@/libs/share';
 import { formatBytes } from '@/utils/book';
+import { useSettingsStore } from '@/store/settingsStore';
+import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
 
 interface ShareBookDialogProps {
   isOpen: boolean;
@@ -36,6 +38,7 @@ interface CreatedShare {
 const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, onClose }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
+  const settings = useSettingsStore((state) => state.settings);
 
   const [expirationDays, setExpirationDays] = useState<number>(SHARE_DEFAULT_EXPIRATION_DAYS);
   // Off by default — sharing the current page reveals where the user is in
@@ -96,8 +99,12 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
     setGenerating(true);
     setErrorMessage(null);
     try {
-      // Upload first if the book lives only locally.
-      if (!book.uploadedAt && appService) {
+      // Upload first if the book isn't in Readest storage, which is what a share
+      // link is served from. `uploadedAt` alone doesn't prove that: the file-sync
+      // engine also stamps it for a book whose only cloud copy is on the selected
+      // third-party provider (WebDAV / Google Drive / …).
+      const inReadestStorage = !!book.uploadedAt && isReadestCloudStorageActive(settings);
+      if (!inReadestStorage && appService) {
         try {
           await appService.uploadBook(book, (progress) => {
             setUploadProgress((progress.progress / progress.total) * 100);
@@ -234,7 +241,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
       title={_('Share Book')}
       onClose={onClose}
       boxClassName='sm:min-w-[460px] sm:max-w-[460px] sm:h-auto sm:max-h-[90%]'
-      contentClassName='!px-6 !py-4'
+      contentClassName='px-6! py-4!'
     >
       <div className='flex flex-col gap-5 pt-2'>
         {/* Hero: cover + metadata. Cover gets a real shadow so it reads as a
@@ -348,7 +355,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                 readOnly
                 value={created.url}
                 aria-label={_('Share URL')}
-                className='text-base-content min-w-0 flex-1 bg-transparent font-mono text-xs outline-none'
+                className='text-base-content min-w-0 flex-1 bg-transparent font-mono text-xs outline-hidden'
                 onFocus={(e) => e.currentTarget.select()}
               />
               <button

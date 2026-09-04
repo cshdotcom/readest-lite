@@ -15,19 +15,82 @@ export interface ProgressPayload {
 
 export type ProgressHandler = (progress: ProgressPayload) => void;
 
-// v8.8: 大文件自动分块上传，规避 Cloudflare 100s 524 超时
-// 文件 > CHUNK_SIZE 时切分，每块单独 PUT 到 /api/storage/_put?...&index=N&total=M，
-// 全部传完发一次 /api/storage/_put?...&merge=1&total=M 触发服务端流式合并。
-// 小文件（<= CHUNK_SIZE）走原直传路径，保持兼容。
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB — 5MB 在慢带宽下也能在 ~30s 内传完
+/**
+ * Percentage sentinel for "running, but the byte total is unknown". Chunked
+ * responses, buffered fallbacks and queued-but-not-started transfers have no
+ * total to divide by; reporting 0 there renders as a frozen 0%, so progress
+ * surfaces render this as an indeterminate state instead.
+ */
+export const INDETERMINATE_PROGRESS = -1;
 
-const uploadSingleChunk = (
-  data: Blob,
-  uploadUrl: string,
-  onProgress?: ProgressHandler,
-  progressOffset = 0,
-  progressTotal = 0,
-): Promise<void> => {
+/** Bytes to a 0-100 percentage, or {@link INDETERMINATE_PROGRESS}. */
+export const toProgressPercent = (progress: ProgressPayload): number =>
+  progress.total > 0 ? (progress.progress / progress.total) * 100 : INDETERMINATE_PROGRESS;
+
+export interface ProgressThrottle {
+  /** Record a progress payload, emitting at most once per interval. */
+  push: (progress: ProgressPayload) => void;
+  /** Emit any pending payload immediately (e.g. when the transfer finishes). */
+  flush: () => void;
+  /** Drop any pending payload and clear the trailing timer. */
+  cancel: () => void;
+}
+
+/**
+ * Coalesce high-frequency progress emissions to at most one per `intervalMs`
+ * (leading + trailing edges). Web and native download streams call onProgress
+ * once per chunk, often as a dense microtask burst for already-buffered sources
+ * (`while (true) { await reader.read(); onProgress(...) }`), and `transferSpeed`
+ * is recomputed from wall-clock time on every call. Emitting each one churns the
+ * transfer store per chunk and sustains a synchronous React update storm past
+ * the nested-update limit (Sentry READEST-2). Throttling caps store writes and
+ * defers the trailing emit to a macrotask, so the render fan-out cannot loop.
+ */
+export const createProgressThrottle = (
+  emit: (progress: ProgressPayload) => void,
+  intervalMs: number,
+): ProgressThrottle => {
+  let lastEmit = Number.NEGATIVE_INFINITY;
+  let pending: ProgressPayload | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const fire = () => {
+    timer = null;
+    if (!pending) return;
+    const payload = pending;
+    pending = null;
+    lastEmit = Date.now();
+    emit(payload);
+  };
+
+  return {
+    push: (progress) => {
+      pending = progress;
+      const elapsed = Date.now() - lastEmit;
+      if (elapsed >= intervalMs) {
+        fire();
+      } else if (timer === null) {
+        timer = setTimeout(fire, intervalMs - elapsed);
+      }
+    },
+    flush: () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      fire();
+    },
+    cancel: () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      pending = null;
+    },
+  };
+};
+
+export const webUpload = (file: File, uploadUrl: string, onProgress?: ProgressHandler) => {
   return new Promise<void>((resolve, reject) => {
     const startTime = Date.now();
     const xhr = new XMLHttpRequest();
@@ -36,8 +99,8 @@ const uploadSingleChunk = (
     xhr.upload.onprogress = (event) => {
       if (onProgress && event.lengthComputable) {
         onProgress({
-          progress: progressOffset + event.loaded,
-          total: progressTotal || event.total,
+          progress: event.loaded,
+          total: event.total,
           transferSpeed: event.loaded / ((Date.now() - startTime) / 1000),
         });
       }
@@ -52,62 +115,9 @@ const uploadSingleChunk = (
     };
 
     xhr.onerror = () => reject(new Error('Upload failed'));
-    xhr.send(data);
+
+    xhr.send(file);
   });
-};
-
-export const webUpload = async (file: File, uploadUrl: string, onProgress?: ProgressHandler) => {
-  const totalSize = file.size;
-  const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
-
-  // 小文件直传 — 走原路径
-  if (totalChunks <= 1) {
-    return uploadSingleChunk(file, uploadUrl, onProgress, 0, totalSize);
-  }
-
-  // 大文件分块上传
-  // 解析 uploadUrl 以追加 index/total/merge 参数
-  // 兼容绝对 URL (PUBLIC_BASE_URL 场景) 和相对 URL (本地直连场景)
-  const urlBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost';
-  const urlObj = new URL(uploadUrl, urlBase);
-  let uploadedBytes = 0;
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, totalSize);
-    const chunk = file.slice(start, end);
-
-    const chunkUrl = new URL(urlObj.toString());
-    chunkUrl.searchParams.set('index', String(i));
-    chunkUrl.searchParams.set('total', String(totalChunks));
-
-    const chunkSize = end - start;
-    await uploadSingleChunk(
-      chunk,
-      chunkUrl.toString(),
-      onProgress,
-      uploadedBytes,
-      totalSize,
-    );
-    uploadedBytes += chunkSize;
-  }
-
-  // 全部 chunk 上传完成，触发服务端合并
-  // merge 请求用一个最小的 PUT + 空 body（保持与 _put.ts 的 method 检查一致）
-  const mergeUrl = new URL(urlObj.toString());
-  mergeUrl.searchParams.set('merge', '1');
-  mergeUrl.searchParams.set('total', String(totalChunks));
-  // 删掉 index（如果有）
-  mergeUrl.searchParams.delete('index');
-
-  const mergeResp = await fetch(mergeUrl.toString(), {
-    method: 'PUT',
-    body: new Blob([]),
-  });
-  if (!mergeResp.ok) {
-    const text = await mergeResp.text().catch(() => '');
-    throw new Error(`Merge failed: ${mergeResp.status} ${text}`);
-  }
 };
 
 export const webDownload = async (

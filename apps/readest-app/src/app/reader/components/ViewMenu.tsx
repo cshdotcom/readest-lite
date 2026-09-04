@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BiMoon, BiSun } from 'react-icons/bi';
+import { PiGear } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
 import { MdZoomOut, MdZoomIn, MdCheck, MdInfoOutline, MdOutlineSensors } from 'react-icons/md';
 import { MdRemove, MdAdd, MdContrast } from 'react-icons/md';
@@ -28,6 +29,7 @@ import { useReaderStore } from '@/store/readerStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useCloudSyncStatus } from '@/hooks/useCloudSyncStatus';
 import { getStyles } from '@/utils/style';
 import { navigateToLogin } from '@/utils/nav';
 import { getScrollGapAttr } from '@/utils/webtoon';
@@ -35,7 +37,6 @@ import { applyPageTurnAttributes } from '@/app/reader/hooks/useCapturedTurn';
 import { eventDispatcher } from '@/utils/event';
 import { getMaxInlineSize } from '@/utils/config';
 import { nextThemeMode } from '@/utils/ambientLight';
-import dayjs from 'dayjs';
 import { saveViewSettings } from '@/helpers/settings';
 import { tauriHandleToggleFullScreen } from '@/utils/window';
 import MenuItem from '@/components/MenuItem';
@@ -58,7 +59,8 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
   const { envConfig, appService } = useEnv();
   const { getConfig, getBookData } = useBookDataStore();
   const { setSettingsDialogOpen, setSettingsDialogBookKey } = useSettingsStore();
-  const { getView, getViewSettings, getViewState, getProgress, setViewSettings } = useReaderStore();
+  const { getView, getViewSettings, getViewState, getProgress, setViewSettings, recreateViewer } =
+    useReaderStore();
   const config = getConfig(bookKey)!;
   const bookData = getBookData(bookKey)!;
   const viewSettings = getViewSettings(bookKey)!;
@@ -82,6 +84,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     viewSettings!.invertImgColorInDark,
   );
   const [applyThemeToPDF, setApplyThemeToPDF] = useState(viewSettings!.applyThemeToPDF!);
+  const [rtlSpread, setRtlSpread] = useState(bookData?.bookDoc?.dir === 'rtl');
 
   const zoomIn = () => setZoomLevel((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM_LEVEL));
   const zoomOut = () => setZoomLevel((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM_LEVEL));
@@ -99,7 +102,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     setIsDropdownOpen?.(false);
   };
 
-  const openFontLayoutMenu = () => {
+  const openSettingsDialog = () => {
     setIsDropdownOpen?.(false);
     setSettingsDialogBookKey(bookKey);
     setSettingsDialogOpen(true);
@@ -114,13 +117,35 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     setIsDropdownOpen?.(false);
   };
 
+  // Readest Cloud's own stamps for THIS book. The per-book values are more
+  // precise than the library-wide cursors the Settings menu uses, so the reader
+  // feeds them in rather than letting the hook guess.
+  const nativeLastSyncTime = Math.max(
+    config?.lastSyncedAtConfig || 0,
+    config?.lastSyncedAtNotes || 0,
+    config?.lastPushedAtConfig || 0,
+    config?.lastPushedAtNotes || 0,
+  );
+  // Every provider the user actually selected, not just Readest Cloud (#5910).
+  const syncStatus = useCloudSyncStatus(nativeLastSyncTime);
+
   const handleSync = () => {
-    if (!user) {
+    // Only Readest Cloud needs an account. With a third-party backend
+    // configured the row must sync, not bounce the user to a login they do not
+    // need (#5910).
+    if (syncStatus.needsSignIn) {
       navigateToLogin(router);
       setIsDropdownOpen?.(false);
-    } else {
-      eventDispatcher.dispatch('sync-book-progress', { bookKey });
+      return;
     }
+    // One tap, every provider the user selected. Before #5910 this dispatched
+    // `sync-book-progress` alone, which only useProgressSync (Readest Cloud)
+    // and useHardcoverSync listen for — so for a third-party-only user the row
+    // did nothing at all.
+    eventDispatcher.dispatch('sync-book-progress', { bookKey });
+    eventDispatcher.dispatch('push-file-sync', { bookKey });
+    eventDispatcher.dispatch('pull-file-sync', { bookKey });
+    eventDispatcher.dispatch('flush-kosync', { bookKey });
   };
 
   const handleStartRSVP = () => {
@@ -248,12 +273,21 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keepCoverSpread]);
 
-  const lastSyncTime = Math.max(
-    config?.lastSyncedAtConfig || 0,
-    config?.lastSyncedAtNotes || 0,
-    config?.lastPushedAtConfig || 0,
-    config?.lastPushedAtNotes || 0,
-  );
+  useEffect(() => {
+    const bookDoc = bookData?.bookDoc;
+    if (!bookDoc || rtlSpread === (bookDoc.dir === 'rtl')) return;
+    // Writing mode is per-book only (no global fallback), and horizontal-rl is
+    // what flips both the spread order and the page progression, so the toggle
+    // rides the same setting the Layout panel edits instead of a new one.
+    const writingMode = rtlSpread ? 'horizontal-rl' : 'horizontal-tb';
+    viewSettings.vertical = false;
+    saveViewSettings(envConfig, bookKey, 'writingMode', writingMode, true).then(() => {
+      const view = getView(bookKey);
+      if (view) view.book.dir = rtlSpread ? 'rtl' : 'ltr';
+      recreateViewer(envConfig, bookKey);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtlSpread]);
 
   return (
     <Menu
@@ -423,13 +457,16 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
               onClick={() => setKeepCoverSpread(!keepCoverSpread)}
               disabled={spreadMode === 'none'}
             />
+            <MenuItem
+              label={_('Right-to-Left Pages')}
+              Icon={rtlSpread ? MdCheck : undefined}
+              onClick={() => setRtlSpread(!rtlSpread)}
+            />
             <MenuItem label={_('Webtoon Mode')} toggled={webtoonMode} onClick={toggleWebtoonMode} />
           </>
           <hr aria-hidden='true' className='border-base-300 my-1' />
         </>
       )}
-
-      <MenuItem label={_('Font & Layout')} shortcut='Shift+F' onClick={openFontLayoutMenu} />
 
       {!bookData.isFixedLayout && (
         <MenuItem
@@ -468,17 +505,24 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
       <hr aria-hidden='true' className='border-base-300 my-1' />
 
       <MenuItem
-        label={
-          !user
-            ? _('Sign in to Sync')
-            : lastSyncTime
-              ? _('Synced {{time}}', {
-                  time: dayjs(lastSyncTime).fromNow(),
-                })
-              : _('Never synced')
+        label={syncStatus.label}
+        description={
+          // Which provider the status belongs to. Only worth saying when a
+          // third-party backend is in play — with Readest Cloud alone the row
+          // means what it always meant.
+          syncStatus.providers.length > 1
+            ? // Several names in full would overrun the row; show a count.
+              // `count` (not a plain var) so i18next applies each locale's
+              // plural rule.
+              _('Synced via {{count}} providers', { count: syncStatus.providers.length })
+            : syncStatus.providers[0] && syncStatus.providers[0].kind !== 'readest'
+              ? _('Synced via {{provider}}', { provider: syncStatus.providers[0].name })
+              : undefined
         }
-        Icon={user ? MdSync : MdSyncProblem}
-        iconClassName={user && viewState?.syncing ? 'animate-reverse-spin' : ''}
+        Icon={syncStatus.needsSignIn || syncStatus.failed ? MdSyncProblem : MdSync}
+        iconClassName={
+          syncStatus.syncing || (user && viewState?.syncing) ? 'animate-reverse-spin' : ''
+        }
         onClick={handleSync}
         siblings={
           <button
@@ -519,6 +563,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
         }
         onClick={cycleThemeMode}
       />
+      <MenuItem label={_('Settings')} Icon={PiGear} onClick={openSettingsDialog} />
       {bookData.book?.format === 'PDF' && appService?.supportsCanvasContext2DFilter && (
         <MenuItem
           label={_('Apply Theme Colors to PDF')}

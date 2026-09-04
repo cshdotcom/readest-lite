@@ -44,6 +44,8 @@ export interface SectionItem {
   fragments?: Array<SectionFragment>;
 
   loadText?: () => Promise<string | null>;
+  // Resolve a reference a script introduces after load (see observeDynamicResources).
+  loadHref?: (href: string) => Promise<string>;
   createDocument: () => Promise<Document>;
 
   // EPUB 3 Media Overlays: the manifest item of this section's SMIL file, or
@@ -93,6 +95,17 @@ export type BookMetadata = {
 
   calibreColumns?: CalibreCustomColumn[];
   feedUrl?: string;
+
+  // Audiobookshelf mirrors. An ABS stub is fileless: its identity is the
+  // synthetic `abs://<serverId>/<itemId>` filePath, and the library badge is
+  // drawn from duration / media type / episode count. None of those have a
+  // cloud `books` column (and the push strips filePath as device-local), so
+  // they ride across inside this synced metadata payload, exactly as a feed
+  // book carries `feedUrl`. Built and read back in src/utils/audiobook.ts.
+  absSource?: string;
+  absMediaType?: 'podcast';
+  absEpisodeCount?: number;
+  absDuration?: number;
 };
 
 export interface BookDoc {
@@ -137,6 +150,10 @@ export const EXTS: Record<BookFormat, string> = {
   FBZ: 'fbz',
   TXT: 'txt',
   MD: 'md',
+  // ABS books stream from the server and never have a real on-disk file, so
+  // this extension is never used to write or look up a file. It exists only
+  // to satisfy the Record<BookFormat, string> exhaustiveness check.
+  ABS: 'abs',
 };
 
 export const MIMETYPES: Record<BookFormat, string[]> = {
@@ -150,6 +167,8 @@ export const MIMETYPES: Record<BookFormat, string[]> = {
   FBZ: ['application/x-zip-compressed-fb2', 'application/zip'],
   TXT: ['text/plain'],
   MD: ['text/markdown', 'text/x-markdown'],
+  // Never matched against a real download; see the EXTS.ABS comment above.
+  ABS: ['application/vnd.audiobookshelf'],
 };
 
 export interface DocumentLoaderOptions {

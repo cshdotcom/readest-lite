@@ -22,7 +22,7 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
   if (!show) return null;
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
       <div className='w-full max-w-md rounded-2xl bg-white p-6'>
         <h3 className='mb-4 text-xl font-bold text-gray-800'>{title}</h3>
         <p className='mb-6 text-gray-600'>{message}</p>
@@ -52,7 +52,7 @@ interface AccountActionsProps {
   onResetPassword: () => void;
   onUpdateEmail: () => void;
   onConfirmDelete: () => void;
-  onConfirmDeleteAllBooks?: () => void;
+  onConfirmDeleteAllBooks: () => void;
   onRestorePurchase?: () => void;
   onManageSubscription?: () => void;
   onManageStorage?: () => void;
@@ -91,7 +91,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
       message: _(
         'This action cannot be undone. Every book will be removed from this device and from your Readest cloud library, along with reading progress, bookmarks, and annotations. Books you imported in place keep their original files, and books uploaded to cloud storage stay there until you remove them under Manage Storage. Other signed-in devices keep their own copies.',
       ),
-      onConfirm: onConfirmDeleteAllBooks ?? (() => {}),
+      onConfirm: onConfirmDeleteAllBooks,
     },
   };
   const confirmation = pendingAction ? confirmations[pendingAction] : null;

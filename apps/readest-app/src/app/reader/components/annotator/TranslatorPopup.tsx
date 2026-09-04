@@ -59,7 +59,11 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { translate, translators } = useTranslator({
+  // The provider's own failure reason (HTTP status, upstream status code,
+  // network error), shown under the generic message so a failure can be
+  // diagnosed from the popup itself (#5823).
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const { translate, translator, translators } = useTranslator({
     provider,
     sourceLang,
     targetLang,
@@ -101,6 +105,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
     setLoading(true);
     const fetchTranslation = async () => {
       setError(null);
+      setErrorDetail(null);
       setTranslation(null);
 
       try {
@@ -119,10 +124,13 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
         }
       } catch (err) {
         console.error(err);
-        if (!token) {
+        // Only blame a missing login when this provider actually needs one;
+        // Azure/Google/Yandex run without a Readest account in the app.
+        if (translator?.authRequired && !token) {
           setError(_('Unable to fetch the translation. Please log in first and try again.'));
         } else {
           setError(_('Unable to fetch the translation. Try again later.'));
+          setErrorDetail(err instanceof Error ? err.message : String(err));
         }
       } finally {
         setLoading(false);
@@ -141,7 +149,15 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
         minHeight={popupHeight}
         maxHeight={720}
         position={position}
-        className='grid h-full select-text grid-rows-[1fr,auto,1fr,auto]'
+        // Tracks are space-separated (`_` in a Tailwind arbitrary value).
+        // Commas here emitted `grid-template-rows:1fr,auto,1fr,auto`, which the
+        // browser discards, leaving four implicit auto rows that sized to their
+        // content and pushed the translated pane and the provider footer past
+        // the popup's own max height with nothing scrollable to reach them.
+        // `minmax(0,...)` rather than a bare `1fr`: a bare fr floors at
+        // min-content, so the rows would refuse to shrink inside the capped
+        // popup and overflow it again.
+        className='grid h-full select-text grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]'
         onDismiss={onDismiss}
       >
         <div className='overflow-y-auto p-4 font-sans'>
@@ -168,7 +184,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
           <p className='text-base'>{text}</p>
         </div>
 
-        <div className='mx-4 flex-shrink-0 border-t border-base-content/20'></div>
+        <div className='mx-4 shrink-0 border-t border-base-content/20'></div>
 
         <div className='overflow-y-auto p-4 font-sans'>
           <div className='mb-2 flex items-center justify-between'>
@@ -189,7 +205,12 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
           ) : (
             <div>
               {error ? (
-                <p className='text-base text-red-600'>{error}</p>
+                <div>
+                  <p className='text-base text-red-600'>{error}</p>
+                  {errorDetail && (
+                    <p className='mt-1 break-words text-xs text-base-content/60'>{errorDetail}</p>
+                  )}
+                </div>
               ) : (
                 <p className='text-base'>{translation || _('No translation available.')}</p>
               )}

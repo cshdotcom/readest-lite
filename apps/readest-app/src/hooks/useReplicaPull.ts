@@ -13,12 +13,14 @@ import {
   migrateLegacyTextures,
 } from '@/store/customTextureStore';
 import { useCustomOPDSStore, findOPDSCatalogByContentId } from '@/store/customOPDSStore';
+import { useABSServerStore } from '@/store/absServerStore';
 import { transferManager } from '@/services/transferManager';
 import { getReplicaSync, subscribeReplicaSyncReady } from '@/services/sync/replicaSync';
 import { dictionaryAdapter } from '@/services/sync/adapters/dictionary';
 import { fontAdapter } from '@/services/sync/adapters/font';
 import { textureAdapter } from '@/services/sync/adapters/texture';
 import { opdsCatalogAdapter } from '@/services/sync/adapters/opdsCatalog';
+import { absServerAdapter } from '@/services/sync/adapters/absServer';
 import { settingsAdapter, type SettingsRemoteRecord } from '@/services/sync/adapters/settings';
 import {
   applyRemoteSettings,
@@ -44,10 +46,17 @@ import type { ImportedDictionary } from '@/services/dictionaries/types';
 import type { CustomFont } from '@/styles/fonts';
 import type { CustomTexture } from '@/styles/textures';
 import type { OPDSCatalog } from '@/types/opds';
+import type { ABSServer } from '@/types/audiobookshelf';
 import type { Hlc, ReplicaRow } from '@/types/replica';
 import type { SystemSettings } from '@/types/settings';
 
-export type ReplicaKind = 'dictionary' | 'font' | 'texture' | 'opds_catalog' | 'settings';
+export type ReplicaKind =
+  | 'dictionary'
+  | 'font'
+  | 'texture'
+  | 'opds_catalog'
+  | 'abs_server'
+  | 'settings';
 
 export interface UseReplicaPullOpts {
   /** Replica kinds this page wants pulled. */
@@ -101,7 +110,7 @@ let hasCurrentUser = false;
 // Shared promise for the boot-time settings pull. All other kinds'
 // boot pulls await this so applyRemoteSettings has a chance to seed
 // `lastPublishedFields` with server-authoritative values before
-// dict/font/texture/opds_catalog auto-saves fire — without that
+// dict/font/texture/opds_catalog/abs_server auto-saves fire — without that
 // ordering, those auto-saves diff against `undefined` on a fresh
 // boot and republish the local default (e.g.
 // `dictionarySettings.providerOrder`) with a fresh HLC, clobbering
@@ -261,6 +270,16 @@ const opdsCatalogPullConfig: ReplicaPullConfig<OPDSCatalog> = {
   softDeleteByContentId: (id) => useCustomOPDSStore.getState().softDeleteByContentId(id),
 };
 
+const absServerPullConfig: ReplicaPullConfig<ABSServer> = {
+  kind: 'abs_server',
+  // metadata-only — no baseDir
+  adapter: absServerAdapter,
+  findByContentId: (id) => useABSServerStore.getState().findByContentId(id),
+  hydrateLocalStore: (envConfig) => useABSServerStore.getState().loadABSServers(envConfig),
+  applyRemote: (server) => useABSServerStore.getState().applyRemoteServer(server),
+  softDeleteByContentId: (id) => useABSServerStore.getState().softDeleteByContentId(id),
+};
+
 const settingsPullConfig = (envConfig: EnvConfigType): ReplicaPullConfig<SettingsRemoteRecord> => ({
   kind: 'settings',
   // metadata-only — no baseDir
@@ -361,6 +380,18 @@ const runPullForKind = async (
         ),
       );
       return;
+    case 'abs_server':
+      await replicaPullAndApply(
+        buildReplicaPullDeps(
+          ctx.manager,
+          service,
+          envConfig,
+          absServerPullConfig,
+          pullOpts,
+          pullOverride,
+        ),
+      );
+      return;
     case 'settings':
       await replicaPullAndApply(
         buildReplicaPullDeps(
@@ -419,7 +450,12 @@ const triggerIncrementalPullAll = (): void => {
       }
       await Promise.allSettled(
         kindsToPull.map(async (kind) => {
-          const rows = rowsByKind.get(kind) ?? [];
+          // Absent (as opposed to empty) means the backend answered nothing
+          // for this kind — see ReplicaSyncManager.pullMany. Applying an
+          // empty row set instead would be indistinguishable from the server
+          // having no rows at all.
+          const rows = rowsByKind.get(kind);
+          if (!rows) return;
           try {
             await runPullForKind(kind, service, envConfig, undefined, async () => rows);
           } catch (err) {
@@ -618,7 +654,15 @@ export const useReplicaPull = ({
           await Promise.allSettled(
             eligible.map(async (kind) => {
               try {
-                const rows = rowsByKind.get(kind) ?? [];
+                // Absent (as opposed to empty) means the backend answered
+                // nothing for this kind — see ReplicaSyncManager.pullMany.
+                // Release the dedup slot so a later mount retries instead of
+                // applying "no information" as an empty server state.
+                const rows = rowsByKind.get(kind);
+                if (!rows) {
+                  pulledKinds.delete(kind);
+                  return;
+                }
                 await runPullForKind(kind, appService, envConfig, undefined, async () => rows);
               } catch (err) {
                 console.warn(`replica ${kind} boot apply failed`, err);

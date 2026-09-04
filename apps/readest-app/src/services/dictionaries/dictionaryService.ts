@@ -630,6 +630,8 @@ export interface ImportDictionariesResult {
   replacements: { oldIds: string[]; newDict: ImportedDictionary }[];
   /** Filenames that didn't form a valid bundle. */
   orphanFiles: string[];
+  /** Sources that failed independently while other selected sources continued. */
+  importErrors?: { name: string; message: string }[];
 }
 
 /**

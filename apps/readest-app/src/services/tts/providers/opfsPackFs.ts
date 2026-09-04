@@ -57,6 +57,15 @@ export const createOpfsPackFs = async (dir: string): Promise<TTSPackFs | undefin
         }
         return slice;
       },
+      async readSidecar(name) {
+        try {
+          const file = await readBytes(name);
+          const parsed = JSON.parse(await file.text());
+          return parsed && Array.isArray(parsed.entries) ? parsed : null;
+        } catch {
+          return null;
+        }
+      },
       async remove(name) {
         await packsDir.removeEntry(name);
       },

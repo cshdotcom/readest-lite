@@ -30,11 +30,17 @@ export interface SectionEnumerator {
 }
 
 export interface CacheWarmer {
-  registerSectionManifest(section: number, labels: string[]): void;
+  registerSectionManifest(section: number, labels: string[]): void | Promise<void>;
   // Synthesize this sentence into the cache (a hit is a no-op) and record its
   // key against the section manifest at the ordinal. Returns whether audio is
   // now cached for it (false = offline miss / permanent failure).
-  warmSentence(section: number, ordinal: number, lang: string, text: string): Promise<boolean>;
+  warmSentence(
+    section: number,
+    ordinal: number,
+    lang: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<boolean>;
   // Force any newly-completed sections to compact into packs now (and push,
   // if pack sync is on) rather than waiting for the debounced timer.
   compactCache(): Promise<void>;
@@ -77,16 +83,18 @@ export class TTSDownloader {
       if (signal?.aborted) break;
       const sentences = await this.#enumerator.enumerateSection(sectionIndex);
       if (!sentences) {
+        console.warn('[TTS] download section failed to enumerate', sectionIndex);
         skipped.push(sectionIndex);
         continue;
       }
 
-      this.#warmer.registerSectionManifest(
+      await this.#warmer.registerSectionManifest(
         sectionIndex,
         sentences.map((s) => s.label),
       );
 
       let synthesized = 0;
+      let failed = false;
       let aborted = false;
       for (let done = 0; done < sentences.length; done++) {
         if (signal?.aborted) {
@@ -94,8 +102,9 @@ export class TTSDownloader {
           break;
         }
         const s = sentences[done]!;
-        const ok = await this.#warmer.warmSentence(sectionIndex, s.ordinal, s.lang, s.text);
+        const ok = await this.#warmer.warmSentence(sectionIndex, s.ordinal, s.lang, s.text, signal);
         if (ok) synthesized++;
+        else failed = true;
         onProgress?.({
           sectionIndex,
           total: sentences.length,
@@ -110,7 +119,8 @@ export class TTSDownloader {
       await this.#warmer.compactCache();
       synthesizedTotal += synthesized;
       if (aborted) break;
-      completed.push(sectionIndex);
+      if (failed) skipped.push(sectionIndex);
+      else completed.push(sectionIndex);
     }
 
     return { completed, skipped, synthesized: synthesizedTotal };

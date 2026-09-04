@@ -63,7 +63,7 @@ interface CustomDictionariesProps {
 interface ProviderRow {
   id: string;
   label: string;
-  kind: 'builtin' | 'stardict' | 'mdict' | 'dict' | 'slob' | 'bgl' | 'web';
+  kind: 'builtin' | 'stardict' | 'mdict' | 'dict' | 'slob' | 'bgl' | 'plugin' | 'web';
   badge: string;
   imported?: ImportedDictionary;
   /** Set on `kind: 'web'` rows. The shape distinguishes deletable custom
@@ -280,6 +280,10 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
 
   const { selectFiles } = useFileSelector(appService, _);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    stage: string;
+    percentage: number;
+  } | null>(null);
   // Android only: the dictionary app remembered for the browser-excluding
   // system-lookup chooser (issue #4559). Stays null on every other platform
   // and whenever nothing has been remembered, so the reset row below only
@@ -481,7 +485,9 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
                 ? _('Slob')
                 : dict.kind === 'bgl'
                   ? _('Babylon')
-                  : _('StarDict'),
+                  : dict.kind === 'plugin'
+                    ? _('Yomitan')
+                    : _('StarDict'),
         imported: dict,
         disabled,
         reason,
@@ -514,6 +520,7 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
   const handleImport = async () => {
     if (importing) return;
     setImporting(true);
+    setImportProgress(null);
     try {
       const result = await selectFiles({ type: 'dictionaries', multiple: true });
       if (result.error) {
@@ -526,7 +533,15 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
       }
       // User cancelled the picker — staying silent is the right call here.
       if (result.files.length === 0) return;
-      const importResult = await appService?.importDictionaries(result.files, dictionaries);
+      const importResult = await appService?.importDictionaries(
+        result.files,
+        dictionaries,
+        ({ stage, completed, total }) => {
+          if (total === undefined || total <= 0) return;
+          const percentage = Math.min(100, Math.max(0, Math.floor((completed / total) * 100)));
+          setImportProgress({ stage, percentage });
+        },
+      );
       if (!importResult) {
         eventDispatcher.dispatch('toast', {
           type: 'error',
@@ -603,7 +618,21 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
           timeout: 4000,
         });
       }
-      if (added === 0 && replaced === 0 && importResult.orphanFiles.length === 0) {
+      for (const error of importResult.importErrors ?? []) {
+        eventDispatcher.dispatch('toast', {
+          type: 'error',
+          message: _('Failed to import dictionary: {{message}}', {
+            message: `${error.name}: ${error.message}`,
+          }),
+          timeout: 4000,
+        });
+      }
+      if (
+        added === 0 &&
+        replaced === 0 &&
+        importResult.orphanFiles.length === 0 &&
+        !importResult.importErrors?.length
+      ) {
         eventDispatcher.dispatch('toast', {
           type: 'info',
           message: _('No new dictionaries were imported'),
@@ -620,6 +649,7 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
       });
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -816,7 +846,7 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
             'transition-colors duration-150',
             'hover:border-base-300 hover:bg-base-300/40',
             'active:bg-base-200/80',
-            'focus-visible:ring-base-content/15 focus-visible:outline-none focus-visible:ring-2',
+            'focus-visible:ring-base-content/15 focus-visible:outline-hidden focus-visible:ring-2',
             'disabled:cursor-not-allowed disabled:opacity-60',
             'disabled:hover:border-base-200 disabled:hover:bg-base-100',
           )}
@@ -835,8 +865,19 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
           >
             <MdAdd className='h-3.5 w-3.5' />
           </span>
-          <span className='line-clamp-1'>
-            {importing ? _('Importing…') : _('Import Dictionary')}
+          <span className='line-clamp-1' aria-live='polite'>
+            {importing ? (
+              importProgress ? (
+                <>
+                  {importProgress.stage === 'indexing' ? _('Indexing…') : _('Importing…')}
+                  {` ${importProgress.percentage}%`}
+                </>
+              ) : (
+                _('Importing…')
+              )
+            ) : (
+              _('Import Dictionary')
+            )}
           </span>
         </button>
         <button
@@ -849,7 +890,7 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
             'transition-colors duration-150',
             'hover:border-base-300 hover:bg-base-300/40',
             'active:bg-base-200/80',
-            'focus-visible:ring-base-content/15 focus-visible:outline-none focus-visible:ring-2',
+            'focus-visible:ring-base-content/15 focus-visible:outline-hidden focus-visible:ring-2',
           )}
         >
           <span
@@ -915,28 +956,28 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
               {webModal.editingId ? _('Edit Web Search') : _('Add Web Search')}
             </h3>
             <div className='mt-4 space-y-3'>
-              <label className='form-control w-full'>
-                <span className='label-text text-sm'>{_('Name')}</span>
+              <label className='flex flex-col w-full'>
+                <span className='text-sm text-sm'>{_('Name')}</span>
                 <input
                   type='text'
-                  className='input input-bordered input-sm w-full'
+                  className='input input-sm w-full'
                   value={webModal.name}
                   placeholder={_('e.g. Google')}
                   onChange={(e) => setWebModal((m) => (m ? { ...m, name: e.target.value } : m))}
                 />
               </label>
-              <label className='form-control w-full'>
-                <span className='label-text text-sm'>{_('URL Template')}</span>
+              <label className='flex flex-col w-full'>
+                <span className='text-sm text-sm'>{_('URL Template')}</span>
                 <input
                   type='url'
-                  className='input input-bordered input-sm w-full'
+                  className='input input-sm w-full'
                   value={webModal.urlTemplate}
                   placeholder='https://www.google.com/search?q=%WORD%'
                   onChange={(e) =>
                     setWebModal((m) => (m ? { ...m, urlTemplate: e.target.value } : m))
                   }
                 />
-                <span className='label-text-alt text-base-content/60 mt-1 text-xs'>
+                <span className='text-xs text-base-content/60 mt-1 text-xs'>
                   {_('Use %WORD% where the looked-up word should appear.')}
                 </span>
               </label>
@@ -967,11 +1008,11 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
           <div className='modal-box w-11/12 max-w-md'>
             <h3 className='text-base font-semibold'>{_('Edit Dictionary')}</h3>
             <div className='mt-4 space-y-3'>
-              <label className='form-control w-full'>
-                <span className='label-text text-sm'>{_('Name')}</span>
+              <label className='flex flex-col w-full'>
+                <span className='text-sm text-sm'>{_('Name')}</span>
                 <input
                   type='text'
-                  className='input input-bordered input-sm w-full'
+                  className='input input-sm w-full'
                   value={dictModal.name}
                   placeholder={_('Dictionary name')}
                   onChange={(e) => setDictModal((m) => (m ? { ...m, name: e.target.value } : m))}

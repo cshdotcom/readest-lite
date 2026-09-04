@@ -27,6 +27,7 @@ import AnnotationToolbarCustomizer from './AnnotationToolbarCustomizer';
 import { DEFAULT_ANNOTATION_TOOLBAR_ITEMS } from '@/utils/annotationToolbar';
 import { canShareText } from '@/utils/share';
 import { optInTelemetry, optOutTelemetry } from '@/utils/telemetry';
+import KeyboardShortcutsSettings from './KeyboardShortcutsSettings';
 
 const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset }) => {
   const _ = useTranslation();
@@ -58,6 +59,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
   );
   const [copyToNotebook, setCopyToNotebook] = useState(viewSettings.copyToNotebook);
   const [showToolbarCustomizer, setShowToolbarCustomizer] = useState(false);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const [animated, setAnimated] = useState(viewSettings.animated);
   const [pageTurnStyle, setPageTurnStyle] = useState(viewSettings.pageTurnStyle || 'push');
   const [isEink, setIsEink] = useState(viewSettings.isEink);
@@ -117,6 +119,8 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
       true,
     );
     pageTurnerResetRef.current();
+    // Keyboard/mouse bindings are NOT reset here — they are device-local and
+    // have their own "Reset all" inside the Keyboard Shortcuts sub-page.
   };
 
   useEffect(() => {
@@ -350,6 +354,10 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
     );
   }
 
+  if (showKeyboardShortcuts) {
+    return <KeyboardShortcutsSettings onBack={() => setShowKeyboardShortcuts(false)} />;
+  }
+
   return (
     <div className='my-4 w-full space-y-6'>
       <BoxedList title={_('Scroll')} data-setting-id='settings.control.scrolledMode'>
@@ -430,6 +438,14 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
           pageTurnerResetRef.current = fn;
         }}
       />
+
+      <BoxedList title={_('Shortcuts')} data-setting-id='settings.control.keyboardShortcuts'>
+        <NavigationRow
+          title={_('Keyboard Shortcuts')}
+          status={_('Customize keyboard and mouse controls')}
+          onClick={() => setShowKeyboardShortcuts(true)}
+        />
+      </BoxedList>
 
       <BoxedList
         title={_('Annotation Tools')}

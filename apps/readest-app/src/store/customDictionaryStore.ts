@@ -10,6 +10,7 @@ import { useSettingsStore } from './settingsStore';
 import { publishReplicaDelete, publishReplicaUpsert } from '@/services/sync/replicaPublish';
 import { DICTIONARY_KIND } from '@/services/sync/adapters/dictionary';
 import { markExplicitProviderOrderPublish } from '@/services/sync/replicaSettingsSync';
+import type { DictionaryPluginControlStore } from '@/services/dictionaries/plugins/controlStore';
 
 const publishDictUpsert = (dict: ImportedDictionary): void => {
   if (!dict.contentId) return;
@@ -516,11 +517,45 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
       const persisted = settings?.customDictionaries ?? [];
       const persistedSettings = settings?.dictionarySettings ?? DEFAULT_DICTIONARY_SETTINGS;
       const appService = await envConfig.getAppService();
+      const pluginDictionaries = persisted.filter(
+        (dict) => !dict.deletedAt && dict.kind === 'plugin',
+      );
+      let pluginControlStore: DictionaryPluginControlStore | undefined;
+      if (pluginDictionaries.length > 0) {
+        try {
+          pluginControlStore = await import('@/services/dictionaries/plugins/controlService').then(
+            (module) => module.getDictionaryPluginControlStore(appService),
+          );
+        } catch (error) {
+          console.warn('Failed to open dictionary plugin control store', error);
+        }
+      }
       const dictionaries = await Promise.all(
         persisted.map(async (dict) => {
           if (dict.deletedAt) return dict;
           const exists = await appService.exists(dict.bundleDir, 'Dictionaries');
-          return exists ? dict : { ...dict, unavailable: true };
+          if (!exists) return { ...dict, unavailable: true };
+          if (dict.kind !== 'plugin' || !dict.plugin) return dict;
+          if (!pluginControlStore) return { ...dict, unavailable: true };
+          const generation = await pluginControlStore.getActiveGeneration(dict.id);
+          if (
+            generation?.pluginId === dict.plugin.pluginId &&
+            generation.indexVersion === dict.plugin.indexVersion
+          ) {
+            return dict;
+          }
+          try {
+            const { materializePluginDictionary } = await import(
+              '@/services/dictionaries/plugins/materialize'
+            );
+            await materializePluginDictionary(appService, dict, {
+              controlStore: pluginControlStore,
+            });
+            return { ...dict, unavailable: undefined };
+          } catch (error) {
+            console.warn('Failed to materialize plugin dictionary', dict.id, error);
+            return { ...dict, unavailable: true };
+          }
         }),
       );
 

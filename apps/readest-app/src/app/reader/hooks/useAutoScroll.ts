@@ -22,9 +22,9 @@ export interface AutoScrollState {
   active: boolean;
   paused: boolean;
   speed: number;
-  setSpeed: (speed: number, _animate?: boolean) => void;
   togglePause: () => void;
   adjustSpeed: (dir: 1 | -1) => void;
+  setSpeed: (value: number, persist?: boolean) => void;
   stop: () => void;
 }
 
@@ -33,22 +33,31 @@ export interface AutoScrollState {
 // A tap on the page pauses/resumes instead of turning the page or toggling the
 // bars; manual wheel/drag input simply composes with the paced scrolling since
 // every frame is a relative containerPosition step. Escape or leaving scrolled
-// mode stops the session; the session state is never persisted.
+// mode stops the session.
+//
+// Whether a session is engaged is remembered per book (#5631): a book closed
+// mid-session reopens scrolling, so readers who use the mode all the time don't
+// re-toggle it after every app suspend. Only an explicit stop clears it.
 export const useAutoScroll = (
   bookKey: string,
   viewRef: React.RefObject<FoliateView | null>,
 ): AutoScrollState => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
-  const { getViewSettings, setAutoScrollEnabled } = useReaderStore();
+  const { getViewSettings, getViewState, setAutoScrollEnabled } = useReaderStore();
+  const inited = useReaderStore((state) => state.viewStates[bookKey]?.inited);
   const viewSettings = getViewSettings(bookKey);
   const [active, setActive] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState(viewSettings?.autoScrollSpeed ?? 100);
+  const [speed, setSpeedState] = useState(viewSettings?.autoScrollSpeed ?? 100);
 
   // Undoes the per-session window listeners; set on start.
   const sessionCleanupRef = useRef<(() => void) | null>(null);
   const stallStartRef = useRef<number | null>(null);
+  // Closing the book tears the session down through the same stop() path an
+  // explicit stop takes — but it must leave the resume flag alone, since a
+  // session that was still running at close is exactly what reopening resumes.
+  const closingRef = useRef(false);
 
   const scrollerRef = useRef<PacedScroller | null>(null);
   if (!scrollerRef.current) {
@@ -83,10 +92,23 @@ export const useAutoScroll = (
           stallStartRef.current = null;
         }
       },
+      // Whole pixels are all a scroll offset can express, so the remainder is
+      // rendered as a sub-pixel transform on the scrollport. Without it a slow
+      // session visibly steps: at the minimum speed of 5px/s the page jumps a
+      // whole pixel every 200ms instead of gliding.
+      onSubpixel: (offset) => {
+        const renderer = viewRef.current?.renderer;
+        if (!renderer) return;
+        const sign = renderer.scrollProp === 'scrollLeft' ? -1 : 1;
+        renderer.subpixelOffset = sign * offset;
+      },
       onStop: () => {
         setActive(false);
         setPaused(false);
         setAutoScrollEnabled(bookKey, false);
+        if (!closingRef.current) {
+          saveViewSettings(envConfig, bookKey, 'autoScrollRunning', false, true, false);
+        }
         sessionCleanupRef.current?.();
         sessionCleanupRef.current = null;
       },
@@ -101,15 +123,21 @@ export const useAutoScroll = (
     setPaused(scroller.paused);
   };
 
-  const adjustSpeed = (dir: 1 | -1) => {
-    const current = getViewSettings(bookKey)?.autoScrollSpeed ?? speed;
+  // Commit a speed (percent). `persist` off skips the settings write, for the
+  // per-frame updates of a continuous drag; the release persists once.
+  const setSpeed = (value: number, persist = true) => {
     const next = Math.min(
       MAX_AUTO_SCROLL_SPEED,
-      Math.max(MIN_AUTO_SCROLL_SPEED, current + dir * AUTO_SCROLL_SPEED_STEP),
+      Math.max(MIN_AUTO_SCROLL_SPEED, Math.round(value)),
     );
-    setSpeed(next);
+    setSpeedState(next);
     scrollerRef.current!.setVelocity((AUTO_SCROLL_BASE_PX_PER_SEC * next) / 100);
-    saveViewSettings(envConfig, bookKey, 'autoScrollSpeed', next, false, false);
+    if (persist) saveViewSettings(envConfig, bookKey, 'autoScrollSpeed', next, false, false);
+  };
+
+  const adjustSpeed = (dir: 1 | -1) => {
+    const current = getViewSettings(bookKey)?.autoScrollSpeed ?? speed;
+    setSpeed(current + dir * AUTO_SCROLL_SPEED_STEP);
   };
 
   const startSession = () => {
@@ -117,12 +145,13 @@ export const useAutoScroll = (
     const renderer = viewRef.current?.renderer;
     if (!renderer?.scrolled) return;
     const speedNow = getViewSettings(bookKey)?.autoScrollSpeed ?? 100;
-    setSpeed(speedNow);
+    setSpeedState(speedNow);
     stallStartRef.current = null;
     scroller.start((AUTO_SCROLL_BASE_PX_PER_SEC * speedNow) / 100);
     setActive(true);
     setPaused(false);
     setAutoScrollEnabled(bookKey, true);
+    saveViewSettings(envConfig, bookKey, 'autoScrollRunning', true, true, false);
 
     const onKeydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') scroller.stop();
@@ -168,17 +197,36 @@ export const useAutoScroll = (
     if (!scrolled) scrollerRef.current?.stop();
   }, [scrolled]);
 
+  // Resume the session the book was closed in (#5631). Waits for the view to
+  // be inited: the renderer is in the store before init, but has no laid-out
+  // content to scroll until then. A deep-link landing (?cfi=, library search
+  // hit) is skipped — scrolling it unprompted would promote the preview into
+  // the reading position the user never navigated to.
   useEffect(() => {
-    return () => scrollerRef.current?.stop();
+    if (!inited) return;
+    if (getViewState(bookKey)?.previewMode) return;
+    if (!getViewSettings(bookKey)?.autoScrollRunning) return;
+    startSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inited]);
+
+  useEffect(() => {
+    // Re-armed on every mount: StrictMode tears the effect down and sets this
+    // up again, and a latched flag would suppress every later stop's write.
+    closingRef.current = false;
+    return () => {
+      closingRef.current = true;
+      scrollerRef.current?.stop();
+    };
   }, []);
 
   return {
     active,
     paused,
     speed,
-    setSpeed: (s: number, _a?: boolean) => setSpeed(s),
     togglePause,
     adjustSpeed,
+    setSpeed,
     stop: () => scrollerRef.current?.stop(),
   };
 };

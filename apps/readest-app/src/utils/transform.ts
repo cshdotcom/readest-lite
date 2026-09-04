@@ -11,6 +11,7 @@ import {
 import { DBBookConfig, DBBook, DBBookNote } from '@/types/records';
 import { sanitizeString } from './sanitize';
 import { buildFeedBookUrl } from '@/services/rss/feedBookUrl';
+import { restoreAbsBookFields } from './audiobook';
 
 export const transformBookConfigToDB = (bookConfig: unknown, userId: string): DBBookConfig => {
   const {
@@ -74,6 +75,7 @@ export const transformBookToDB = (book: unknown, userId: string): DBBook => {
     author,
     groupId,
     groupName,
+    groupUpdatedAt,
     tags,
     progress,
     readingStatus,
@@ -97,6 +99,7 @@ export const transformBookToDB = (book: unknown, userId: string): DBBook => {
     author: sanitizeString(author)!,
     group_id: groupId,
     group_name: sanitizeString(groupName),
+    group_updated_at: groupUpdatedAt ? new Date(groupUpdatedAt).toISOString() : null,
     tags: tags,
     progress: progress,
     reading_status: readingStatus,
@@ -124,6 +127,7 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     author,
     group_id,
     group_name,
+    group_updated_at,
     tags,
     progress,
     reading_status,
@@ -147,6 +151,7 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     author,
     groupId: group_id,
     groupName: group_name,
+    groupUpdatedAt: group_updated_at ? new Date(group_updated_at).getTime() : null,
     tags: tags,
     progress: progress,
     readingStatus: reading_status as ReadingStatus,
@@ -167,6 +172,12 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
   // metadata so the reader can rebuild the feed:// descriptor here.
   if (!book.url && book.metadata?.feedUrl) {
     book.url = buildFeedBookUrl(book.metadata.feedUrl);
+  }
+  // Same story for an ABS stub, whose identity is its `abs://` filePath: no
+  // column carries it (and the push strips filePath as device-local), so it
+  // rides in metadata and is rebuilt here along with the badge fields.
+  if (book.format === 'ABS') {
+    restoreAbsBookFields(book);
   }
   return book;
 };

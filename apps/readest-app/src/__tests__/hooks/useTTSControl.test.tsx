@@ -1,4 +1,4 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Dependency mocks (must be set up before importing the hook) ---
@@ -29,6 +29,7 @@ const mockView = {
     start: 0,
     end: 0,
     sideProp: 'height',
+    next: vi.fn(),
     goTo: vi.fn(),
   },
   resolveCFI: vi.fn().mockReturnValue({ index: 0, anchor: () => new Range() }),
@@ -45,19 +46,20 @@ const mockView = {
   },
 };
 
-const mockProgress = {
+let mockProgress = {
   location: { start: { cfi: '' }, end: { cfi: '' } },
   index: 0,
-  range: null,
+  range: null as Range | null,
   sectionLabel: '',
 };
 
 const mockViewSettings = {
   ttsLocation: null as string | null,
   ttsRate: 1,
+  ttsSentenceGap: 0.15,
+  ttsParagraphGap: 0.3,
   ttsHighlightOptions: { style: 'highlight', color: '#ffff00' },
   isEink: false,
-  showTTSBar: false,
   ttsMediaMetadata: 'sentence',
   translationEnabled: false,
   ttsReadAloudText: 'source',
@@ -71,6 +73,7 @@ const mockBookData = {
 vi.mock('@/store/readerStore', () => {
   const store = {
     hoveredBookKey: null,
+    bookKeys: ['book-1'],
     getView: () => mockView,
     getProgress: () => mockProgress,
     getViewSettings: () => mockViewSettings,
@@ -82,6 +85,24 @@ vi.mock('@/store/readerStore', () => {
     selector ? selector(store) : store;
   useReaderStore.getState = () => store;
   return { useReaderStore };
+});
+
+const mockSettings = {
+  globalViewSettings: { ttsRate: 1, ttsSentenceGap: 0.15, ttsParagraphGap: 0.3 },
+};
+const mockSaveSettings = vi.fn();
+vi.mock('@/store/settingsStore', () => {
+  // Lazy accessors only: the factory is hoisted above the consts it reads.
+  const state = {
+    get settings() {
+      return mockSettings;
+    },
+    setSettings: vi.fn(),
+    saveSettings: (...args: unknown[]) => mockSaveSettings(...args),
+  };
+  return {
+    useSettingsStore: Object.assign(() => state, { getState: () => state }),
+  };
 });
 
 vi.mock('@/store/bookDataStore', () => {
@@ -136,11 +157,16 @@ vi.mock('@/services/tts', () => ({
       setHighlightGranularity: vi.fn(),
       setLang: vi.fn(),
       setRate: vi.fn(),
+      setSentenceGap: vi.fn(),
+      setParagraphGap: vi.fn(),
+      supportsGapControl: vi.fn().mockReturnValue(false),
       setVoice: vi.fn(),
       setTargetLang: vi.fn(),
       speak: vi.fn(),
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+      startFromRange: vi.fn().mockReturnValue('<speak>hello</speak>'),
       stop: vi.fn().mockResolvedValue(undefined),
       shutdown: vi.fn().mockResolvedValue(undefined),
       forward: vi.fn().mockResolvedValue(undefined),
@@ -148,6 +174,21 @@ vi.mock('@/services/tts', () => ({
       getVoices: vi.fn().mockResolvedValue([]),
       getVoiceId: vi.fn().mockReturnValue(''),
       redispatchPosition: vi.fn(),
+      ensureTimeline: vi.fn().mockResolvedValue(null),
+      getPlaybackInfo: vi.fn().mockReturnValue(null),
+      seekToTime: vi.fn().mockResolvedValue(undefined),
+      detachView: vi.fn(),
+      attachView: vi.fn().mockResolvedValue(undefined),
+      getSpeakingLang: vi.fn().mockReturnValue('en'),
+      getSentenceProgress: vi.fn().mockReturnValue(null),
+      isSoundingSentenceOnScreen: vi.fn().mockReturnValue(false),
+      getCurrentHighlightCfi: vi.fn().mockReturnValue(null),
+      getCurrentPlaybackCfi: vi.fn().mockReturnValue(null),
+      reapplyCurrentHighlight: vi.fn(),
+      kind: 'tts',
+      terminated: false,
+      isViewAttached: true,
+      narrationActive: narrationState.active,
       state: 'idle',
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -155,10 +196,58 @@ vi.mock('@/services/tts', () => ({
     });
     ttsControllerInstances.push(this);
   }),
+  ensureSharedAudioContext: vi.fn().mockResolvedValue(undefined),
+}));
+
+// jsdom reports every rect as zero, so the layout probe cannot answer here.
+// What this suite covers is the follow loop; where the page break falls is
+// covered by src/__tests__/utils/ttsPageFollow.test.ts.
+vi.mock('@/utils/ttsPageFollow', () => ({
+  pageBreakFraction: vi.fn(() => null),
+}));
+
+vi.mock('@/services/tts/wordHighlight', () => ({
+  rangeTextExcludingInert: vi.fn(() => 'a sentence long enough to straddle a page break'),
+  getTextSubRange: vi.fn(() => null),
 }));
 
 vi.mock('@/libs/mediaSession', () => ({
   TauriMediaSession: class {},
+  getMediaSession: vi.fn(() => null),
+}));
+
+const { narrationState } = vi.hoisted(() => ({ narrationState: { active: false } }));
+
+const { mockSessionManager } = vi.hoisted(() => ({
+  mockSessionManager: {
+    claim: vi.fn(),
+    detach: vi.fn(),
+    release: vi.fn(),
+    adopt: vi.fn(),
+    getSessionByHash: vi.fn((_hash: string) => null as unknown),
+    getActiveSession: vi.fn(() => null as unknown),
+    stopActive: vi.fn().mockResolvedValue(undefined),
+    stopBook: vi.fn().mockResolvedValue(undefined),
+    stopController: vi.fn(
+      async (_bookHash: string, controller: { shutdown: () => Promise<void> }) =>
+        controller.shutdown().catch(() => {}),
+    ),
+    setSleepTimer: vi.fn(),
+    getSleepTimer: vi.fn(() => null),
+    setStopAtChapterEnd: vi.fn(),
+    getStopAtChapterEnd: vi.fn(() => false),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  },
+}));
+
+vi.mock('@/services/tts/TTSSessionManager', () => ({
+  getBookHashFromKey: (key: string) => key.split('-')[0]!,
+  // Mirrors the real kind gate: only a TTS source is adoptable by the reader.
+  asTTSController: (source: { kind?: string } | null | undefined) =>
+    source && source.kind === 'tts' ? source : null,
+  ttsSessionManager: mockSessionManager,
+  TTS_STOP_AT_CHAPTER_END: -1,
 }));
 
 vi.mock('@/utils/ssml', () => ({
@@ -176,6 +265,8 @@ vi.mock('@/utils/cfi', () => ({
 
 vi.mock('@/utils/misc', () => ({
   getLocale: () => 'en',
+  getOSPlatform: () => 'macos',
+  stubTranslation: (key: string) => key,
 }));
 
 vi.mock('@/utils/ttsMetadata', () => ({
@@ -199,23 +290,11 @@ vi.mock('@/utils/ttsTime', () => ({
   }),
 }));
 
-const { mockDeinitMediaSession } = vi.hoisted(() => ({
-  mockDeinitMediaSession: vi.fn(() => Promise.resolve()),
-}));
-
-vi.mock('@/app/reader/hooks/useTTSMediaSession', () => ({
-  useTTSMediaSession: () => ({
-    mediaSessionRef: { current: null },
-    unblockAudio: vi.fn(),
-    releaseUnblockAudio: vi.fn(),
-    initMediaSession: vi.fn().mockResolvedValue(undefined),
-    deinitMediaSession: mockDeinitMediaSession,
-  }),
-}));
-
 // Imports must come AFTER vi.mock calls so they pick up the mocked modules.
 import { useTTSControl } from '@/app/reader/hooks/useTTSControl';
+import { ttsMediaBridge } from '@/services/tts/ttsMediaBridge';
 import { eventDispatcher } from '@/utils/event';
+import { pageBreakFraction } from '@/utils/ttsPageFollow';
 import { useReaderStore } from '@/store/readerStore';
 
 const getSetTTSEnabledMock = () =>
@@ -264,6 +343,143 @@ describe('useTTSControl concurrent tts-speak events', () => {
       while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
       await Promise.all([p1, p2]);
     });
+  });
+});
+
+// Reading a selection aloud has to mean different things for the two kinds of
+// engine: a synthesizer can render the selected words, a recording only has the
+// clips the publisher timed. Handing raw text to the narration client ended the
+// utterance at once, which fired the one-shot callback and killed the session —
+// the button appeared to play for a moment and stop.
+describe('useTTSControl reading a selection aloud', () => {
+  beforeEach(() => {
+    ttsControllerInstances.length = 0;
+    pendingInitResolvers.length = 0;
+    narrationState.active = false;
+    mockView.tts.from.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const speakSelection = async () => {
+    render(<Harness />);
+    const range = new Range();
+    await act(async () => {
+      const p = eventDispatcher.dispatch('tts-speak', { bookKey: 'book-1', range, oneTime: true });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
+      await p;
+    });
+    const controller = ttsControllerInstances[0] as unknown as {
+      speak: ReturnType<typeof vi.fn>;
+      startFromRange: ReturnType<typeof vi.fn>;
+    };
+    return { range, controller };
+  };
+
+  it('starts the recording at the selection when the book is narrated', async () => {
+    narrationState.active = true;
+
+    const { range, controller } = await speakSelection();
+
+    expect(controller.startFromRange).toHaveBeenCalledWith(range);
+    // Not a one-shot: the session goes on from that passage rather than being
+    // stopped by the one-time callback as soon as the first clip ends.
+    expect(controller.speak).toHaveBeenCalledWith(expect.anything(), false, expect.any(Function));
+  });
+
+  it('synthesizes the selected text when the book is not narrated', async () => {
+    const { controller } = await speakSelection();
+
+    expect(mockView.tts.from).not.toHaveBeenCalled();
+    expect(controller.speak).toHaveBeenCalledWith(expect.anything(), true, expect.any(Function));
+  });
+});
+
+// Following the voice onto the next page moves the view past the *start* of the
+// sentence being read, which is what ttsLocation records. Judged on that alone
+// the reader looks like they navigated away, so the back-to-position prompt
+// appeared on every page turn — while they were in fact looking at the words
+// being spoken. isCfiInLocation is mocked false throughout this suite, so these
+// two tests turn entirely on whether the sentence is still on screen.
+describe('useTTSControl back-to-position prompt', () => {
+  const BannerHarness = () => {
+    const tts = useTTSControl({ bookKey: 'book-1' });
+    return <div data-testid='banner'>{String(tts.showBackToCurrentTTSLocation)}</div>;
+  };
+
+  beforeEach(() => {
+    ttsControllerInstances.length = 0;
+    pendingInitResolvers.length = 0;
+    mockViewSettings.ttsLocation = 'epubcfi(/6/4!/4/2)';
+  });
+
+  afterEach(() => {
+    cleanup();
+    mockViewSettings.ttsLocation = null;
+  });
+
+  const startSessionThenRelocate = async (sentenceOnScreen: boolean) => {
+    const view = render(<BannerHarness />);
+    await act(async () => {
+      const p = eventDispatcher.dispatch('tts-speak', { bookKey: 'book-1' });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
+      await p;
+    });
+    const controller = ttsControllerInstances[0] as unknown as {
+      isSoundingSentenceOnScreen: ReturnType<typeof vi.fn>;
+    };
+    controller.isSoundingSentenceOnScreen.mockReturnValue(sentenceOnScreen);
+
+    // Past the suppression window that hides the prompt right after a section
+    // change, so this asserts the on-screen test rather than that grace period.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 5000);
+    try {
+      // A page turn republishes the location as a new object; the re-render is
+      // what a store update would do, and is what re-runs the location effect.
+      await act(async () => {
+        mockProgress = { ...mockProgress, location: { start: { cfi: 'a' }, end: { cfi: 'b' } } };
+        view.rerender(<BannerHarness />);
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    return screen.getByTestId('banner').textContent;
+  };
+
+  it('stays hidden when the sentence being read is still on the page', async () => {
+    expect(await startSessionThenRelocate(true)).toBe('false');
+  });
+
+  it('appears when the reader has paged away from the sentence entirely', async () => {
+    expect(await startSessionThenRelocate(false)).toBe('true');
+  });
+
+  it('returns to the live narration position instead of a stale saved mark', async () => {
+    const BackHarness = () => {
+      const tts = useTTSControl({ bookKey: 'book-1' });
+      return <button onClick={tts.handleBackToCurrentTTSLocation}>Back</button>;
+    };
+    render(<BackHarness />);
+    await act(async () => {
+      const p = eventDispatcher.dispatch('tts-speak', { bookKey: 'book-1' });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
+      await p;
+    });
+    const controller = ttsControllerInstances[0] as unknown as {
+      getCurrentPlaybackCfi: ReturnType<typeof vi.fn>;
+    };
+    controller.getCurrentPlaybackCfi.mockReturnValue('live-narration-cfi');
+
+    fireEvent.click(screen.getByText('Back'));
+
+    expect(mockView.resolveNavigation).toHaveBeenLastCalledWith('live-narration-cfi');
   });
 });
 
@@ -341,8 +557,6 @@ describe('useTTSControl handleStop resilience (#4676)', () => {
   beforeEach(() => {
     ttsControllerInstances.length = 0;
     pendingInitResolvers.length = 0;
-    mockDeinitMediaSession.mockReset();
-    mockDeinitMediaSession.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -379,6 +593,34 @@ describe('useTTSControl handleStop resilience (#4676)', () => {
     expect(setTTSEnabled).toHaveBeenCalledWith('book-1', false);
   });
 
+  it('keeps an awaited tts-stop dispatch pending until controller shutdown finishes', async () => {
+    const controller = await startSession();
+    let finishShutdown!: () => void;
+    const teardown = new Promise<void>((resolve) => {
+      finishShutdown = resolve;
+    });
+    controller.shutdown.mockReturnValueOnce(teardown);
+    mockSessionManager.stopBook.mockReturnValueOnce(teardown);
+
+    let firstStopped = false;
+    let secondStopped = false;
+    const firstStop = eventDispatcher.dispatch('tts-stop', { bookKey: 'book-1' }).then(() => {
+      firstStopped = true;
+    });
+    const secondStop = eventDispatcher.dispatch('tts-stop', { bookKey: 'book-1' }).then(() => {
+      secondStopped = true;
+    });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(firstStopped).toBe(false);
+    expect(secondStopped).toBe(false);
+    expect(mockSessionManager.stopBook).toHaveBeenCalledWith('book', 'user');
+    finishShutdown();
+    await Promise.all([firstStop, secondStop]);
+    expect(firstStopped).toBe(true);
+    expect(secondStopped).toBe(true);
+  });
+
   it('disables TTS even when controller.shutdown never resolves', async () => {
     // The state resets must run before (not after) the teardown await, so a
     // hung native teardown can never leave the TTS icon stuck on.
@@ -399,9 +641,11 @@ describe('useTTSControl handleStop resilience (#4676)', () => {
   it('tears down the media session even when controller.shutdown never resolves', async () => {
     // Regression for the lock-screen Now Playing lingering with iOS system TTS:
     // the media-session teardown must not be gated behind the controller's own
-    // shutdown, which can stall.
+    // shutdown, which can stall. The media session is owned by ttsMediaBridge
+    // now; the teardown is its unbind().
+    const unbindSpy = vi.spyOn(ttsMediaBridge, 'unbind');
     const controller = await startSession();
-    mockDeinitMediaSession.mockClear();
+    unbindSpy.mockClear();
     controller.shutdown.mockReturnValueOnce(new Promise<void>(() => {}));
 
     await act(async () => {
@@ -409,7 +653,8 @@ describe('useTTSControl handleStop resilience (#4676)', () => {
       for (let i = 0; i < 5; i++) await Promise.resolve();
     });
 
-    expect(mockDeinitMediaSession).toHaveBeenCalled();
+    expect(unbindSpy).toHaveBeenCalled();
+    unbindSpy.mockRestore();
   });
 });
 
@@ -421,14 +666,23 @@ describe('useTTSControl handleHighlightMark cross-section navigation', () => {
     mockView.renderer.goTo.mockClear();
     mockView.goTo.mockClear();
     mockView.resolveCFI.mockReset();
+    // Reset renderer state a test may override (a throwing assertion can skip
+    // an inline restore, leaking into later tests).
+    mockView.renderer.getContents = () => [{ index: 0, doc: document as unknown as Document }];
+    mockView.renderer.primaryIndex = 0;
+    mockView.renderer.scrolled = false;
+    mockProgress.range = null;
     mockViewSettings.ttsLocation = null;
+    vi.mocked(pageBreakFraction).mockReturnValue(null);
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  const setupAndCaptureHighlightHandler = async () => {
+  const setupAndCaptureHighlightHandler = async (
+    eventName: 'tts-highlight-mark' | 'tts-highlight-word' = 'tts-highlight-mark',
+  ) => {
     render(<Harness />);
 
     await act(async () => {
@@ -447,8 +701,8 @@ describe('useTTSControl handleHighlightMark cross-section navigation', () => {
       addEventListener: { mock: { calls: [string, (e: Event) => void][] } };
     };
     const calls = controller.addEventListener.mock.calls;
-    const entry = calls.find(([name]) => name === 'tts-highlight-mark');
-    if (!entry) throw new Error('tts-highlight-mark listener was not registered');
+    const entry = calls.find(([name]) => name === eventName);
+    if (!entry) throw new Error(`${eventName} listener was not registered`);
     return entry[1];
   };
 
@@ -477,5 +731,461 @@ describe('useTTSControl handleHighlightMark cross-section navigation', () => {
 
     expect(mockView.renderer.scrollToAnchor).toHaveBeenCalledTimes(1);
     expect(mockView.goTo).not.toHaveBeenCalled();
+  });
+
+  // A sentence laid out across a page break: its mark fires once, on the page it
+  // starts on, and a phrase-timed recording reports no words in between. Without
+  // following the audio clock the reader is left on the first page while the
+  // voice reads the tail rendered on the next one.
+  it('turns the page when the voice reads past the visible part of a sentence', async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = await setupAndCaptureHighlightHandler();
+      const controller = ttsControllerInstances[0] as unknown as {
+        getSentenceProgress: ReturnType<typeof vi.fn>;
+        state: string;
+      };
+      controller.state = 'playing';
+
+      // Three quarters of the sentence is readable on this page; the tail is
+      // laid out past its edge.
+      vi.mocked(pageBreakFraction).mockReturnValue(0.75);
+      mockView.renderer.end = 528;
+      mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => new Range() });
+      controller.getSentenceProgress.mockReturnValue(0);
+
+      await act(async () => {
+        handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+      });
+
+      // Still reading the visible part.
+      controller.getSentenceProgress.mockReturnValue(0.5);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      expect(mockView.renderer.next).not.toHaveBeenCalled();
+
+      // Past it: the page must follow.
+      controller.getSentenceProgress.mockReturnValue(0.8);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      expect(mockView.renderer.next).toHaveBeenCalled();
+    } finally {
+      mockView.renderer.end = 0;
+      mockView.renderer.next = vi.fn();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not follow a sentence that fits on the page', async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = await setupAndCaptureHighlightHandler();
+      const controller = ttsControllerInstances[0] as unknown as {
+        getSentenceProgress: ReturnType<typeof vi.fn>;
+        state: string;
+      };
+      controller.state = 'playing';
+      controller.getSentenceProgress.mockReturnValue(0.99);
+      // The whole sentence fits: no break to follow.
+      vi.mocked(pageBreakFraction).mockReturnValue(null);
+      mockView.renderer.end = 528;
+      mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => new Range() });
+
+      await act(async () => {
+        handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(mockView.renderer.next).not.toHaveBeenCalled();
+    } finally {
+      mockView.renderer.end = 0;
+      mockView.renderer.next = vi.fn();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not follow when the engine reports no clock', async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = await setupAndCaptureHighlightHandler();
+      const controller = ttsControllerInstances[0] as unknown as {
+        getSentenceProgress: ReturnType<typeof vi.fn>;
+        state: string;
+      };
+      controller.state = 'playing';
+      controller.getSentenceProgress.mockReturnValue(null);
+      vi.mocked(pageBreakFraction).mockReturnValue(0.1);
+      mockView.renderer.end = 528;
+      mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => new Range() });
+
+      await act(async () => {
+        handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(mockView.renderer.next).not.toHaveBeenCalled();
+    } finally {
+      mockView.renderer.end = 0;
+      mockView.renderer.next = vi.fn();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not throw when the renderer has no loaded contents (READEST-19)', async () => {
+    const handler = await setupAndCaptureHighlightHandler();
+    // getContents() can be empty mid-relocate (section still loading / view
+    // torn down); the mark handler must not destructure `doc` off undefined.
+    mockView.renderer.getContents = () => [];
+    mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => new Range() });
+
+    expect(() => {
+      handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+    }).not.toThrow();
+  });
+
+  it('bails without scrolling when the cfi resolves to a null range (READEST-21)', async () => {
+    const handler = await setupAndCaptureHighlightHandler();
+    // In-section (index 0 == primaryIndex 0) so the follow-scroll path runs,
+    // but the anchor cannot resolve to a range in the doc.
+    mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => null });
+
+    expect(() => {
+      handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+    }).not.toThrow();
+    // A null range must never reach scrollToAnchor (foliate reads
+    // range.startContainer inside it -> the READEST-21 crash).
+    expect(mockView.renderer.scrollToAnchor).not.toHaveBeenCalled();
+  });
+
+  it('does not throw in scrolled mode when the range is null (READEST-21)', async () => {
+    const handler = await setupAndCaptureHighlightHandler();
+    mockView.renderer.scrolled = true;
+    mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => null });
+
+    expect(() => {
+      handler(new CustomEvent('tts-highlight-mark', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+    }).not.toThrow();
+  });
+
+  it('does not throw when a word highlight fires with no loaded contents (READEST-4S)', async () => {
+    const handler = await setupAndCaptureHighlightHandler('tts-highlight-word');
+    mockView.renderer.getContents = () => [];
+
+    expect(() => {
+      handler(new CustomEvent('tts-highlight-word', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+    }).not.toThrow();
+  });
+
+  it('follows a visible-section word using the first loaded content as fallback', async () => {
+    const handler = await setupAndCaptureHighlightHandler('tts-highlight-word');
+    const wordRange = {
+      compareBoundaryPoints: vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0),
+    } as unknown as Range;
+    const visibleRange = {} as Range;
+    mockView.renderer.primaryIndex = 1;
+    mockView.renderer.getContents = () => [{ index: 0, doc: document as unknown as Document }];
+    mockProgress.range = visibleRange;
+    mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => wordRange });
+
+    handler(new CustomEvent('tts-highlight-word', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+
+    expect(wordRange.compareBoundaryPoints).toHaveBeenCalledWith(Range.END_TO_START, visibleRange);
+    expect(mockView.renderer.scrollToAnchor).toHaveBeenCalledWith(wordRange);
+  });
+
+  it('follows a word in the primary loaded section', async () => {
+    const handler = await setupAndCaptureHighlightHandler('tts-highlight-word');
+    const wordRange = {
+      compareBoundaryPoints: vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0),
+    } as unknown as Range;
+    mockProgress.range = {} as Range;
+    mockView.resolveCFI.mockReturnValue({ index: 0, anchor: () => wordRange });
+
+    handler(new CustomEvent('tts-highlight-word', { detail: { cfi: 'epubcfi(/6/4!/4/2)' } }));
+
+    expect(mockView.renderer.scrollToAnchor).toHaveBeenCalledWith(wordRange);
+  });
+});
+
+describe('useTTSControl background session lifecycle', () => {
+  type ControllerMock = {
+    shutdown: ReturnType<typeof vi.fn>;
+    detachView: ReturnType<typeof vi.fn>;
+    attachView: ReturnType<typeof vi.fn>;
+    terminated: boolean;
+    state: string;
+  };
+
+  beforeEach(() => {
+    ttsControllerInstances.length = 0;
+    pendingInitResolvers.length = 0;
+    mockSessionManager.claim.mockClear();
+    mockSessionManager.detach.mockClear();
+    mockSessionManager.release.mockClear();
+    mockSessionManager.adopt.mockClear();
+    mockSessionManager.stopActive.mockClear();
+    mockSessionManager.stopController.mockClear();
+    mockSessionManager.addEventListener.mockClear();
+    mockSessionManager.removeEventListener.mockClear();
+    mockSessionManager.getSessionByHash.mockReturnValue(null);
+    mockSessionManager.getActiveSession.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const startSession = async () => {
+    render(<Harness />);
+    await act(async () => {
+      const p = eventDispatcher.dispatch('tts-speak', { bookKey: 'book-1' });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
+      await p;
+    });
+    return ttsControllerInstances[0] as ControllerMock;
+  };
+
+  it('claims the session at controller birth', async () => {
+    await startSession();
+    expect(mockSessionManager.claim).toHaveBeenCalledWith(
+      'book-1',
+      ttsControllerInstances[0],
+      expect.objectContaining({ bookKey: 'book-1', title: 'T' }),
+    );
+  });
+
+  it('unmount while the session lives transfers ownership (detach, no shutdown)', async () => {
+    const controller = await startSession();
+    controller.state = 'playing';
+    controller.terminated = false;
+    mockSessionManager.getSessionByHash.mockReturnValue({
+      bookHash: 'book',
+      bookKey: 'book-1',
+      controller,
+    });
+    cleanup(); // unmounts the hook
+    expect(mockSessionManager.detach).toHaveBeenCalledWith('book');
+    expect(controller.shutdown).not.toHaveBeenCalled();
+  });
+
+  it('unmount after termination delegates the joinable controller teardown', async () => {
+    const controller = await startSession();
+    controller.terminated = true;
+    mockSessionManager.getSessionByHash.mockReturnValue({
+      bookHash: 'book',
+      bookKey: 'book-1',
+      controller,
+    });
+    cleanup();
+    expect(mockSessionManager.stopController).toHaveBeenCalledWith('book', controller, 'user');
+  });
+
+  it('tts-close-book detaches a live session; tts-stop stays a hard stop', async () => {
+    const controller = await startSession();
+    controller.terminated = false;
+    await act(async () => {
+      await eventDispatcher.dispatch('tts-close-book', { bookKey: 'book-1' });
+    });
+    expect(mockSessionManager.detach).toHaveBeenCalledWith('book');
+    expect(controller.shutdown).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await eventDispatcher.dispatch('tts-stop', { bookKey: 'book-1' });
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(mockSessionManager.stopController).toHaveBeenCalledWith('book', controller, 'user');
+  });
+
+  it('ignores a stopped event for the controller another reader replaced', async () => {
+    const controller = await startSession();
+    const listener = mockSessionManager.addEventListener.mock.calls.find(
+      ([event]) => event === 'session-changed',
+    )?.[1] as ((event: Event) => void) | undefined;
+    expect(listener).toBeDefined();
+
+    act(() => {
+      listener!(
+        new CustomEvent('session-changed', {
+          detail: {
+            reason: 'stopped',
+            session: { bookHash: 'other', bookKey: 'other-r1', controller: {} },
+          },
+        }),
+      );
+    });
+    await act(async () => {
+      await eventDispatcher.dispatch('tts-stop', { bookKey: 'book-1' });
+    });
+
+    expect(mockSessionManager.stopController).toHaveBeenCalledWith('book', controller, 'user');
+  });
+
+  it('mounting a book stops an active session of a different, unmounted book', async () => {
+    mockSessionManager.getActiveSession.mockReturnValue({
+      bookHash: 'otherhash',
+      bookKey: 'otherhash-r9',
+      controller: {},
+    });
+    render(<Harness />);
+    await act(async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(mockSessionManager.stopActive).toHaveBeenCalledWith('replaced');
+  });
+
+  it('adopts a live session for the same book without constructing a controller', async () => {
+    const liveController = {
+      kind: 'tts',
+      state: 'playing',
+      terminated: false,
+      isViewAttached: false,
+      shutdown: vi.fn(),
+      detachView: vi.fn(),
+      attachView: vi.fn().mockResolvedValue(undefined),
+      getSpeakingLang: vi.fn().mockReturnValue('en'),
+      getCurrentHighlightCfi: vi.fn().mockReturnValue(null),
+      getCurrentPlaybackCfi: vi.fn().mockReturnValue(null),
+      isSoundingSentenceOnScreen: vi.fn().mockReturnValue(false),
+      getSpokenSentence: vi.fn().mockReturnValue(null),
+      updateHighlightOptions: vi.fn(),
+      setHighlightGranularity: vi.fn(),
+      getVoiceId: vi.fn().mockReturnValue(''),
+      setTargetLang: vi.fn(),
+      setLang: vi.fn(),
+      setRate: vi.fn(),
+      pause: vi.fn().mockResolvedValue(true),
+      resume: vi.fn().mockResolvedValue(true),
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      forward: vi.fn().mockResolvedValue(undefined),
+      backward: vi.fn().mockResolvedValue(undefined),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      redispatchPosition: vi.fn(),
+      usesAudioTransport: vi.fn().mockReturnValue(false),
+      supportsLyrics: vi.fn().mockReturnValue(true),
+      isBuffering: vi.fn().mockReturnValue(false),
+    };
+    mockSessionManager.getSessionByHash.mockReturnValue({
+      bookHash: 'book',
+      bookKey: 'book-old',
+      controller: liveController,
+    });
+    render(<Harness />);
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(ttsControllerInstances).toHaveLength(0); // no new controller
+    expect(mockSessionManager.adopt).toHaveBeenCalledWith(
+      'book-1',
+      expect.objectContaining({ bookKey: 'book-1' }),
+    );
+    expect(liveController.attachView).toHaveBeenCalledWith(
+      mockView,
+      expect.objectContaining({ bookKey: 'book-1' }),
+    );
+  });
+});
+
+describe('useTTSControl gap control (handleSetSentenceGap / handleSupportsGapControl)', () => {
+  let hookResult: ReturnType<typeof useTTSControl> | null = null;
+
+  const CaptureHarness = () => {
+    hookResult = useTTSControl({ bookKey: 'book-1' });
+    return null;
+  };
+
+  beforeEach(() => {
+    ttsControllerInstances.length = 0;
+    pendingInitResolvers.length = 0;
+    hookResult = null;
+    mockSessionManager.claim.mockClear();
+    mockSessionManager.getSessionByHash.mockReturnValue(null);
+    mockSessionManager.getActiveSession.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const startSession = async () => {
+    render(<CaptureHarness />);
+    await act(async () => {
+      const p = eventDispatcher.dispatch('tts-speak', { bookKey: 'book-1' });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      while (pendingInitResolvers.length > 0) pendingInitResolvers.shift()!();
+      await p;
+    });
+    return ttsControllerInstances[0] as {
+      setSentenceGap: ReturnType<typeof vi.fn>;
+      supportsGapControl: ReturnType<typeof vi.fn>;
+      stop: ReturnType<typeof vi.fn>;
+      start: ReturnType<typeof vi.fn>;
+      state: string;
+    };
+  };
+
+  // Both the player sheet's speed ruler and the RSVP overlay's `tts-set-rate`
+  // land here, so deriving the pauses at this one funnel is what keeps them
+  // from going stale against the rate they were scaled for (#5750).
+  it('a rate change re-derives and persists both pauses', async () => {
+    const controller = (await startSession()) as unknown as {
+      setSentenceGap: ReturnType<typeof vi.fn>;
+      setParagraphGap: ReturnType<typeof vi.fn>;
+    };
+
+    await act(async () => {
+      hookResult!.handleSetRate(2);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(controller.setSentenceGap).toHaveBeenCalledWith(0.1);
+    expect(controller.setParagraphGap).toHaveBeenCalledWith(0.2);
+    expect(mockViewSettings.ttsSentenceGap).toBe(0.1);
+    expect(mockViewSettings.ttsParagraphGap).toBe(0.2);
+    expect(mockSettings.globalViewSettings.ttsSentenceGap).toBe(0.1);
+    expect(mockSettings.globalViewSettings.ttsParagraphGap).toBe(0.2);
+    expect(mockSaveSettings).toHaveBeenCalled();
+  });
+
+  // The RSVP overlay can set the rate before Read Aloud has ever started, and
+  // it persists ttsRate either way. Skipping the derivation when there is no
+  // controller yet would leave the stored pauses scaled for the old rate, to be
+  // picked up by the next session — the exact staleness this funnel removes.
+  it('derives the pauses even with no session running', async () => {
+    mockViewSettings.ttsSentenceGap = 0.15;
+    mockViewSettings.ttsParagraphGap = 0.3;
+    render(<CaptureHarness />);
+
+    await act(async () => {
+      hookResult!.handleSetRate(1.5);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(mockViewSettings.ttsSentenceGap).toBe(0.12);
+    expect(mockViewSettings.ttsParagraphGap).toBe(0.24);
+  });
+
+  it('the tts-set-rate bus re-derives the pauses too', async () => {
+    const controller = (await startSession()) as unknown as {
+      setSentenceGap: ReturnType<typeof vi.fn>;
+      setParagraphGap: ReturnType<typeof vi.fn>;
+    };
+
+    await act(async () => {
+      await eventDispatcher.dispatch('tts-set-rate', { bookKey: 'book-1', rate: 1.5 });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(mockViewSettings.ttsRate).toBe(1.5);
+    expect(controller.setSentenceGap).toHaveBeenCalledWith(0.12);
+    expect(controller.setParagraphGap).toHaveBeenCalledWith(0.24);
   });
 });

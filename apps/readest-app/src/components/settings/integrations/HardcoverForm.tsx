@@ -7,6 +7,7 @@ import { eventDispatcher } from '@/utils/event';
 import { HardcoverClient, HardcoverSyncMapStore } from '@/services/hardcover';
 import SubPageHeader from '../SubPageHeader';
 import { SectionTitle, SettingLabel } from '../primitives';
+import { Toggle } from '@/components/primitives/toggle';
 
 interface HardcoverFormProps {
   onBack: () => void;
@@ -110,18 +111,14 @@ const HardcoverForm: React.FC<HardcoverFormProps> = ({ onBack }) => {
             <div className='divide-base-200 divide-y'>
               <label className='flex min-h-14 items-center justify-between px-4'>
                 <SettingLabel>{_('Sync Enabled')}</SettingLabel>
-                <input
-                  type='checkbox'
-                  className='toggle'
+                <Toggle
                   checked={settings.hardcover?.enabled ?? false}
                   onChange={handleToggleEnabled}
                 />
               </label>
               <label className='flex min-h-14 items-center justify-between px-4'>
                 <SettingLabel>{_('Auto Sync')}</SettingLabel>
-                <input
-                  type='checkbox'
-                  className='toggle'
+                <Toggle
                   checked={settings.hardcover?.autoSync === true}
                   onChange={handleToggleAutoSync}
                 />
@@ -138,7 +135,7 @@ const HardcoverForm: React.FC<HardcoverFormProps> = ({ onBack }) => {
                 'h-10 rounded-lg px-4 text-sm font-medium',
                 'text-error hover:bg-error/10',
                 'transition-colors duration-150',
-                'focus-visible:ring-error/40 focus-visible:outline-none focus-visible:ring-2',
+                'focus-visible:ring-error/40 focus-visible:outline-hidden focus-visible:ring-2',
               )}
             >
               {_('Disconnect')}
@@ -155,7 +152,7 @@ const HardcoverForm: React.FC<HardcoverFormProps> = ({ onBack }) => {
               id='hardcover-token'
               type='password'
               placeholder={_('Paste your Hardcover API token')}
-              className='input input-bordered eink-bordered h-11 w-full text-sm focus:outline-none'
+              className='input eink-bordered h-11 w-full text-sm focus:outline-hidden'
               spellCheck='false'
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
@@ -170,7 +167,7 @@ const HardcoverForm: React.FC<HardcoverFormProps> = ({ onBack }) => {
               className={clsx(
                 'btn btn-primary',
                 'h-10 min-h-10 rounded-lg border-0 px-5 text-sm font-medium',
-                'focus-visible:ring-primary/40 focus-visible:outline-none focus-visible:ring-2',
+                'focus-visible:ring-primary/40 focus-visible:outline-hidden focus-visible:ring-2',
                 isConnecting && 'opacity-60',
               )}
             >

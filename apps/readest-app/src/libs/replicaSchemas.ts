@@ -62,11 +62,30 @@ const opdsCatalogFieldsSchema = z
     autoDownload: fieldEnvelopeSchema.optional(),
     disabled: fieldEnvelopeSchema.optional(),
     addedAt: fieldEnvelopeSchema.optional(),
+    sortOrder: fieldEnvelopeSchema.optional(),
     // Encrypted-credential fields. The CRDT envelope wraps a cipher
     // envelope as `v` when the publishing device had its CryptoSession
     // unlocked; otherwise the field is omitted from the row.
     username: fieldEnvelopeWithCipher.optional(),
     password: fieldEnvelopeWithCipher.optional(),
+  })
+  .catchall(fieldEnvelopeWithCipher);
+
+const absServerFieldsSchema = z
+  .object({
+    name: fieldEnvelopeSchema.optional(),
+    url: fieldEnvelopeSchema.optional(),
+    addedAt: fieldEnvelopeSchema.optional(),
+    libraryIds: fieldEnvelopeSchema.optional(),
+    disabled: fieldEnvelopeSchema.optional(),
+    serverVersion: fieldEnvelopeSchema.optional(),
+    // Encrypted-credential fields. The CRDT envelope wraps a cipher
+    // envelope as `v` when the publishing device had its CryptoSession
+    // unlocked; otherwise the field is omitted from the row.
+    username: fieldEnvelopeWithCipher.optional(),
+    password: fieldEnvelopeWithCipher.optional(),
+    accessToken: fieldEnvelopeWithCipher.optional(),
+    refreshToken: fieldEnvelopeWithCipher.optional(),
   })
   .catchall(fieldEnvelopeWithCipher);
 
@@ -113,6 +132,13 @@ export const KIND_ALLOWLIST: Record<string, KindSpec> = {
     maxSchemaVersion: 1,
     maxRowsPerUser: 50,
     fields: opdsCatalogFieldsSchema,
+    binary: false,
+  },
+  abs_server: {
+    minSchemaVersion: 1,
+    maxSchemaVersion: 1,
+    maxRowsPerUser: 50,
+    fields: absServerFieldsSchema,
     binary: false,
   },
   settings: {
@@ -163,6 +189,10 @@ const manifestFileSchema = z.object({
   filename: z.string(),
   byteSize: z.number().int().nonnegative(),
   partialMd5: z.string(),
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/u)
+    .optional(),
   mtime: z.number().optional(),
 });
 

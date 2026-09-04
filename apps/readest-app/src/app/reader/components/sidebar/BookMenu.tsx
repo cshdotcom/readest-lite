@@ -34,9 +34,14 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
   const { getVisibleLibrary } = useLibraryStore();
   const { openParallelView } = useBooksManager();
   const { sideBarBookKey } = useSidebarStore();
-  const { getConfig } = useBookDataStore();
+  const { getConfig, getBookData } = useBookDataStore();
   const { parallelViews, setParallel, unsetParallel } = useParallelViewStore();
   const viewSettings = getViewSettings(sideBarBookKey!);
+  const bookData = sideBarBookKey ? getBookData(sideBarBookKey) : null;
+  const canPairAudiobook =
+    bookData?.book?.format === 'EPUB' &&
+    bookData.bookDoc?.rendition?.layout !== 'pre-paginated' &&
+    !!bookData.bookDoc?.toc?.length;
 
   const [isSortedTOC, setIsSortedTOC] = React.useState(viewSettings?.sortedTOC || false);
 
@@ -118,10 +123,21 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
     eventDispatcher.dispatch('hardcover-push-progress', { bookKey: sideBarBookKey });
     setIsDropdownOpen?.(false);
   };
+  // Hosted by ReaderContent (like the audiobook dialog) so the picker
+  // outlives this dropdown.
+  const handleLinkHardcoverBook = () => {
+    eventDispatcher.dispatch('hardcover-link-book', { bookKey: sideBarBookKey });
+    setIsDropdownOpen?.(false);
+  };
+  const hardcoverLink = sideBarBookKey ? getConfig(sideBarBookKey)?.hardcover : undefined;
   // Routed through Annotator (per-book, long-lived) so that the
   // confirmation dialog isn't unmounted with the dropdown menu.
   const handleClearAnnotations = () => {
     eventDispatcher.dispatch('clear-annotations', { bookKey: sideBarBookKey });
+    setIsDropdownOpen?.(false);
+  };
+  const handleManageAudiobook = () => {
+    eventDispatcher.dispatch('manage-audiobook', { bookKey: sideBarBookKey });
     setIsDropdownOpen?.(false);
   };
 
@@ -150,7 +166,7 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
                     alt={book.title}
                     width={56}
                     height={80}
-                    className='aspect-auto max-h-8 max-w-4 rounded-sm shadow-md'
+                    className='aspect-auto max-h-8 max-w-4 rounded-xs shadow-md'
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
@@ -192,11 +208,25 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
           <ul className='flex flex-col ps-1'>
             <MenuItem label={_('Push Progress')} noIcon onClick={handlePushHardcoverProgress} />
             <MenuItem label={_('Push Notes')} noIcon onClick={handlePushHardcoverNotes} />
+            <MenuItem
+              label={_('Link Book')}
+              description={hardcoverLink?.title}
+              noIcon
+              onClick={handleLinkHardcoverBook}
+            />
           </ul>
         </MenuItem>
       )}
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem label={_('Proofread')} onClick={showProofreadRulesWindow} />
+      {canPairAudiobook && (
+        <MenuItem
+          label={
+            getConfig(sideBarBookKey!)?.audiobook ? _('Manage Audiobook') : _('Pair Audiobook')
+          }
+          onClick={handleManageAudiobook}
+        />
+      )}
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem label={_('Export Annotations')} onClick={handleExportAnnotations} />
       <MenuItem label={_('Import Annotations')} onClick={handleImportAnnotations} />

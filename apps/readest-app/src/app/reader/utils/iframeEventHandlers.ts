@@ -239,6 +239,30 @@ const getKeyStatus = (event?: MouseEvent | WheelEvent | TouchEvent) => {
 };
 
 export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null;
+  const interactiveTarget =
+    !!target?.isContentEditable ||
+    /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '') ||
+    (/^(A|BUTTON)$/.test(target?.tagName ?? '') && (event.key === 'Enter' || event.key === ' '));
+  const postKeydown = (handled: boolean) => {
+    window.postMessage(
+      {
+        type: 'iframe-keydown',
+        bookKey,
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+        altGraphKey: event.getModifierState('AltGraph'),
+        repeat: event.repeat,
+        interactiveTarget,
+        handled,
+      },
+      '*',
+    );
+  };
   keyboardState = {
     key: event.key,
     code: event.code,
@@ -255,19 +279,23 @@ export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
     event.preventDefault();
   }
 
-  window.postMessage(
-    {
-      type: 'iframe-keydown',
-      bookKey,
-      key: event.key,
-      code: event.code,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-      metaKey: event.metaKey,
-    },
-    '*',
-  );
+  // The original iframe KeyboardEvent must be consumed synchronously. A later
+  // postMessage handler cannot cancel browser defaults such as Ctrl+End.
+  if (eventDispatcher.dispatchSync('iframe-page-turn-keydown', { bookKey, event })) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    postKeydown(true);
+    return;
+  }
+
+  if (eventDispatcher.dispatchSync('iframe-shortcut-keydown', { bookKey, event })) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    postKeydown(true);
+    return;
+  }
+
+  postKeydown(false);
 };
 
 export const handleKeyup = (bookKey: string, event: KeyboardEvent) => {
@@ -304,6 +332,7 @@ export const handleMousedown = (bookKey: string, event: MouseEvent) => {
   if (event.button === 1 && autoscrollArmedBooks.has(bookKey)) {
     event.preventDefault();
   }
+  if (event.button === 3 || event.button === 4) event.preventDefault();
 
   window.postMessage(
     {
@@ -330,6 +359,7 @@ export const handleAuxclick = (bookKey: string, event: MouseEvent) => {
   if (event.button === 1 && autoscrollArmedBooks.has(bookKey)) {
     event.preventDefault();
   }
+  if (event.button === 3 || event.button === 4) event.preventDefault();
 };
 
 export const handleMousemove = (bookKey: string, event: MouseEvent) => {
@@ -350,6 +380,10 @@ export const handleMouseup = (bookKey: string, event: MouseEvent) => {
   // we will handle mouse back and forward buttons ourselves
   if ([3, 4].includes(event.button)) {
     event.preventDefault();
+    if (eventDispatcher.dispatchSync('iframe-shortcut-mouseup', { bookKey, event })) {
+      event.stopImmediatePropagation();
+      return;
+    }
   }
   window.postMessage(
     {
@@ -414,6 +448,7 @@ export const handleClick = (
   bookKey: string,
   doubleClickDisabled: React.MutableRefObject<boolean>,
   isFixedLayout: boolean,
+  isComicBook: boolean,
   event: MouseEvent,
 ) => {
   const now = Date.now();
@@ -421,6 +456,17 @@ export const handleClick = (
 
   if (!doubleClickDisabled.current && now - lastClickTime < DOUBLE_CLICK_INTERVAL_THRESHOLD_MS) {
     lastClickTime = now;
+    // A comic page is one full-bleed image with no text on it, so the
+    // double-click that starts a word selection everywhere else is free to do
+    // what a single tap does in a reflowable book: open the page in the image
+    // viewer, the only surface that can zoom past page-fit and save/share the
+    // image. Single tap cannot be used here - in fixed layout it is the
+    // page-turn / toolbar gesture.
+    const comicPage = isComicBook ? detectMediaTarget(event.target as HTMLElement | null) : null;
+    if (comicPage?.elementType === 'image') {
+      window.postMessage({ type: 'iframe-open-media', bookKey, ...comicPage }, '*');
+      return;
+    }
     window.postMessage(
       {
         type: 'iframe-double-click',

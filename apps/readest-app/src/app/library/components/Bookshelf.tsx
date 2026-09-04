@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { MdManageSearch } from 'react-icons/md';
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,7 +14,7 @@ import {
   type GridListProps,
   type ListProps,
 } from 'react-virtuoso';
-import { Book, BooksGroup, ReadingStatus } from '@/types/book';
+import { Book, BooksGroup, type LibrarySearchConfig, ReadingStatus } from '@/types/book';
 import {
   LibraryCoverFitType,
   LibraryGroupByType,
@@ -24,7 +25,9 @@ import { useEnv } from '@/context/EnvContext';
 import { useThemeStore } from '@/store/themeStore';
 import { useAutoFocus } from '@/hooks/useAutoFocus';
 import { useSettingsStore } from '@/store/settingsStore';
+import { isAbsBookOrphaned, useABSServerStore } from '@/store/absServerStore';
 import { useLibraryStore } from '@/store/libraryStore';
+import { selectActiveBookDownloadProgress, useTransferStore } from '@/store/transferStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { navigateToLibrary, navigateToReader, showReaderWindow } from '@/utils/nav';
@@ -43,16 +46,22 @@ import {
   compareSortValues,
   resolveEffectivePrimarySort,
   resolveEffectiveSecondarySort,
+  resolveCurrentShelfBooks,
+  selectDownloadableBooks,
   selectRecentShelfBooks,
   withReadingStatus,
+  withTimeRemainingLast,
 } from '../utils/libraryUtils';
 import { eventDispatcher } from '@/utils/event';
 import { getLocalBookFilename } from '@/utils/book';
 import { MIMETYPES, EXTS } from '@/libs/document';
 import { makeSafeFilename } from '@/utils/misc';
+import { isTauriAppPlatform } from '@/services/environment';
+import { isLocalSendEnabled } from '@/services/localsend/devicePrefs';
+import { splitLibraryOpenIds } from '@/utils/audiobook';
 
 import { useSpatialNavigation } from '../hooks/useSpatialNavigation';
-import Alert from '@/components/Alert';
+import DeleteConfirmAlert from '@/components/DeleteConfirmAlert';
 import Spinner from '@/components/Spinner';
 import ModalPortal from '@/components/ModalPortal';
 import BookshelfItem, { generateBookshelfItems } from './BookshelfItem';
@@ -63,6 +72,12 @@ import GroupingModal from './GroupingModal';
 import SetStatusAlert from './SetStatusAlert';
 import RecentShelf, { RECENT_SHELF_BOOK_COUNT } from './RecentShelf';
 import { useOpenBook } from '../hooks/useOpenBook';
+import LibrarySearchResults from './LibrarySearchResults';
+
+export interface ContentSearchRequest {
+  query: string;
+  config: LibrarySearchConfig;
+}
 
 interface BookshelfProps {
   libraryBooks: Book[];
@@ -70,18 +85,23 @@ interface BookshelfProps {
   isSelectAll: boolean;
   isSelectNone: boolean;
   onScrollerRef: (el: HTMLDivElement | null) => void;
-  handleImportBooks: () => void;
+  handleImportBooks: (anchor: HTMLElement) => void;
   handleBookDownload: (
     book: Book,
-    options?: { redownload?: boolean; queued?: boolean },
+    options?: { redownload?: boolean; queued?: boolean; silent?: boolean },
   ) => Promise<boolean>;
   handleBookUpload: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleBookDelete: (book: Book, syncBooks?: boolean) => Promise<boolean>;
+  handleBookPurge: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleSetSelectMode: (selectMode: boolean) => void;
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
   handlePushLibrary: () => Promise<void>;
-  booksTransferProgress: { [key: string]: number | null };
+  /** Direct (non-queued) downloads only; queue transfers are read from the store. */
+  booksTransferProgress: { [key: string]: number };
+  contentSearch: ContentSearchRequest | null;
+  onSearchContents: () => void;
+  onSearchProgress?: (value: number | null) => void;
 }
 
 /**
@@ -99,7 +119,19 @@ type BookshelfListContext = {
    * identity stable and does not reset its scroller on every Bookshelf render.
    */
   recentShelfHeader: React.ReactNode;
+  /**
+   * Height (px) of the trailing Footer spacer. Defaults to the baseline
+   * breathing room, but grows to clear the fixed select-mode action bar so the
+   * last book can scroll above it instead of hiding behind it (#5175).
+   */
+  footerHeight: number;
 };
+
+const DEFAULT_FOOTER_HEIGHT = 34;
+
+const BookshelfFooter = ({ context }: { context?: BookshelfListContext }) => (
+  <div style={{ height: context?.footerHeight ?? DEFAULT_FOOTER_HEIGHT }} />
+);
 
 const BOOKSHELF_GRID_CLASSES =
   'bookshelf-items transform-wrapper grid gap-x-4 px-4 sm:gap-x-0 sm:px-2 ' +
@@ -145,12 +177,12 @@ const BookshelfHeader = ({ context }: { context?: BookshelfListContext }) => (
 const GRID_VIRTUOSO_COMPONENTS: GridComponents<BookshelfListContext> = {
   List: BookshelfGridList,
   Header: BookshelfHeader,
-  Footer: () => <div style={{ height: 34 }} />,
+  Footer: BookshelfFooter,
 };
 const LIST_VIRTUOSO_COMPONENTS: Components<unknown, BookshelfListContext> = {
   List: BookshelfLinearList,
   Header: BookshelfHeader,
-  Footer: () => <div style={{ height: 34 }} />,
+  Footer: BookshelfFooter,
 };
 
 const Bookshelf: React.FC<BookshelfProps> = ({
@@ -163,11 +195,15 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   handleBookUpload,
   handleBookDownload,
   handleBookDelete,
+  handleBookPurge,
   handleSetSelectMode,
   handleShowDetailsBook,
   handleLibraryNavigation,
   handlePushLibrary,
   booksTransferProgress,
+  contentSearch,
+  onSearchContents,
+  onSearchProgress,
 }) => {
   const _ = useTranslation();
   const router = useRouter();
@@ -177,24 +213,28 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   const { safeAreaInsets } = useThemeStore();
 
   const groupId = searchParams?.get('group') || '';
-  const queryTerm = searchParams?.get('q') || null;
+  const queryTerm = searchParams?.get('q')?.trim() || null;
   const viewMode = searchParams?.get('view') || settings.libraryViewMode;
   const storedSortBy = ensureLibrarySortByType(searchParams?.get('sort'), settings.librarySortBy);
   const sortOrder = searchParams?.get('order') || (settings.librarySortAscending ? 'asc' : 'desc');
   const groupBy = ensureLibraryGroupByType(searchParams?.get('groupBy'), settings.libraryGroupBy);
   const sortByAuto = settings.librarySortByAuto ?? true;
   const sortBy = resolveEffectivePrimarySort(storedSortBy, groupBy, sortByAuto);
-  const sortBy2Raw = ensureLibrarySecondarySortByType(
+  const thenSortByRaw = ensureLibrarySecondarySortByType(
     searchParams?.get('thenSort'),
     settings.libraryThenSortBy ?? 'none',
   );
-  const sortBy2 = resolveEffectiveSecondarySort(sortBy2Raw, groupBy);
+  const thenSortBy = resolveEffectiveSecondarySort(thenSortByRaw, groupBy);
   const thenSortOrder =
-    searchParams?.get('thenOrder') || ((settings.libraryThenSortAscending ?? true) ? 'asc' : 'desc');
+    searchParams?.get('thenOrder') ||
+    ((settings.libraryThenSortAscending ?? true) ? 'asc' : 'desc');
+  const showTimeRemaining =
+    sortBy === LibrarySortByType.TimeRemaining || thenSortBy === LibrarySortByType.TimeRemaining;
   const coverFit = searchParams?.get('cover') || settings.libraryCoverFit;
 
   const [loading, setLoading] = useState(false);
   const [showSelectModeActions, setShowSelectModeActions] = useState(false);
+  const [selectModeActionsHeight, setSelectModeActionsHeight] = useState(0);
   const [bookIdsToDelete, setBookIdsToDelete] = useState<string[]>([]);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [showStatusAlert, setShowStatusAlert] = useState(false);
@@ -209,13 +249,17 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
   const { setCurrentBookshelf, setLibrary, updateBooks } = useLibraryStore();
   const { setSelectedBooks, getSelectedBooks, toggleSelectedBook } = useLibraryStore();
+  // The raw Set from the store: its identity only changes when the selection
+  // does, so memos keyed on it stay stable across unrelated re-renders
+  // (getSelectedBooks() allocates a fresh array per call).
+  const { selectedBooks: selectedBookSet } = useLibraryStore();
   const { getGroupName } = useLibraryStore();
 
   const uiLanguage = localStorage?.getItem('i18nextLng') || '';
 
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams?.toString());
+      const params = new URLSearchParams(window.location.search);
 
       Object.entries(updates).forEach(([key, value]) => {
         if (value === null || value === '') {
@@ -233,7 +277,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       if (params.get('view') === 'grid') params.delete('view');
 
       const newParamString = params.toString();
-      const currentParamString = searchParams?.toString() || '';
+      const currentParamString = window.location.search.slice(1);
 
       if (newParamString !== currentParamString) {
         navigateToLibrary(router, newParamString);
@@ -242,50 +286,56 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     [router, searchParams],
   );
 
+  // ABS books whose server row hasn't reached this device (or was removed)
+  // can't stream, have no cover source, and can't be opened — hide them from
+  // every shelf derivation (grid, groups, recent shelf, search). They stay in
+  // the store and keep syncing; they reappear the moment the server row
+  // lands. `absServers` and `settings` are deps because the orphan check
+  // reads the server store with a settings fallback, both of which hydrate
+  // asynchronously after the cached library first renders.
+  const absServers = useABSServerStore((state) => state.servers);
+  const visibleBooks = useMemo(
+    () => libraryBooks.filter((book) => !isAbsBookOrphaned(book)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [libraryBooks, absServers, settings],
+  );
+
   const filteredBooks = useMemo(() => {
     const bookFilter = createBookFilter(queryTerm);
-    return queryTerm ? libraryBooks.filter((book) => bookFilter(book)) : libraryBooks;
-  }, [libraryBooks, queryTerm]);
+    return queryTerm ? visibleBooks.filter((book) => bookFilter(book)) : visibleBooks;
+  }, [visibleBooks, queryTerm]);
+
+  const manualGroupName = groupBy === LibraryGroupByType.Group ? getGroupName(groupId) : undefined;
+  const currentShelfBooks = useMemo(
+    () => resolveCurrentShelfBooks(visibleBooks, groupBy, groupId, manualGroupName),
+    [visibleBooks, groupBy, groupId, manualGroupName],
+  );
+  const filteredShelfBooks = useMemo(() => {
+    const bookFilter = createBookFilter(queryTerm);
+    return queryTerm ? currentShelfBooks.filter(bookFilter) : currentShelfBooks;
+  }, [currentShelfBooks, queryTerm]);
 
   const currentBookshelfItems = useMemo(() => {
     if (groupBy === LibraryGroupByType.Group) {
       // Use existing generateBookshelfItems for group mode
-      const groupName = getGroupName(groupId) || '';
-      if (groupId && !groupName) {
+      const groupName = manualGroupName || '';
+      if (groupId && !manualGroupName) {
         return [];
       }
-      return generateBookshelfItems(filteredBooks, groupName);
+      return generateBookshelfItems(filteredShelfBooks, groupName);
     } else {
-      // Use new createBookGroups for series/author/none modes
-      const allItems = createBookGroups(filteredBooks, groupBy);
-
-      // If navigating into a specific group, show only that group's books
-      if (groupId) {
-        const targetGroup = allItems.find(
-          (item): item is BooksGroup => 'books' in item && item.id === groupId,
-        );
-        if (targetGroup) {
-          // Return the books from the target group as individual items
-          return targetGroup.books;
-        }
-        // Group not found, return empty
-        return [];
-      }
-
-      return allItems;
+      if (groupId) return filteredShelfBooks;
+      return createBookGroups(filteredShelfBooks, groupBy);
     }
-  }, [filteredBooks, groupBy, groupId, getGroupName]);
+  }, [filteredShelfBooks, groupBy, groupId, manualGroupName]);
 
   useEffect(() => {
-    // v8.10.3: 只在 group 真的不存在时才导航走，而不是 group 暂时为空时
-    // 旧逻辑: groupId && currentBookshelfItems.length === 0 → 立即导航走
-    //   问题: 用户把组里最后一本书移出 → 组暂时为空 → 立即被踢出 → 无法继续操作
-    // 新逻辑: 只在 getGroupName(groupId) 返回空（group 真的被删了）时才导航走
-    //   group 暂时为空时显示空状态，让用户继续操作（加书/删组/返回）
-    if (groupId && !getGroupName(groupId)) {
+    if (groupId && currentShelfBooks.length === 0) {
       updateUrlParams({ group: null });
+    } else {
+      updateUrlParams({});
     }
-  }, [groupId, getGroupName, updateUrlParams]);
+  }, [searchParams, groupId, currentShelfBooks.length, updateUrlParams]);
 
   const sortedBookshelfItems = useMemo(() => {
     const sortOrderMultiplier = sortOrder === 'asc' ? 1 : -1;
@@ -298,13 +348,16 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     // For series groups, series index is always ascending; sort direction applies to fallback only
     const sortAscending = sortOrder === 'asc';
     const thenSortAscending = thenSortOrder === 'asc';
-    const withinGroupSorter = createWithinGroupSorter(
-      groupBy,
+    const withinGroupSorter = withTimeRemainingLast<Book>(
       sortBy,
-      uiLanguage,
-      sortAscending,
-      sortBy2,
-      thenSortAscending,
+      createWithinGroupSorter(
+        groupBy,
+        sortBy,
+        uiLanguage,
+        sortAscending,
+        thenSortBy,
+        thenSortAscending,
+      ),
     );
     groups.forEach((group) => {
       group.books.sort(withinGroupSorter);
@@ -314,49 +367,66 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     // (for series, this ensures books are sorted by series index)
     // `bookSorter` already carries both sort directions, so it is never multiplied
     // by `sortOrderMultiplier` — that would flip the secondary key too (#5119).
-    const bookSorter = createBookSorter(sortBy, uiLanguage, sortBy2, sortAscending, thenSortAscending);
+    const bookSorter = createBookSorter(
+      sortBy,
+      uiLanguage,
+      thenSortBy,
+      sortAscending,
+      thenSortAscending,
+    );
     if (groupId && groupBy !== LibraryGroupByType.Group && groupBy !== LibraryGroupByType.None) {
       ungroupedBooks.sort(withinGroupSorter);
       // When inside a group, books are already sorted correctly — return directly
       // to avoid the merge sort below overriding the within-group sort order
       return ungroupedBooks;
     } else {
-      ungroupedBooks.sort(bookSorter);
+      ungroupedBooks.sort(withTimeRemainingLast<Book>(sortBy, bookSorter));
     }
 
     // Merge groups and ungrouped books, then sort them together
     const allItems: (Book | BooksGroup)[] = [...groups, ...ungroupedBooks];
     const groupSorter = createGroupSorter(sortBy, uiLanguage, groupBy);
 
-    allItems.sort((a, b) => {
-      const isAGroup = 'books' in a;
-      const isBGroup = 'books' in b;
+    allItems.sort(
+      withTimeRemainingLast<Book | BooksGroup>(sortBy, (a, b) => {
+        const isAGroup = 'books' in a;
+        const isBGroup = 'books' in b;
 
-      // If both are groups, use group sorter
-      if (isAGroup && isBGroup) {
-        return groupSorter(a, b) * sortOrderMultiplier;
-      }
+        // If both are groups, use group sorter
+        if (isAGroup && isBGroup) {
+          return groupSorter(a, b) * sortOrderMultiplier;
+        }
 
-      // If both are books, use book sorter
-      if (!isAGroup && !isBGroup) {
-        return bookSorter(a, b);
-      }
+        // If both are books, use book sorter
+        if (!isAGroup && !isBGroup) {
+          return bookSorter(a, b);
+        }
 
-      // For series/author groups: compare sort values to interleave properly
-      if (isAGroup && !isBGroup) {
-        const groupValue = getGroupSortValue(a, sortBy, groupBy);
-        const bookValue = getBookSortValue(b, sortBy);
-        return compareSortValues(groupValue, bookValue, uiLanguage) * sortOrderMultiplier;
-      } else if (!isAGroup && isBGroup) {
-        const bookValue = getBookSortValue(a, sortBy);
-        const groupValue = getGroupSortValue(b, sortBy, groupBy);
-        return compareSortValues(bookValue, groupValue, uiLanguage) * sortOrderMultiplier;
-      }
-      return 0;
-    });
+        // For series/author groups: compare sort values to interleave properly
+        if (isAGroup && !isBGroup) {
+          const groupValue = getGroupSortValue(a, sortBy, groupBy);
+          const bookValue = getBookSortValue(b, sortBy);
+          return compareSortValues(groupValue, bookValue, uiLanguage) * sortOrderMultiplier;
+        } else if (!isAGroup && isBGroup) {
+          const bookValue = getBookSortValue(a, sortBy);
+          const groupValue = getGroupSortValue(b, sortBy, groupBy);
+          return compareSortValues(bookValue, groupValue, uiLanguage) * sortOrderMultiplier;
+        }
+        return 0;
+      }),
+    );
 
     return allItems;
-  }, [sortOrder, thenSortOrder, sortBy, sortBy2, groupBy, groupId, uiLanguage, currentBookshelfItems]);
+  }, [
+    sortOrder,
+    thenSortOrder,
+    sortBy,
+    thenSortBy,
+    groupBy,
+    groupId,
+    uiLanguage,
+    currentBookshelfItems,
+  ]);
 
   useEffect(() => {
     if (isImportingBook.current) return;
@@ -378,8 +448,8 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   }, [importBookUrl, appService]);
 
   useEffect(() => {
-    setCurrentBookshelf(currentBookshelfItems);
-  }, [currentBookshelfItems, setCurrentBookshelf]);
+    setCurrentBookshelf(currentShelfBooks);
+  }, [currentShelfBooks, setCurrentBookshelf]);
 
   const toggleSelection = useCallback(
     (id: string) => {
@@ -390,11 +460,26 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
   const openSelectedBooks = () => {
     handleSetSelectMode(false);
+    const { audiobookHash, readerIds, droppedAudiobooks } = splitLibraryOpenIds(
+      getSelectedBooks(),
+      (hash) => libraryBooks.find((book) => book.hash === hash),
+    );
+    if (audiobookHash) {
+      router.push(`/player?id=${audiobookHash}`);
+      return;
+    }
+    if (droppedAudiobooks) {
+      eventDispatcher.dispatch('toast', {
+        message: _('Audiobooks open in the player'),
+        type: 'info',
+      });
+    }
+    if (readerIds.length === 0) return;
     if (appService?.hasWindow && settings.openBookInNewWindow) {
-      showReaderWindow(appService, getSelectedBooks());
+      showReaderWindow(appService, readerIds);
     } else {
       setTimeout(() => setLoading(true), 200);
-      navigateToReader(router, getSelectedBooks());
+      navigateToReader(router, readerIds);
     }
   };
 
@@ -417,8 +502,12 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     return filteredBooks.filter((book) => wanted.has(book.hash) && !book.deletedAt);
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (purgeData: boolean) => {
     const books = getBooksToDelete();
+    // Toggling "purge all reading data" on the confirmation routes the whole
+    // batch through the purge path, which also wipes each book's reading-data
+    // sidecars (config/nav) instead of leaving the metadata folder behind.
+    const deleteBook = purgeData ? handleBookPurge : handleBookDelete;
     const concurrency = 20;
 
     for (let i = 0; i < books.length; i += concurrency) {
@@ -427,7 +516,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
         break;
       }
       const batch = books.slice(i, i + concurrency);
-      await Promise.all(batch.map((book) => handleBookDelete(book, false)));
+      await Promise.all(batch.map((book) => deleteBook(book, false)));
     }
     handlePushLibrary();
     setSelectedBooks([]);
@@ -563,6 +652,19 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     }
   };
 
+  const sendSelectedNearby = () => {
+    // Group ids in the selection simply don't match any book hash and drop
+    // out; LocalSendManager resolves the files and reports unavailable books.
+    const ids = getSelectedBooks();
+    const books = ids
+      .map((id) => filteredBooks.find((book) => book.hash === id))
+      .filter((book): book is Book => !!book);
+    if (books.length === 0) return;
+    setShowSelectModeActions(false);
+    handleSetSelectMode(false);
+    eventDispatcher.dispatch('localsend-send-books', { books });
+  };
+
   const updateBooksStatus = async (status: ReadingStatus | undefined) => {
     const selectedIds = getSelectedBooks();
     const booksToUpdate: Book[] = [];
@@ -682,6 +784,46 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   );
 
   const selectedBooks = getSelectedBooks();
+
+  // Bulk download (#5244): a selected group stands in for every book it shows,
+  // which is how a 300-book folder gets onto a new device in one action. Only
+  // worth computing while the select-mode bar is up.
+  const downloadableBooks = isSelectMode
+    ? selectDownloadableBooks(selectedBooks, sortedBookshelfItems, filteredBooks)
+    : [];
+
+  const downloadSelectedBooks = async () => {
+    const books = downloadableBooks;
+    if (books.length === 0) return;
+    handleSetSelectMode(false);
+    // One summary up front rather than a toast per book: the Readest Cloud
+    // path returns as soon as each book is queued, but a file backend
+    // actually fetches them, and either way the user needs immediate feedback
+    // that the batch started.
+    eventDispatcher.dispatch('toast', {
+      type: 'info',
+      timeout: 2000,
+      message: _('Downloading {{count}} book(s)', { count: books.length }),
+    });
+    // Batched like the bulk delete path so a file backend isn't hit with
+    // hundreds of simultaneous fetches.
+    const concurrency = 20;
+    let failed = 0;
+    for (let i = 0; i < books.length; i += concurrency) {
+      const batch = books.slice(i, i + concurrency);
+      const results = await Promise.all(
+        batch.map((book) => handleBookDownload(book, { queued: true, silent: true })),
+      );
+      failed += results.filter((ok) => !ok).length;
+    }
+    if (failed > 0) {
+      eventDispatcher.dispatch('toast', {
+        type: 'error',
+        message: _('Failed to download {{count}} book(s)', { count: failed }),
+      });
+    }
+  };
+
   const isGridMode = viewMode === 'grid';
   const hasItems = sortedBookshelfItems.length > 0;
   // In grid mode the Import-Books "+" tile is rendered as an extra grid cell
@@ -695,22 +837,35 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   // -> `listContext` identities stable (no full-grid re-render churn).
   const { openBook } = useOpenBook({ setLoading, handleBookDownload });
   const openRecentBook = useCallback((book: Book) => openBook(book), [openBook]);
-
-  // Flat recency slice of the whole library, independent of the main shelf's
-  // sort/grouping. Built from `libraryBooks` (not the sorted/filtered items).
-  const recentBooks = useMemo(
-    () => selectRecentShelfBooks(libraryBooks, RECENT_SHELF_BOOK_COUNT),
-    [libraryBooks],
+  const openSearchResult = useCallback(
+    (book: Book, cfi: string) => openBook(book, cfi, { highlightSearchResult: true }),
+    [openBook],
   );
 
-  // A top-level quick-resume strip: hidden while searching, inside a group,
-  // selecting, or when nothing has been read yet.
+  // Flat recency slice of the whole library, independent of the main shelf's
+  // sort/grouping. Built from `visibleBooks` (not the sorted/filtered items).
+  const recentBooks = useMemo(
+    () => selectRecentShelfBooks(visibleBooks, RECENT_SHELF_BOOK_COUNT),
+    [visibleBooks],
+  );
+
+  // Cover transfer overlay progress for every book on screen, from both
+  // sources: queued downloads live in the transfer store, direct ones in
+  // `booksTransferProgress`. Merged on read so neither has to reconcile
+  // against the other's lifecycle, and so the recent strip and the grid
+  // cannot disagree about the same book. Selecting `transfers` keeps the
+  // subscription off the store's unrelated UI fields.
+  const transfers = useTransferStore((state) => state.transfers);
+  const transferProgress = useMemo(
+    () => ({ ...selectActiveBookDownloadProgress(transfers), ...booksTransferProgress }),
+    [transfers, booksTransferProgress],
+  );
+
+  // A top-level quick-resume strip: hidden while searching, inside a group, or
+  // when nothing has been read yet. It stays up in select mode so shelf books
+  // can be selected in place, just like the grid.
   const showRecentShelf =
-    settings.libraryRecentShelfEnabled &&
-    !queryTerm &&
-    !groupId &&
-    !isSelectMode &&
-    recentBooks.length > 0;
+    settings.libraryRecentShelfEnabled && !queryTerm && !groupId && recentBooks.length > 0;
 
   const recentShelfHeader = useMemo(
     () =>
@@ -720,32 +875,61 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           coverFit={coverFit as LibraryCoverFitType}
           autoColumns={settings.libraryAutoColumns}
           fixedColumns={settings.libraryColumns}
+          isSelectMode={isSelectMode}
+          selectedBooks={selectedBookSet}
           onOpenBook={openRecentBook}
+          toggleSelection={toggleSelection}
+          handleSetSelectMode={handleSetSelectMode}
           handleBookUpload={handleBookUpload}
           handleBookDownload={handleBookDownload}
           showBookDetailsModal={handleShowDetailsBook}
+          showTimeRemaining={showTimeRemaining}
+          transferProgress={transferProgress}
         />
       ) : null,
     [
       showRecentShelf,
       recentBooks,
+      transferProgress,
       coverFit,
       settings.libraryAutoColumns,
       settings.libraryColumns,
+      isSelectMode,
+      selectedBookSet,
       openRecentBook,
+      toggleSelection,
+      handleSetSelectMode,
       handleBookUpload,
       handleBookDownload,
       handleShowDetailsBook,
+      showTimeRemaining,
     ],
   );
+
+  // Reserve enough trailing space for the fixed select-mode action bar so the
+  // last book scrolls clear of it (#5175). `selectModeActionsHeight` already
+  // includes the bar's safe-area padding and is 0 whenever the bar is hidden,
+  // so the baseline breathing room applies at all other times.
+  const footerHeight =
+    selectModeActionsHeight > 0
+      ? selectModeActionsHeight + DEFAULT_FOOTER_HEIGHT
+      : DEFAULT_FOOTER_HEIGHT;
 
   const listContext = useMemo<BookshelfListContext>(
     () => ({
       autoColumns: settings.libraryAutoColumns,
       fixedColumns: settings.libraryColumns,
       recentShelfHeader,
+      showTimeRemaining,
+      footerHeight,
     }),
-    [settings.libraryAutoColumns, settings.libraryColumns, recentShelfHeader],
+    [
+      settings.libraryAutoColumns,
+      settings.libraryColumns,
+      recentShelfHeader,
+      showTimeRemaining,
+      footerHeight,
+    ],
   );
 
   const renderBookshelfItem = useCallback(
@@ -762,12 +946,13 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           >
             <button
               aria-label={_('Import Books')}
+              aria-haspopup='menu'
               className={clsx(
                 'bookitem-main bg-base-100 hover:bg-base-300/50',
                 'flex items-center justify-center',
                 'aspect-[28/41] w-full',
               )}
-              onClick={handleImportBooks}
+              onClick={(event) => handleImportBooks(event.currentTarget)}
             >
               <div className='flex items-center justify-center'>
                 <PiPlus className='size-10' color='gray' />
@@ -797,9 +982,8 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           handleShowDetailsBook={handleShowDetailsBook}
           handleLibraryNavigation={handleLibraryNavigation}
           handleUpdateReadingStatus={handleUpdateReadingStatus}
-          transferProgress={
-            'hash' in item ? booksTransferProgress[(item as Book).hash] || null : null
-          }
+          transferProgress={'hash' in item ? (transferProgress[(item as Book).hash] ?? null) : null}
+          showTimeRemaining={showTimeRemaining}
         />
       );
     },
@@ -811,7 +995,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       viewMode,
       coverFit,
       isSelectMode,
-      booksTransferProgress,
+      transferProgress,
       iconSize15,
       handleImportBooks,
       toggleSelection,
@@ -822,6 +1006,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       handleShowDetailsBook,
       handleLibraryNavigation,
       handleUpdateReadingStatus,
+      showTimeRemaining,
     ],
   );
 
@@ -843,39 +1028,64 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       tabIndex={-1}
       role='main'
       aria-label={_('Bookshelf')}
-      className='bookshelf min-h-0 flex-grow focus:outline-none'
+      className='bookshelf flex min-h-0 grow flex-col focus:outline-hidden'
     >
-      <div ref={osRootRef} data-overlayscrollbars-initialize='' className='h-full'>
-        {hasItems && isGridMode && (
-          <VirtuosoGrid<unknown, BookshelfListContext>
-            overscan={200}
-            totalCount={gridTotalCount}
-            components={GRID_VIRTUOSO_COMPONENTS}
-            context={listContext}
-            computeItemKey={computeItemKey}
-            itemContent={renderBookshelfItem}
-            scrollerRef={handleScrollerRef}
-          />
-        )}
-        {hasItems && !isGridMode && (
-          <Virtuoso<unknown, BookshelfListContext>
-            overscan={200}
-            totalCount={sortedBookshelfItems.length}
-            components={LIST_VIRTUOSO_COMPONENTS}
-            context={listContext}
-            computeItemKey={computeItemKey}
-            itemContent={renderBookshelfItem}
-            scrollerRef={handleScrollerRef}
-          />
-        )}
-        {/* v8.10.3: group 暂时为空时显示提示，而不是立即踢出 */}
-        {!hasItems && groupId && getGroupName(groupId) && (
-          <div className='flex flex-col items-center justify-center h-full text-base-content/40 py-16'>
-            <p className='text-lg font-medium mb-2'>{_('This group is empty')}</p>
-            <p className='text-sm'>{_('Move books here or go back to add some.')}</p>
-          </div>
-        )}
-      </div>
+      {!contentSearch?.query.trim() && queryTerm && (
+        <div className='flex shrink-0 justify-center px-4 pb-2'>
+          <button
+            type='button'
+            onClick={onSearchContents}
+            className={clsx(
+              'eink-bordered border-base-200 bg-base-100 hover:border-base-300 hover:bg-base-300/40',
+              'text-base-content/80 hover:text-base-content not-eink:transition-colors',
+              'flex h-9 items-center gap-2 rounded-lg border px-4 text-sm font-medium duration-150',
+              'focus-visible:ring-base-content/15 focus-visible:outline-hidden focus-visible:ring-2',
+            )}
+          >
+            <MdManageSearch aria-hidden='true' className='h-5 w-5' />
+            {_('Search in book contents')}
+          </button>
+        </div>
+      )}
+      {contentSearch?.query.trim() && appService ? (
+        <LibrarySearchResults
+          appService={appService}
+          books={currentShelfBooks}
+          query={contentSearch.query.trim()}
+          config={contentSearch.config}
+          onSelectResult={openSearchResult}
+          onProgress={onSearchProgress}
+        />
+      ) : (
+        // The OverlayScrollbars root and the search results are siblings on
+        // purpose: OS decorates this subtree with its own DOM, and letting
+        // React swap children inside it caused NotFoundError crashes on
+        // WebKit when a search was cleared.
+        <div ref={osRootRef} data-overlayscrollbars-initialize='' className='min-h-0 flex-1'>
+          {!contentSearch?.query.trim() && hasItems && isGridMode && (
+            <VirtuosoGrid<unknown, BookshelfListContext>
+              overscan={200}
+              totalCount={gridTotalCount}
+              components={GRID_VIRTUOSO_COMPONENTS}
+              context={listContext}
+              computeItemKey={computeItemKey}
+              itemContent={renderBookshelfItem}
+              scrollerRef={handleScrollerRef}
+            />
+          )}
+          {!contentSearch?.query.trim() && hasItems && !isGridMode && (
+            <Virtuoso<unknown, BookshelfListContext>
+              overscan={200}
+              totalCount={sortedBookshelfItems.length}
+              components={LIST_VIRTUOSO_COMPONENTS}
+              context={listContext}
+              computeItemKey={computeItemKey}
+              itemContent={renderBookshelfItem}
+              scrollerRef={handleScrollerRef}
+            />
+          )}
+        </div>
+      )}
       {loading && (
         <div className='fixed inset-0 z-50 flex items-center justify-center'>
           <Spinner loading />
@@ -885,6 +1095,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
         <SelectModeActions
           selectedBooks={selectedBooks}
           safeAreaBottom={safeAreaInsets?.bottom || 0}
+          onHeightChange={setSelectModeActionsHeight}
           // Native send targets: iOS, Android, macOS — route through
           // tauri-plugin-sharekit (UIActivityViewController /
           // Intent.ACTION_SEND / NSSharingServicePicker). Linux has no
@@ -896,10 +1107,14 @@ const Bookshelf: React.FC<BookshelfProps> = ({
             !!appService &&
             (appService.isIOSApp || appService.isAndroidApp || appService.isMacOSApp)
           }
+          sendNearbyEnabled={isTauriAppPlatform() && isLocalSendEnabled()}
+          onSendNearby={sendSelectedNearby}
+          canDownload={downloadableBooks.length > 0}
           onOpen={openSelectedBooks}
           onGroup={groupSelectedBooks}
           onDetails={openBookDetails}
           onStatus={showStatusSelection}
+          onDownload={downloadSelectedBooks}
           onSend={sendSelectedBook}
           onDelete={deleteSelectedBooks}
           onCancel={() => handleSetSelectMode(false)}
@@ -929,11 +1144,12 @@ const Bookshelf: React.FC<BookshelfProps> = ({
             paddingBottom: `${(safeAreaInsets?.bottom || 0) + 16}px`,
           }}
         >
-          <Alert
+          <DeleteConfirmAlert
             title={_('Confirm Deletion')}
             message={_('Are you sure to delete {{count}} selected book(s)?', {
               count: getBooksToDelete().length,
             })}
+            showPurgeToggle
             onCancel={() => {
               abortDeletionRef.current = true;
               setShowDeleteAlert(false);

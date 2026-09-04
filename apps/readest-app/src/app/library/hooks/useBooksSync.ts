@@ -18,15 +18,14 @@ import { isDemoBook } from '@/services/demoBooks';
 import { isFeedBook } from '@/services/rss/feedBookUrl';
 import { ensureFeedBookCover } from '@/services/rss/feedBook';
 import { runFileLibrarySyncPass } from '@/services/sync/file/runLibrarySync';
-import { checkMixedFleetOnce } from '@/services/sync/fleetDetection';
-import { useSyncContext } from '@/context/SyncContext';
 import {
   pickFresherReadingStatus,
   needsCoverRefresh,
   pickFresherCover,
   pickFresherMetadata,
 } from '@/app/library/utils/libraryUtils';
-import { getPrimaryLanguage } from '@/utils/book';
+import { getPrimaryLanguage, pickFresherGroup } from '@/utils/book';
+import { isAudiobook, parseAbsFilePath } from '@/utils/audiobook';
 
 export const useBooksSync = () => {
   const _ = useTranslation();
@@ -35,8 +34,18 @@ export const useBooksSync = () => {
   const { library, isSyncing, libraryLoaded } = useLibraryStore();
   const { setLibrary, setIsSyncing, setSyncProgress } = useLibraryStore();
   const { useSyncInited, syncedBooks, syncBooks, lastSyncedAtBooks } = useSync();
-  const { syncClient } = useSyncContext();
   const isPullingRef = useRef(false);
+  // A library change that lands while a sync is in flight must not be lost.
+  // The post-import chain (push, pull, follow-up pull) runs for seconds and a
+  // book's upload completes inside it, stamping `uploadedAt` — the field
+  // peers gate adoption on. Dropping that change left the cloud row with
+  // `uploaded_at = null` until an unrelated change re-pushed the book.
+  const syncPendingRef = useRef(false);
+  const handleAutoSyncRef = useRef<() => void>(() => {});
+  const releaseSyncLock = useCallback(() => {
+    isPullingRef.current = false;
+    if (syncPendingRef.current) handleAutoSyncRef.current();
+  }, []);
 
   const getNewBooks = useCallback(() => {
     if (!user) return {};
@@ -63,6 +72,12 @@ export const useBooksSync = () => {
       // peers chase a non-existent path instead of downloading).
       // `altFilePaths` (the other on-disk names that resolve to the same book)
       // is device-local for exactly the same reason.
+      //
+      // An ABS book is the one format whose `filePath` is NOT device-local —
+      // `abs://<serverId>/<itemId>` is its entire identity — so it keeps
+      // riding along in `metadata.absSource` (reconcileAbsBooks writes it) and
+      // is rebuilt by transformBookFromDB. The strip below still applies to it:
+      // the device-field convention holds, only the mirror crosses.
       .map(({ filePath: _filePath, altFilePaths: _altFilePaths, ...rest }): Book => rest);
     return {
       books: newBooks,
@@ -100,7 +115,11 @@ export const useBooksSync = () => {
         let fileSucceeded = false;
         if (runFilePass) {
           const result = await runFileLibrarySyncPass(envConfig, _);
-          fileSucceeded = result !== null;
+          // A run that could not write library.json converged NOTHING, however
+          // many books it uploaded: peers read membership, tombstones and the
+          // uploaded-file record from that one file. Reporting it as "N books
+          // synced" is what let #5900 go unnoticed for so long.
+          fileSucceeded = result !== null && !result.indexPushFailed;
           fileSynced = result?.booksSynced ?? 0;
         }
 
@@ -125,33 +144,34 @@ export const useBooksSync = () => {
           });
         }
       } finally {
-        isPullingRef.current = false;
+        releaseSyncLock();
       }
     },
-    [_, user, libraryLoaded, syncBooks, envConfig],
+    [_, user, libraryLoaded, syncBooks, envConfig, releaseSyncLock],
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleAutoSync = useCallback(
     throttle(
       async () => {
-        if (isPullingRef.current) return;
-        // Readest Cloud unchecked: the native book channel is gated, so the
-        // interval runs the read-only mixed-fleet probe instead — a device
-        // still writing natively would otherwise fork progress silently
-        // (the auto library sync itself is useLibraryFileSync's).
-        const settingsNow = useSettingsStore.getState().settings;
-        if (!isReadestCloudEnabled(settingsNow)) {
-          void checkMixedFleetOnce(syncClient, settingsNow, _);
+        if (isPullingRef.current) {
+          syncPendingRef.current = true;
           return;
         }
+        // Readest Cloud unchecked: the native book channel is gated (the auto
+        // library sync itself is useLibraryFileSync's).
+        const settingsNow = useSettingsStore.getState().settings;
+        if (!isReadestCloudEnabled(settingsNow)) return;
         const newBooks = getNewBooks();
         if (!newBooks.lastSyncedAt) return;
+        // getNewBooks just read the live library, so every change up to now
+        // rides on this sync; only changes landing during it re-arm.
+        syncPendingRef.current = false;
         isPullingRef.current = true;
         try {
           await syncBooks(newBooks.books, 'both');
         } finally {
-          isPullingRef.current = false;
+          releaseSyncLock();
         }
       },
       SYNC_BOOKS_INTERVAL_SEC * 1000,
@@ -161,8 +181,11 @@ export const useBooksSync = () => {
   );
 
   useEffect(() => {
+    handleAutoSyncRef.current = handleAutoSync;
+  }, [handleAutoSync]);
+
+  useEffect(() => {
     if (!user) return;
-    if (isPullingRef.current) return;
     handleAutoSync();
   }, [user, library, handleAutoSync]);
 
@@ -193,7 +216,16 @@ export const useBooksSync = () => {
         .library.filter(isDemoBook)
         .map((book) => book.hash),
     );
-    const cloudBooks = syncedBooks.filter((book) => !demoHashes.has(book.hash));
+    const cloudBooks = syncedBooks.filter(
+      // An ABS row arrives with its `abs://` filePath rebuilt from
+      // `metadata.absSource` (transformBookFromDB). A row that still has none
+      // — pushed before the mirror existed, when the push stripped filePath
+      // and carried nothing in its place — is dead on arrival: nothing can
+      // resolve the server or item it came from. Drop it rather than shelving
+      // an unopenable entry.
+      (book) =>
+        !demoHashes.has(book.hash) && !(isAudiobook(book) && !parseAbsFilePath(book.filePath)),
+    );
     if (!cloudBooks.length) return;
 
     // Process old books first so that when we update the library the order is preserved
@@ -249,6 +281,25 @@ export const useBooksSync = () => {
             mergedBook.primaryLanguage = getPrimaryLanguage(meta.metadata.language);
           }
         }
+        // Group membership resolves on its own groupUpdatedAt clock (issue
+        // #5911). `transformBookFromDB` always materialises groupId/groupName,
+        // so the row spread above hands an absent cloud group straight over a
+        // present local one — and it does so on `>=`, meaning a mere TIE wiped
+        // the group. `updatedAt` is bumped by an UPLOAD as well as by an edit,
+        // so a stale cloud row could outrank every real grouping.
+        const group = pickFresherGroup(
+          oldBook,
+          matchingBook,
+          matchingBook.updatedAt >= oldBook.updatedAt,
+        );
+        mergedBook.groupId = group.groupId;
+        mergedBook.groupName = group.groupName;
+        mergedBook.groupUpdatedAt = group.groupUpdatedAt;
+        // Same story for the metadata blob, which carries the description: a
+        // cloud row whose `metadata` column is null arrives as `metadata: null`
+        // and the spread clears the local copy. An absent blob always means
+        // "this row never had one", never "the user cleared it" (#5912).
+        mergedBook.metadata = mergedBook.metadata ?? oldBook.metadata ?? matchingBook.metadata;
         return mergedBook;
       }
       return oldBook;
@@ -268,11 +319,13 @@ export const useBooksSync = () => {
     // `uploadedAt` gates adoption so a peer never shelves a book whose file it
     // cannot fetch. A feed book has no file to fetch — it is rebuilt from
     // `metadata.feedUrl` — so it would never pass that gate and the
-    // subscription stayed stuck on the device that added it (issue #5307).
+    // subscription stayed stuck on the device that added it (issue #5307). An
+    // ABS book is fileless for the same reason: it streams from the
+    // Audiobookshelf server named in its `abs://` filePath.
     const newBooks = cloudBooks.filter(
       (newBook) =>
         !bookHashesInLibrary.has(newBook.hash) &&
-        (newBook.uploadedAt || isFeedBook(newBook)) &&
+        (newBook.uploadedAt || isFeedBook(newBook) || isAudiobook(newBook)) &&
         !newBook.deletedAt,
     );
 
