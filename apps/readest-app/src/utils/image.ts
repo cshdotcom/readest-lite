@@ -238,4 +238,4 @@ export async function fetchImageAsBase64(
   }
 }
 
-export const galleryFileName = (filename: string, now: number = Date.now()): string => filename;
+export const galleryFileName = (filename: string, _now: number = Date.now()): string => filename;
