@@ -308,7 +308,7 @@ export abstract class BaseAppService implements AppService {
     base: BaseDir,
     handleProgress: ProgressHandler,
     hash: string,
-    temp: boolean = false,
+    _temp: boolean = false,
     _media?: string,
   ) {
     return CloudSvc.uploadFileToCloud(
