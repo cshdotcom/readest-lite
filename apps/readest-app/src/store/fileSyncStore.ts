@@ -60,6 +60,8 @@ interface FileSyncState {
   endSync: (kind: FileSyncBackendKind) => void;
   /** v0.12.1: Switch to a different backend mid-session (used by cloud sync status) */
   switchSync: (kind: FileSyncBackendKind, label: string) => void;
+  /** v0.12.1: Set per-kind last sync error */
+  setLastError: (kind: FileSyncBackendKind, error: string | null) => void;
 }
 
 export const useFileSyncStore = create<FileSyncState>((set, get) => ({
@@ -112,6 +114,11 @@ export const useFileSyncStore = create<FileSyncState>((set, get) => ({
         ...s.byKind,
         [kind]: { isSyncing: true, progressLabel: label, progressDetail: null },
       },
+    })),
+
+  setLastError: (kind, error) =>
+    set((s) => ({
+      lastErrorByKind: { ...s.lastErrorByKind, [kind]: error },
     })),
 }));
 
