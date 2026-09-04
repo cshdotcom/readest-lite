@@ -16,8 +16,10 @@ export type BookFormat =
   | 'FB2'
   | 'FBZ'
   | 'TXT'
-  | 'MD';
-export type BookNoteType = 'bookmark' | 'annotation' | 'excerpt';
+  | 'MD'
+  // Streaming audiobook from an Audiobookshelf server; filePath is abs://<serverId>/<itemId>
+  | 'ABS';
+export type BookNoteType = 'bookmark' | 'annotation' | 'excerpt' | 'notebook';
 export type ReadingStatus = 'unread' | 'reading' | 'finished' | 'abandoned';
 export type HighlightStyle = 'highlight' | 'underline' | 'squiggly';
 // Predefined highlight colors, can be extended with custom hex colors
