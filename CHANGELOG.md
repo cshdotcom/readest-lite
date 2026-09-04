@@ -3,6 +3,62 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.17.0] — 2026-09-04
+
+### Added — 上游 v0.11.20 → v0.12.1 完整合并
+
+**新功能（来自上游 v0.12.1）：**
+- YAML frontmatter 元数据提取（#5344）
+- TOC 标题深度可配置（#5363）
+- Markdown 脚注支持（marked-footnote 插件）
+- Column Gap 重命名为更直观的语义（#5315）
+- Google 翻译保留原文格式（#5556）
+- footer 切换进度条（#5466）
+- 图片描述显示（#5472）
+- 搜索结果折叠分组（#5282）
+- 段落模式字体设置（#5403）
+- TTS mini player（#5446）
+
+**基础架构：**
+- 50+ 个新文件复制自上游 v0.12.1（reader 组件、settings 模块、tts providers、cloud sync adapters）
+- 236+ 个修改文件按上游 v0.12.1 重新对齐
+- 引入 marked-footnote、marked-katex-extension、katex、react-colorful 依赖
+- Webpack alias：marked-katex-extension、react-colorful、tauri-plugin-turso（stub）
+
+**为 Lite 创建 stub 的不适用功能：**
+- BookOrbit（KOReader 设备间同步服务，无 web 端）
+- iCloud / GoogleDrive / OneDrive / S3 客户端集成（Lite 用本地文件系统替代）
+- clipSignIn（Apple Sign-In，需要 native）
+- cloudSync 上游 sync 协议（需要 Supabase Realtime）
+
+**类型系统扩展：**
+- `Book` 类型添加 `hasNarration`/`duration`/`metadataUpdatedAt`/`groupUpdatedAt`/`fileSyncDeletionRequestedAt`/`altPaths`
+- `SystemSettings` 添加 `librarySkeuomorphicCovers`/`libraryHideCovers`/`autohideCursor`/`googleDrive`/`s3`/`onedrive`/`icloud`/`bookorbit`/`readestCloud`
+- `BookLayout` 添加 `scrolledDirection`/`autoScrollRunning`
+- `ViewSettings` 添加 `ttsSentenceGap`/`ttsParagraphGap`/`ttsUseNarration`
+- `NoteExportConfig` 添加 `exportFormat`/`includeCoverImage` + `NoteExportFormat` 类型
+- `KOSyncSettings` 添加 `customHeaders`/`sendMetadata`
+- `ReadwiseSettings` 添加 `includeCoverImage`
+- `ReaderStore` 添加 `bottomBarTab`/`setBottomBarTab`
+- `AppService` 添加 `databaseExists`/`deleteDatabase`/`hasAmbientLightSensor`
+- `TransferItem` 添加 `cancelReason`
+- `FileSyncState` 添加 `lastErrorByKind`/`switchSync`/`setLastError`
+
+**修复 / 改进：**
+- Dockerfile 添加 `NODE_OPTIONS=--max-old-space-size=4096` 避免 OOM
+- tsconfig 添加 `types/*.d.ts` include + tauri-plugin-turso stub path alias
+- foliate-js `textWalker` 类型改为 `any`（上游 loose inference 兼容）
+- `runMigrations` 添加可选 `settings` 参数
+
+### Removed — Lite 不适用的功能
+- BookOrbit / iCloud / GoogleDrive / OneDrive / S3 cloud sync UI（用 stub 替代避免编译错误，UI 入口隐藏）
+- clipSignIn（Apple Sign-In native 实现）
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.13.1] — 2026-07-09
 
 ### Added — 翻页动画补全 + 关于页面版本号修复 + bookService 崩溃修复
