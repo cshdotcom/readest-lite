@@ -5,6 +5,7 @@ export interface ReadestRuntimeConfig {
   objectStorageType?: string;
   storageFixedQuota?: number;
   translationFixedQuota?: number;
+  fontBaseUrl?: string;
 }
 
 declare global {
