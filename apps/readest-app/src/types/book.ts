@@ -126,6 +126,10 @@ export interface Book {
   // v0.12.1: TTS narration + Media Overlays support
   hasNarration?: boolean;
   duration?: number;
+  // v0.12.6: ABS podcast show stub marker (undefined = regular audiobook)
+  absMediaType?: 'podcast';
+  // v0.12.6: Episode count for ABS podcast show stub
+  episodeCount?: number;
   /** v0.12.1: Field-level LWW timestamp for metadata (title, author, tags) */
   metadataUpdatedAt?: number | null;
   /** v0.12.1: Field-level LWW timestamp for group membership */
@@ -524,6 +528,68 @@ export interface LibrarySearchSectionResult {
 
 export const BOOK_CONFIG_SCHEMA_VERSION = 1;
 
+/**
+ * The Hardcover book this file syncs to. Set explicitly from the book menu
+ * ("Link Book") or recorded from the first successful automatic match; once
+ * present it bypasses ISBN and title matching entirely (#5846). Device-local:
+ * the cloud config push only carries the columns in `transformBookConfigToDB`.
+ */
+export interface HardcoverBookLink {
+  bookId: number;
+  /** Display only — lets the menu show the linked book without a request. */
+  title: string;
+}
+
+export interface AudiobookFile {
+  id: string;
+  name: string;
+  path: string;
+  duration: number;
+}
+
+export interface AudiobookChapter {
+  id: string;
+  fileId: string;
+  label: string;
+  start: number;
+  end: number;
+}
+
+export interface AudiobookChapterMapping {
+  ebookChapterId: string;
+  audioChapterId: string;
+}
+
+/**
+ * An audiobook streamed from an Audiobookshelf server instead of copied to
+ * the device. The pairing then has a single virtual file
+ * (`abs://<serverId>/<itemId>`) whose chapters are timed on the item's global
+ * timeline, and the track list here maps that timeline onto the server's
+ * media files; nothing under Books/<hash>/audiobook/ exists for it.
+ */
+export interface PairedAudiobookAbsSource {
+  kind: 'audiobookshelf';
+  serverId: string;
+  itemId: string;
+  tracks: {
+    index: number;
+    startOffset: number; // global seconds
+    duration: number; // seconds
+    contentUrl: string; // server-relative
+  }[];
+}
+
+export interface PairedAudiobook {
+  version: 1;
+  title?: string;
+  narrator?: string;
+  files: AudiobookFile[];
+  chapters: AudiobookChapter[];
+  mappings: AudiobookChapterMapping[];
+  createdAt: number;
+  source?: PairedAudiobookAbsSource;
+}
+
 export interface BookConfig {
   schemaVersion?: number;
   bookHash?: string;
@@ -535,6 +601,15 @@ export interface BookConfig {
   rsvpPosition?: { cfi: string; wordText: string };
   searchConfig?: Partial<BookSearchConfig>;
   viewSettings?: Partial<ViewSettings>;
+  /**
+   * A device-local recording paired with this ebook. The audio files live
+   * under Books/<hash>/audiobook/, or stream from an Audiobookshelf server
+   * (see PairedAudiobook.source); either way the pairing is deliberately
+   * excluded from cloud sync, and ordinary reading progress remains the
+   * shared cross-device state.
+   */
+  audiobook?: PairedAudiobook;
+  hardcover?: HardcoverBookLink;
 
   lastSyncedAtConfig?: number;
   lastSyncedAtNotes?: number;

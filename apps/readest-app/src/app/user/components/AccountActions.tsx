@@ -52,7 +52,7 @@ interface AccountActionsProps {
   onResetPassword: () => void;
   onUpdateEmail: () => void;
   onConfirmDelete: () => void;
-  onConfirmDeleteAllBooks: () => void;
+  onConfirmDeleteAllBooks?: () => void;
   onRestorePurchase?: () => void;
   onManageSubscription?: () => void;
   onManageStorage?: () => void;

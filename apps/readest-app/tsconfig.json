@@ -15,6 +15,7 @@
     "allowImportingTsExtensions": true,
     "jsx": "preserve",
     "incremental": true,
+    "rootDir": "../..",
     "plugins": [
       {
         "name": "next"

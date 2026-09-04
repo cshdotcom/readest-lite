@@ -12,7 +12,7 @@ interface LocalSendFormProps {
 }
 
 const LocalSendForm: React.FC<LocalSendFormProps> = ({ onBack }) => {
-  const { t } = useTranslation();
+  const t = useTranslation();
   return (
     <div className="p-4">
       <p className="text-sm text-base-content/70">

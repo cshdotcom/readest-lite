@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 import type { Book } from '@/types/book';
-import type { EnvConfig } from '@/services/environment';
+import type { EnvConfigType } from '@/services/environment';
 
 export interface ABSServer {
   id: string;
@@ -16,12 +16,13 @@ export interface ABSServer {
   url: string;
   username?: string;
   token?: string;
+  deletedAt?: number | null;
 }
 
 export interface ABSServerStore {
   servers: ABSServer[];
   findByContentId: (id: string) => ABSServer | undefined;
-  loadABSServers: (envConfig?: EnvConfig) => Promise<void>;
+  loadABSServers: (envConfig?: EnvConfigType) => Promise<void>;
   applyRemoteServer: (server: ABSServer) => Promise<void>;
   softDeleteByContentId: (id: string) => Promise<void>;
 }
