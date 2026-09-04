@@ -168,6 +168,19 @@ export const createAppLocalStore = ({
     await useLibraryStore.getState().updateBooks(envConfig, rows);
   },
 
+  markBooksDownloaded: async (hashes, downloadedAt) => {
+    if (!hashes.length) return;
+    if (!useLibraryStore.getState().libraryLoaded) {
+      useLibraryStore.getState().setLibrary(await appService.loadLibraryBooks());
+    }
+    const wanted = new Set(hashes);
+    const rows = useLibraryStore
+      .getState()
+      .library.filter((b) => wanted.has(b.hash))
+      .map((b) => ({ ...b, downloadedAt }));
+    await useLibraryStore.getState().updateBooks(envConfig, rows);
+  },
+
   deleteBookLocally: async (book) => {
     // Remove this device's managed copy of the book file (cloudService.deleteBook
     // with 'local' only ever touches app-managed Books/<hash>/ sources; an
