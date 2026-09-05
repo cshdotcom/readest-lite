@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/context/AuthContext';
 import { getAccessToken } from '@/utils/access';
 import { getAPIBaseUrl } from '@/services/environment';
 import { eventDispatcher } from '@/utils/event';
-import { IoClose, IoCreateOutline, IoTrashOutline, IoPersonOutline, IoChevronForwardOutline } from 'react-icons/io5';
+import { IoClose, IoCreateOutline, IoTrashOutline, IoPersonOutline, IoChevronForwardOutline, IoSearchOutline } from 'react-icons/io5';
 import { MdAdminPanelSettings } from 'react-icons/md';
 
 interface UserItem {
@@ -28,6 +28,17 @@ export default function UserManagement() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users;
+    const q = searchQuery.toLowerCase();
+    return users.filter((u) =>
+      u.email.toLowerCase().includes(q) ||
+      (u.displayName || '').toLowerCase().includes(q) ||
+      u.role.toLowerCase().includes(q)
+    );
+  }, [users, searchQuery]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -88,8 +99,21 @@ export default function UserManagement() {
       </div>
 
       <div className='space-y-2'>
-        {/* v8.10.2: 默认只显示前 3 个用户，避免长列表撑爆用户中心 */}
-        {users.slice(0, 3).map((u) => (
+        {/* v8.18.6: 搜索框 — 当用户数 > 3 时显示 */}
+        {users.length > 3 && (
+          <div className='relative'>
+            <IoSearchOutline className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40' />
+            <input
+              type='text'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={_('Search users...')}
+              className='input input-bordered input-sm w-full pl-9'
+            />
+          </div>
+        )}
+        {/* 搜索时显示全部匹配；不搜索时显示前 3 个 */}
+        {(searchQuery.trim() ? filteredUsers : users.slice(0, 3)).map((u) => (
           <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
             <div className='flex items-center gap-3 min-w-0 flex-1'>
               <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
@@ -129,8 +153,8 @@ export default function UserManagement() {
         ))}
       </div>
 
-      {/* v8.10.2: 超过 3 个用户时显示「查看全部」按钮 */}
-      {users.length > 3 && (
+      {/* v8.10.2: 超过 3 个用户且不搜索时显示「查看全部」按钮 */}
+      {users.length > 3 && !searchQuery.trim() && (
         <button
           onClick={() => setShowAllUsers(true)}
           className='btn btn-ghost btn-sm w-full text-base-content/60 hover:text-base-content'
@@ -177,6 +201,18 @@ function AllUsersModal({
   onDelete: (id: string, email: string) => void;
 }) {
   const _ = useTranslation();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users;
+    const q = searchQuery.toLowerCase();
+    return users.filter((u) =>
+      u.email.toLowerCase().includes(q) ||
+      (u.displayName || '').toLowerCase().includes(q) ||
+      u.role.toLowerCase().includes(q)
+    );
+  }, [users, searchQuery]);
+
   return (
     <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/60'>
       <div className='bg-base-100 rounded-lg shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col'>
@@ -188,8 +224,32 @@ function AllUsersModal({
             <IoClose className='w-5 h-5' />
           </button>
         </div>
+        {/* v8.18.6: 搜索框 */}
+        <div className='px-4 py-2 border-b border-base-200'>
+          <div className='relative'>
+            <IoSearchOutline className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40' />
+            <input
+              type='text'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={_('Search users...')}
+              className='input input-bordered input-sm w-full pl-9'
+              autoFocus
+            />
+          </div>
+          {searchQuery && (
+            <div className='text-xs text-base-content/50 mt-1'>
+              {filteredUsers.length} / {users.length} {_('users')}
+            </div>
+          )}
+        </div>
         <div className='flex-1 overflow-y-auto p-3 space-y-2'>
-          {users.map((u) => (
+          {filteredUsers.length === 0 ? (
+            <div className='text-center py-8 text-base-content/40'>
+              {_('No matching users')}
+            </div>
+          ) : (
+            filteredUsers.map((u) => (
             <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
               <div className='flex items-center gap-3 min-w-0 flex-1'>
                 <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
@@ -223,10 +283,11 @@ function AllUsersModal({
                 )}
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
         <div className='px-4 py-2 border-t border-base-200 text-xs text-base-content/50 text-center'>
-          {users.length} {_('users')}
+          {filteredUsers.length} / {users.length} {_('users')}
         </div>
       </div>
     </div>

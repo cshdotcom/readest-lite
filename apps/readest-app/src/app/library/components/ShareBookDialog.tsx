@@ -315,7 +315,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
               {/* Both rows share min-h-12 so the segmented control's internal
                   pill height doesn't make this row visibly taller than the
                   toggle row below. */}
-              <div className='flex min-h-12 flex-wrap items-center justify-between gap-2 px-4 py-2'>
+              <div className='flex min-h-12 flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between'>
                 <span className='text-base-content text-sm font-medium shrink-0'>{_('Expires in')}</span>
                 <div className='flex flex-wrap gap-1'>
                   {SHARE_EXPIRATION_DAYS.map((n) => (
