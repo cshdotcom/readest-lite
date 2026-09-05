@@ -18,78 +18,49 @@ export async function POST(req: NextRequest) {
   const action = body.action as string;
 
   // ── 批量创建任务 ─────────────────────────────────────────────────────────
-  // v8.10.1: 支持 items 数组（per-URL cookies/headers），向后兼容 urls 数组
   if (action === 'create') {
-    // 新格式: items: [{ url, cookies?, headers? }]
-    // 旧格式: urls: [string] + 全局 cookies/headers
-    interface BatchItem {
-      url: string;
-      cookies?: string;
-      headers?: Record<string, string>;
-    }
-
-    let items: BatchItem[] = [];
-    if (Array.isArray(body.items)) {
-      items = body.items
-        .filter((item: unknown): item is BatchItem =>
-          typeof item === 'object' && item !== null && typeof (item as BatchItem).url === 'string',
-        )
-        .map((item: BatchItem) => ({
-          url: item.url,
-          cookies: typeof item.cookies === 'string' && item.cookies.trim() ? item.cookies.trim() : undefined,
-          headers: item.headers && typeof item.headers === 'object' && !Array.isArray(item.headers) ? item.headers : undefined,
-        }));
-    } else if (Array.isArray(body.urls)) {
-      // 向后兼容：urls 数组 + 全局 cookies/headers
-      const globalCookies = typeof body.cookies === 'string' && body.cookies.trim() ? body.cookies.trim() : undefined;
-      const globalHeaders = body.headers && typeof body.headers === 'object' && !Array.isArray(body.headers)
-        ? body.headers as Record<string, string>
-        : undefined;
-      items = body.urls
-        .filter((u: unknown): u is string => typeof u === 'string')
-        .map((u: string) => ({
-          url: u,
-          cookies: globalCookies,
-          headers: globalHeaders,
-        }));
-    }
-
-    if (items.length === 0) {
+    const urls: string[] = Array.isArray(body.urls) ? body.urls : [];
+    if (urls.length === 0) {
       return NextResponse.json({ error: 'No URLs provided' }, { status: 400 });
     }
-    if (items.length > MAX_BATCH_CREATE) {
+    if (urls.length > MAX_BATCH_CREATE) {
       return NextResponse.json(
         { error: `Too many URLs: max ${MAX_BATCH_CREATE}` },
         { status: 400 },
       );
     }
 
-    // 校验所有 URL
-    for (const item of items) {
+    // 校验
+    for (const u of urls) {
+      if (typeof u !== 'string') {
+        return NextResponse.json({ error: `Invalid URL: ${u}` }, { status: 400 });
+      }
       try {
-        const parsed = new URL(item.url.trim());
+        const parsed = new URL(u.trim());
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          return NextResponse.json({ error: `Only http(s) URLs: ${item.url}` }, { status: 400 });
+          return NextResponse.json({ error: `Only http(s) URLs: ${u}` }, { status: 400 });
         }
       } catch {
-        return NextResponse.json({ error: `Invalid URL: ${item.url}` }, { status: 400 });
+        return NextResponse.json({ error: `Invalid URL: ${u}` }, { status: 400 });
       }
     }
 
-    const created = await Promise.all(items.map(async (item) => {
+    const cookies = typeof body.cookies === 'string' && body.cookies.trim() ? body.cookies.trim() : null;
+    const headersObj = body.headers && typeof body.headers === 'object' && !Array.isArray(body.headers)
+      ? body.headers as Record<string, string>
+      : {};
+    const customHeadersJson = Object.keys(headersObj).length > 0 ? JSON.stringify(headersObj) : null;
+
+    const created = await Promise.all(urls.map(async (u) => {
       const fallbackName = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.epub`;
-      const customHeadersJson = item.headers && Object.keys(item.headers).length > 0
-        ? JSON.stringify(item.headers)
-        : null;
-      const cookiesStr = item.cookies || null;
       return prismaClient.downloadTask.create({
         data: {
           userId: user.id,
-          url: item.url.trim(),
-          originalUrl: item.url.trim(),
+          url: u.trim(),
+          originalUrl: u.trim(),
           filename: sanitizeOutputFilename(fallbackName),
           status: 'pending',
-          cookies: cookiesStr,
+          cookies,
           customHeaders: customHeadersJson,
         },
       });

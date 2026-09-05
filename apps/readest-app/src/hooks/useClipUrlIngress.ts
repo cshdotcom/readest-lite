@@ -107,6 +107,9 @@ export function useClipUrlIngress() {
         if (!book) {
           book = await clipPageWithSignInFallback(url, _, appService);
         }
+        if (!book) {
+          throw new Error('Clip produced no book');
+        }
         const { library } = useLibraryStore.getState();
         const { settings } = useSettingsStore.getState();
         const ingested = await ingestFile(

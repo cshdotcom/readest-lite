@@ -6,11 +6,6 @@ import { isBlockedHost } from '@/utils/network';
 // Cap redirect hops so the SSRF host check below can re-run on every one.
 const MAX_REDIRECTS = 5;
 
-// In `next dev` the server runs on the developer's own machine, where a LAN
-// OPDS catalog is the normal use case (the CatalogManager UI only forbids
-// adding LAN URLs in production builds), so the host blocklist is skipped.
-const isPrivateHostAllowed = () => process.env.NODE_ENV === 'development';
-
 /**
  * Fetch the target while running the SSRF host check on every redirect hop.
  * `fetch`'s default `redirect: 'follow'` would let a public URL 302 to an
@@ -19,42 +14,6 @@ const isPrivateHostAllowed = () => process.env.NODE_ENV === 'development';
  * Throws `SsrfBlockedError` when a hop targets a blocked host or scheme.
  */
 class SsrfBlockedError extends Error {}
-
-const sanitizeXmlBuffer = (buf: ArrayBuffer): ArrayBuffer => {
-  let text = '';
-  const bytes = new Uint8Array(buf);
-  for (const byte of bytes) text += String.fromCharCode(byte);
-
-  let out = '';
-  let inCdata = false;
-  for (let i = 0; i < text.length; i++) {
-    if (!inCdata && text.startsWith('<![CDATA[', i)) {
-      inCdata = true;
-      out += '<![CDATA[';
-      i += '<![CDATA['.length - 1;
-      continue;
-    }
-    if (inCdata && text.startsWith(']]>', i)) {
-      inCdata = false;
-      out += ']]>';
-      i += ']]>'.length - 1;
-      continue;
-    }
-    if (
-      !inCdata &&
-      text[i] === '&' &&
-      !text.slice(i).match(/^&(amp|lt|gt|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);/)
-    ) {
-      out += '&amp;';
-      continue;
-    }
-    out += text[i];
-  }
-
-  const outBytes = new Uint8Array(out.length);
-  for (let i = 0; i < out.length; i++) outBytes[i] = out.charCodeAt(i) & 0xff;
-  return outBytes.buffer;
-};
 
 async function fetchFollowingRedirects(
   startUrl: string,
@@ -66,7 +25,7 @@ async function fetchFollowingRedirects(
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new SsrfBlockedError('Only http(s) URLs are supported');
     }
-    if (!isPrivateHostAllowed() && isBlockedHost(parsed.hostname)) {
+    if (isBlockedHost(parsed.hostname)) {
       throw new SsrfBlockedError('This URL is not allowed');
     }
     const response = await fetch(currentUrl, { ...init, redirect: 'manual' });
@@ -120,7 +79,7 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
     return NextResponse.json({ error: 'Only http(s) URLs are supported' }, { status: 400 });
   }
-  if (!isPrivateHostAllowed() && isBlockedHost(parsedUrl.hostname)) {
+  if (isBlockedHost(parsedUrl.hostname)) {
     return NextResponse.json({ error: 'This URL is not allowed' }, { status: 400 });
   }
 
@@ -274,10 +233,7 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
       });
       return new NextResponse(response.body, { status: 200, headers });
     } else {
-      let buf = await response.arrayBuffer();
-      if (contentType.toLowerCase().includes('xml')) {
-        buf = sanitizeXmlBuffer(buf);
-      }
+      const buf = await response.arrayBuffer();
       const length = buf.byteLength;
       console.log(`[OPDS Proxy] Buffered Success: ${url} (${length} bytes)`);
       return new NextResponse(buf, {

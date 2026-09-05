@@ -104,7 +104,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
         message={confirmation?.message ?? ''}
         onCancel={() => setPendingAction(null)}
         onConfirm={async () => {
-          await confirmation?.onConfirm();
+          if (confirmation?.onConfirm) await confirmation.onConfirm();
           setPendingAction(null);
         }}
       />

@@ -31,14 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       const downloadUrlsMap = await processFileKeys([fileKey], user.id);
       const downloadUrl = downloadUrlsMap[fileKey];
-      if (!downloadUrl) {
-        console.error('[download] File not found for fileKey:', JSON.stringify(fileKey));
-        return res.status(404).json({
-          error: 'File not found',
-          hint: 'File record not found in DB. Possible causes: (1) book.hash or filename is empty/wrong, (2) File was uploaded with a different fileKey, (3) File was deleted',
-          receivedFileKey: fileKey.slice(0, 200),
-        });
-      }
+      if (!downloadUrl) return res.status(404).json({ error: 'File not found' });
       return res.status(200).json({ downloadUrl });
     }
 
@@ -66,19 +59,14 @@ async function processFileKeys(
   const fileRecordMap = new Map(records.map((r) => [r.fileKey, r]));
 
   // fallback：同 book_hash 找同后缀
-  // v8.12.2: 放宽 parts.length 检查，兼容不同 cfp 结构（4 或 5 段）
-  // 4 段：cfp='Readest/Books/<hash>/<filename>' (无 uid 前缀)
-  // 5 段：fileKey='<uid>/Readest/Books/<hash>/<filename>' (有 uid 前缀)
   const missing = fileKeys.filter((key) => !fileRecordMap.has(key) && key.includes('Readest/Book'));
   if (missing.length > 0) {
     const candidates = missing
       .map((key) => {
         const parts = key.split('/');
-        // 找 'Books' 段后的两段：hash + filename
-        const booksIdx = parts.indexOf('Books');
-        if (booksIdx >= 0 && booksIdx + 2 < parts.length) {
-          const bookHash = parts[booksIdx + 1]!;
-          const filename = parts[booksIdx + 2]!;
+        if (parts.length === 5) {
+          const bookHash = parts[3]!;
+          const filename = parts[4]!;
           const ext = filename.split('.').pop() || '';
           return { originalKey: key, bookHash, ext };
         }

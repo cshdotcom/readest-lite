@@ -1,36 +1,27 @@
 /**
  * Lite stub for `@/services/sync/adapters/absServer`.
  * ABS (Audiobookshelf) replica adapter — not applicable to web-only Lite.
+ * Implements the full ReplicaAdapter interface so the registry accepts it,
+ * but every method returns empty/no-op since ABS is not available.
  */
 
-import type { Book } from '@/types/book';
-
-export interface ReplicaAdapter<T> {
-  kind: string;
-  list: () => Promise<T[]>;
-  findByContentId: (id: string) => T | undefined;
-  hydrateLocalStore: (envConfig?: unknown) => Promise<void>;
-  applyRemote: (item: T) => Promise<void>;
-  softDeleteByContentId: (id: string) => Promise<void>;
-}
+import type { ReplicaAdapter } from '@/services/sync/replicaRegistry';
+import type { ReplicaRow } from '@/types/replica';
 
 export interface ABSServer {
   id: string;
   name: string;
   url: string;
+  username?: string;
+  token?: string;
+  deletedAt?: number | null;
 }
 
 export const absServerAdapter: ReplicaAdapter<ABSServer> = {
-  kind: 'absServer',
-  list: async () => [],
-  findByContentId: () => undefined,
-  hydrateLocalStore: async () => {
-    // No-op in Lite
-  },
-  applyRemote: async () => {
-    // No-op in Lite
-  },
-  softDeleteByContentId: async () => {
-    // No-op in Lite
-  },
+  kind: 'abs_server',
+  schemaVersion: 1,
+  pack: (_replica: ABSServer) => ({}),
+  unpack: (_fields: Record<string, unknown>) => ({ id: '', name: '', url: '' }),
+  computeId: async (server: ABSServer) => server.id,
+  unpackRow: (_row: ReplicaRow, _bundleDir: string) => null,
 };

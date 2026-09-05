@@ -92,15 +92,17 @@ interface BookshelfProps {
   ) => Promise<boolean>;
   handleBookUpload: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleBookDelete: (book: Book, syncBooks?: boolean) => Promise<boolean>;
-  handleBookPurge: (book: Book, syncBooks?: boolean) => Promise<boolean>;
+  /** Optional in Lite (no purge-with-data-sync action). Falls back to handleBookDelete. */
+  handleBookPurge?: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleSetSelectMode: (selectMode: boolean) => void;
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
   handlePushLibrary: () => Promise<void>;
   /** Direct (non-queued) downloads only; queue transfers are read from the store. */
   booksTransferProgress: { [key: string]: number };
-  contentSearch: ContentSearchRequest | null;
-  onSearchContents: () => void;
+  /** Optional in Lite (no in-bookshelf content search). Hides the search bar when null/undefined. */
+  contentSearch?: ContentSearchRequest | null;
+  onSearchContents?: () => void;
   onSearchProgress?: (value: number | null) => void;
 }
 

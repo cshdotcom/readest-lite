@@ -18,14 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
 
   const { fileName, fileSize, bookHash, replicaKind, replicaId, temp = false } = req.body;
-  if (!isSafeObjectKeyName(fileName)) {
-    console.error('[upload] Invalid fileName rejected:', JSON.stringify(fileName));
-    return res.status(400).json({
-      error: 'Invalid fileName',
-      hint: 'fileName must be a non-empty path with no leading slash, no backslash, no NUL, and no empty/./.. segments',
-      received: typeof fileName === 'string' ? fileName.slice(0, 200) : String(fileName).slice(0, 200),
-    });
-  }
+  if (!isSafeObjectKeyName(fileName)) return res.status(400).json({ error: 'Invalid fileName' });
 
   if (temp) {
     try {

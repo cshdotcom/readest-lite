@@ -20,6 +20,14 @@ export type DeleteAction = 'cloud' | 'local' | 'both' | 'purge';
 export type SelectDirectoryMode = 'read' | 'write';
 export type DistChannel = 'readest' | 'playstore' | 'appstore' | 'unknown';
 
+export interface DictionaryImportProgress {
+  stage: string;
+  completed: number;
+  total?: number;
+}
+
+export type DictionaryImportProgressHandler = (progress: DictionaryImportProgress) => void;
+
 export type ResolvedPath = {
   baseDir: number;
   basePrefix: () => Promise<string>;
@@ -174,6 +182,7 @@ export interface AppService {
   importDictionaries(
     files: SelectedFile[],
     existingDictionaries?: ImportedDictionary[],
+    onProgress?: DictionaryImportProgressHandler,
   ): Promise<ImportDictionariesResult>;
   deleteDictionary(dict: ImportedDictionary): Promise<void>;
   importBook(file: string | File, books: Book[], options?: ImportBookOptions): Promise<Book | null>;
@@ -243,4 +252,8 @@ export interface AppService {
   // v0.12.1: Database existence + deletion for library search index
   databaseExists(path: string, base: BaseDir): Promise<boolean>;
   deleteDatabase(path: string, base: BaseDir): Promise<void>;
+  /** v0.12.6: Native cover thumbnail optimization (Tauri-only; Lite returns false). */
+  supportsCoverThumbnailOptimization?: boolean;
+  /** v0.12.6: Request a thumbnail for the given book (Tauri-only; Lite no-op). */
+  requestCoverThumbnail?(book: Book): void;
 }

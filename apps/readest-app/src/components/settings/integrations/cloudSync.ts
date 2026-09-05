@@ -1,9 +1,9 @@
-// Lite stub — cloud sync activation not available
-export const activateCloudSync = (): void => {};
-export const deactivateCloudSync = (): void => {};
-export const isCloudSyncActive = (): boolean => false;
-export const persistCloudProviderEnabled = async (
-  _envConfig: unknown,
-  _kind: string,
-  _next: boolean,
-): Promise<void> => {};
+/**
+ * Lite stub for `@/components/settings/integrations/cloudSync`.
+ * Re-exports from the (Lite-stubbed) services/sync/cloudSyncActivation.
+ */
+
+export {
+  withCloudProviderEnabled,
+  persistCloudProviderEnabled,
+} from '@/services/sync/cloudSyncActivation';
