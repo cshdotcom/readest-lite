@@ -3,6 +3,53 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.2] — 2026-09-05
+
+### Fixed — 第二轮用户反馈 bug 修复
+
+#### 1. 中文文件名上传报「Invalid fileName」（严重 — 用户原话：「人教版】八年级上册(2025秋版)语文电子课本-页面-1 Invalid fileName」）
+**根因**：`getRemoteBookFilename()` 在 `getStorageType() === 'local'` 时返回空字符串 `''`，导致 cloud path `cfp = 'Readest/Books/'` 出现空段，被 `isSafeObjectKeyName` 拒绝（'Invalid fileName'）。
+
+**修复**：`local` 分支也按 `r2` 规则生成 `hash/safe-name.ext`，cloud path 永远有真实文件名段。
+
+#### 2. 下载报「File not found」（严重 — 用户原话：「Fundamental-Accessibility-Tests-Basic-Functionality-v2.0.0 File not found」）
+**根因**：上传时写进 DB 的 `fileKey` 是 `<uid>/Readest/Books/<hash>/`（无文件名段），下载请求的 `fileKey` 是 `<uid>/Readest/Books/<hash>/<title>.ext`，两者不匹配 → 404。
+
+**修复**：修复 #1 后上传写入的 `fileKey` 与下载请求一致，匹配命中。
+
+#### 3. 站点名称 / 安装应用名称仍显示「Readest」
+**修复**：完整梳理所有用户可见字符串 + 元数据：
+- `public/manifest.json`：name / short_name / description → Readest Lite
+- `app/layout.tsx`：title / description / template / appleWebApp / openGraph / twitter → Readest Lite + cshdotcom.github.io URL
+- `o/page.tsx` / `s/page.tsx`：'Open in Readest' / 'Readest logo' / 'Opening Readest' → Readest Lite
+- `SettingsMenu` / `BookMenu`：'About Readest' / 'Download Readest' / 'Upgrade to Readest Premium' / PIN 提示 → Readest Lite
+- `Annotator` / `ExportMarkdownDialog` / `ImportAnnotationsDialog`：'Readest annotations file' / 'Exported from Readest' / 'Select Readest Annotations' → Readest Lite
+- `BooknoteItem` / `ShareLanding` / `commandRegistry`：所有 'Open in Readest' / 'Readest logo' → Readest Lite
+
+#### 4. 删除服务条款 + 隐私政策（用户原话：「把服务条款 隐私政策删除」）
+**修复**：移除 `LegalLinks` 组件 + 在 `user/page.tsx` 中的使用。Lite 是自托管，无外部 ToS。
+
+#### 5. 删除文章的批注点击崩溃 → 优雅降级（用户原话：「批注和划线的总的那个看板里面还是有的，只是点击之后无法打开到对应的内容，这里可能会引发一个错误，但是要让系统忽略这里的错误」）
+**修复**：`BooknoteItem.handleClickItem` 用 try/catch 包住 `goTo(cfi)`。若 RSS 文章已被删除但批注仍在 `config.json`，导航失败时显示 toast「The highlighted location is no longer available in this book.」，不再让面板崩溃。
+
+#### 6. 阅读统计清除功能（用户原话：「增加一个阅读统计数据清除功能删除按钮放在那个危险操作里」）
+**修复**：
+- 新增 API 端点 `DELETE /api/usage/stats` — 删除当前用户的所有 `StatPage` + `UsageStat` 行（需 Bearer auth）
+- `AccountActions.tsx` 在「Danger Zone」分区最前面加「Clear Reading Statistics」按钮
+- 确认弹窗说明会删除哪些数据（保留书籍、进度、批注）
+- 成功后自动刷新页面让 UI 卡片更新
+
+#### 7. 翻译 / 词典代理必须登录验证（用户原话：「翻译代理，词典代理这些是必须要登录后的用户才能使用的」）
+**已验证**：`/api/proxy/wiki` / `/api/proxy/resource` / `/api/translate/google` 三个端点全部调用 `validateUserAndToken(authHeader)`，未登录返回 401。无任何公开访问路径。
+
+#### 8. 设置同步说明（用户原话：「同步功能本身就有点问题，就是用户在设置里的修改似乎并没有被同步」）
+**说明**：`settings` replica 在 `DEFAULT_SYSTEM_SETTINGS.syncCategories.settings = true` 默认开启。跨设备设置同步需要用户先在「集成 → 阅读同步」中配置 WebDAV / S3 等云同步 provider。没有 provider 时，设置只保存在本地（Lite 不带 Readest Cloud）。
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.18.1] — 2026-09-05
 
 ### Fixed — 用户反馈的关键 bug 修复
