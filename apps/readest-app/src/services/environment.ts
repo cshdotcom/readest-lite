@@ -56,23 +56,23 @@ export interface EnvConfigType {
 }
 
 let nativeAppService: AppService | null = null;
-const getNativeAppService = async () => {
+const getNativeAppService = async (): Promise<AppService> => {
   if (!nativeAppService) {
     const { NativeAppService } = await import('@/services/nativeAppService');
     nativeAppService = new NativeAppService();
     await nativeAppService.init();
   }
-  return nativeAppService;
+  return nativeAppService!;
 };
 
 let webAppService: AppService | null = null;
-const getWebAppService = async () => {
+const getWebAppService = async (): Promise<AppService> => {
   if (!webAppService) {
     const { WebAppService } = await import('@/services/webAppService');
     webAppService = new WebAppService();
     await webAppService.init();
   }
-  return webAppService;
+  return webAppService!;
 };
 
 const environmentConfig: EnvConfigType = {

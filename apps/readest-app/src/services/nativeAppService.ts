@@ -735,7 +735,7 @@ export class NativeAppService extends BaseAppService {
     return listenerReady;
   }
 
-  override requestCoverThumbnail(book: Book): void {
+  requestCoverThumbnail(book: Book): void {
     const request = buildCoverThumbnailRequests([book])[0];
     if (!request) return;
     const key = `${request.bookHash}:${request.coverHash ?? 'legacy'}`;
@@ -1005,7 +1005,7 @@ export class NativeAppService extends BaseAppService {
     return db;
   }
 
-  override async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
+  async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
     await this.writeFile(path, base, source);
   }
 

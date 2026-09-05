@@ -134,8 +134,8 @@ export interface AppService {
   deleteDir(path: string, base: BaseDir, recursive?: boolean): Promise<void>;
   exists(path: string, base: BaseDir): Promise<boolean>;
   isDirectory(path: string, base: BaseDir): Promise<boolean>;
-  /** v0.12.6: File stats (mtime, size, etc.) for cache invalidation. */
-  stats(path: string, base: BaseDir): Promise<FileInfo>;
+  /** v0.12.6: File stats (mtime, size, etc.) for cache invalidation. Optional: native override. */
+  stats?(path: string, base: BaseDir): Promise<FileInfo>;
   getImageURL(path: string): Promise<string>;
 
   setCustomRootDir(customRootDir: string): Promise<void>;

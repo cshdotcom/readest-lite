@@ -44,6 +44,7 @@ export interface NarrationTrack {
 
 export const absNarrationTracks = (
   _source: PairedAudiobookAbsSource,
+  _href?: string,
 ): NarrationTrack[] | null => null;
 
 /** Resolve tracks for a specific href (MediaOverlayClient shape). */

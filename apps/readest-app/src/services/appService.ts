@@ -7,6 +7,7 @@ import {
   DeleteAction,
   DistChannel,
   FileItem,
+  FileInfo,
   FileSystem,
   OsPlatform,
   ResolvedPath,
@@ -222,6 +223,10 @@ export abstract class BaseAppService implements AppService {
     } catch {
       return false;
     }
+  }
+
+  async stats(path: string, base: BaseDir): Promise<FileInfo> {
+    return await this.fs.stats(path, base);
   }
 
   async getImageURL(path: string): Promise<string> {

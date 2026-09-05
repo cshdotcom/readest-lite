@@ -437,7 +437,7 @@ export class NodeAppService extends BaseAppService {
     return db;
   }
 
-  override async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
+  async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
     await this.writeFile(path, base, source);
   }
 }

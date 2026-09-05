@@ -430,7 +430,7 @@ export class WebAppService extends BaseAppService {
     return db;
   }
 
-  override async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
+  async installDatabase(path: string, base: BaseDir, source: File): Promise<void> {
     const root = await navigator.storage.getDirectory();
     const handle = await root.getFileHandle(await this.opfsDatabaseName(path, base), {
       create: true,
