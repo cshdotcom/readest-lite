@@ -580,7 +580,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
 
       <BoxedList title={_('Privacy')} data-setting-id='settings.control.telemetry'>
         <SettingsSwitchRow
-          label={_('Help improve Readest')}
+          label={_('Help improve Readest Lite')}
           description={isTelemetryEnabled ? _('Sharing anonymized statistics') : ''}
           checked={isTelemetryEnabled}
           onChange={toggleTelemetry}

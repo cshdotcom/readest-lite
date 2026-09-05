@@ -428,8 +428,19 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
 
   const { pressing, handlers } = useLongPress(
     {
-      onLongPress: () => {
-        handleSelectItem();
+      onLongPress: (position) => {
+        // Lite (web): long-press pops up the in-app context menu so users
+        // see Delete / Upload / Download / Details / Share actions instead of
+        // only toggling select-mode. Native platforms keep their own native
+        // context menu (hasContextMenu=true path in onContextMenu below).
+        if (appService?.hasContextMenu) {
+          // Native: native menu opens via the OS — keep the old select-item
+          // behaviour so long-press still marks the book in select mode.
+          handleSelectItem();
+        } else {
+          // Web (Lite): show our in-app popup at the press position.
+          setInAppMenuPosition(position);
+        }
       },
       onTap: () => {
         handleOpenItem();
@@ -439,6 +450,10 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           handleContextMenu({ x: e.clientX, y: e.clientY });
         } else if (appService?.isAndroidApp) {
           handleSelectItem();
+        } else {
+          // Lite (web): right-click / long-press contextmenu event also pops
+          // the in-app menu so desktop users get the same action set.
+          setInAppMenuPosition({ x: e.clientX, y: e.clientY });
         }
       },
     },

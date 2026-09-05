@@ -130,19 +130,19 @@ export const AboutWindow = () => {
 
           <hr aria-hidden='true' className='border-base-300 my-8 w-full sm:my-4' />
 
-          {/* 仓库链接区 — 区分 Lite 和上游 */}
-          <div className='flex flex-col items-center gap-3 px-4' dir='ltr'>
+          {/* 仓库链接区 — 3 个网站用网格 3 列排版（窄屏自动堆叠） */}
+          <div className='grid w-full grid-cols-1 gap-3 px-4 sm:grid-cols-3' dir='ltr'>
             {/* Lite 仓库 */}
             <a
               href='https://github.com/cshdotcom/readest-lite'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex items-center gap-3 rounded-lg bg-base-200 px-4 py-2 transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
             >
-              <LiteRepoIcon size={28} />
-              <div className='flex flex-col'>
+              <LiteRepoIcon size={32} />
+              <div className='flex flex-col items-center'>
                 <span className='text-sm font-medium'>Readest Lite</span>
-                <span className='text-xs opacity-60'>github.com/cshdotcom/readest-lite</span>
+                <span className='text-xs opacity-60'>GitHub 仓库</span>
               </div>
             </a>
 
@@ -151,12 +151,12 @@ export const AboutWindow = () => {
               href='https://github.com/readest/readest'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex items-center gap-3 rounded-lg bg-base-200 px-4 py-2 transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
             >
-              <UpstreamRepoIcon size={28} />
-              <div className='flex flex-col'>
-                <span className='text-sm font-medium'>Readest (上游原版)</span>
-                <span className='text-xs opacity-60'>github.com/readest/readest</span>
+              <UpstreamRepoIcon size={32} />
+              <div className='flex flex-col items-center'>
+                <span className='text-sm font-medium'>Readest 上游</span>
+                <span className='text-xs opacity-60'>原版仓库</span>
               </div>
             </a>
 
@@ -165,12 +165,12 @@ export const AboutWindow = () => {
               href='https://cshdotcom.github.io/readestl/'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex items-center gap-3 rounded-lg bg-base-200 px-4 py-2 transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
             >
-              <FaGithub size={28} className='opacity-70' />
-              <div className='flex flex-col'>
+              <FaGithub size={32} className='opacity-70' />
+              <div className='flex flex-col items-center'>
                 <span className='text-sm font-medium'>{_('Website')}</span>
-                <span className='text-xs opacity-60'>cshdotcom.github.io/readestl</span>
+                <span className='text-xs opacity-60'>官网 / 部署教程</span>
               </div>
             </a>
           </div>

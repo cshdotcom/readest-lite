@@ -3,7 +3,9 @@ import { renderShareOgImage } from './render';
 
 interface RouteParams { params: Promise<{ token: string }> }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { token } = await params;
-  return renderShareOgImage(token);
+  // Pass request origin so render() can build absolute URLs for server-side fetch
+  const requestOrigin = new URL(request.url).origin;
+  return renderShareOgImage(token, requestOrigin);
 }

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseLongPressOptions {
   onTap?: () => void;
-  onLongPress?: () => void;
+  /** Called when the long-press timer fires. Receives the pointer's start position so callers can anchor a popup at the press location. */
+  onLongPress?: (position: { x: number; y: number }) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onCancel?: () => void;
   threshold?: number;
@@ -78,7 +79,7 @@ export const useLongPress = (
       timerRef.current = setTimeout(() => {
         if (startPosRef.current) {
           isLongPressTriggered.current = true;
-          onLongPress?.();
+          onLongPress?.(startPosRef.current);
           setPressing(false);
         }
       }, threshold);

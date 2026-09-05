@@ -12,7 +12,7 @@ const HEIGHT = 630;
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string =>
   Buffer.from(buffer).toString('base64');
 
-export const renderShareOgImage = async (token: string): Promise<Response> => {
+export const renderShareOgImage = async (token: string, requestOrigin?: string): Promise<Response> => {
   const result = await resolveActiveShare(token);
   if (!result.ok) {
     const { status, body } = rejectionToHttp(result.reason);
@@ -23,7 +23,14 @@ export const renderShareOgImage = async (token: string): Promise<Response> => {
   let coverDataUrl: string | null = null;
   if (share.coverFileKey) {
     try {
-      const signedUrl = await getDownloadSignedUrl(share.coverFileKey, SHARE_PRESIGN_TTL_SECONDS);
+      // For server-side fetch we need an absolute URL — pass requestOrigin
+      // (derived from the request by the calling route handler).
+      const signedUrl = await getDownloadSignedUrl(
+        share.coverFileKey,
+        SHARE_PRESIGN_TTL_SECONDS,
+        undefined,
+        requestOrigin,
+      );
       const response = await fetch(signedUrl);
       if (response.ok) {
         const buffer = await response.arrayBuffer();

@@ -269,7 +269,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             </Tips>
@@ -299,7 +299,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             </Tips>
@@ -331,7 +331,7 @@ const IntegrationsPanel: React.FC = () => {
             {
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             }
@@ -373,7 +373,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             </Tips>
@@ -403,7 +403,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             </Tips>
@@ -573,7 +573,7 @@ const IntegrationsPanel: React.FC = () => {
       <div className='w-full px-4'>
         <h2 className='mb-1.5 text-lg font-semibold tracking-tight'>{_('Integrations')}</h2>
         <p className='text-base-content/70 text-sm leading-relaxed'>
-          {_('Connect Readest to external services for sync, highlights, and catalogs.')}
+          {_('Connect Readest Lite to external services for sync, highlights, and catalogs.')}
         </p>
       </div>
 
@@ -737,7 +737,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Readest Lite account while signed in.',
                 )}
               </li>
             </Tips>
@@ -795,6 +795,27 @@ const IntegrationsPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Lite: Network proxy toggle for Translate / Wikipedia / dictionaries.
+          Routes those through the server so users behind GFW can use them. */}
+      <div className='w-full' data-setting-id='settings.integrations.network'>
+        <SectionTitle className='mb-2'>{_('Network')}</SectionTitle>
+        <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
+          <div className='divide-base-200 divide-y'>
+            <IntegrationToggleRow
+              icon={RiCloudLine}
+              title={_('Server Proxy')}
+              description={_(
+                'Route Translate / Wikipedia / dictionaries through this server. Off = direct client connection (requires client-side network access to Google/Wikipedia).',
+              )}
+              checked={settings.proxyEnabled ?? true}
+              onChange={() => {
+                saveSysSettings(envConfig, 'proxyEnabled', !(settings.proxyEnabled ?? true));
+              }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

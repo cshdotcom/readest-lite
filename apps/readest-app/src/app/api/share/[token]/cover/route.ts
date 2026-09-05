@@ -6,7 +6,7 @@ import { SHARE_PRESIGN_TTL_SECONDS } from '@/services/constants';
 
 interface RouteParams { params: Promise<{ token: string }> }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { token } = await params;
   const result = await resolveActiveShare(token);
   if (!result.ok) {
@@ -16,9 +16,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { share } = result;
   if (!share.coverFileKey) return NextResponse.json({ error: 'No cover for this share' }, { status: 404 });
 
+  const requestOrigin = new URL(request.url).origin;
   let url: string;
   try {
-    url = await getDownloadSignedUrl(share.coverFileKey, SHARE_PRESIGN_TTL_SECONDS);
+    url = await getDownloadSignedUrl(share.coverFileKey, SHARE_PRESIGN_TTL_SECONDS, undefined, requestOrigin);
   } catch (err) {
     console.error('Share cover presign failed:', err);
     return NextResponse.json({ error: 'Could not sign cover URL' }, { status: 500 });

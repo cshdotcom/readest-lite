@@ -6,7 +6,7 @@ import { SHARE_PRESIGN_TTL_SECONDS } from '@/services/constants';
 
 interface RouteParams { params: Promise<{ token: string }> }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { token } = await params;
   const result = await resolveActiveShare(token);
   if (!result.ok) {
@@ -14,9 +14,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json(body, { status });
   }
   const { share } = result;
+  // Derive absolute origin from request URL so NextResponse.redirect works
+  // when PUBLIC_BASE_URL is not set (relative URLs cannot be used for redirect).
+  const requestOrigin = new URL(request.url).origin;
   let url: string;
   try {
-    url = await getDownloadSignedUrl(share.bookFileKey, SHARE_PRESIGN_TTL_SECONDS);
+    url = await getDownloadSignedUrl(share.bookFileKey, SHARE_PRESIGN_TTL_SECONDS, undefined, requestOrigin);
   } catch (err) {
     console.error('Share download presign failed:', err);
     return NextResponse.json({ error: 'Could not sign download URL' }, { status: 500 });

@@ -57,20 +57,27 @@ const sign = (payload: string): string => {
 
 // Readest Lite — 签名 URL 的 base：
 // - 如果设了 PUBLIC_BASE_URL（如 https://read.example.com），用它（反向代理场景）
-// - 否则用请求的 host 拼接绝对 URL（NextResponse.redirect 需要绝对 URL）
-const getStorageBase = (): string => {
+// - 否则返回空字符串 → buildPutUrl/buildGetUrl 输出相对 URL（`/api/storage/_get?...`），
+//   浏览器会自动按当前 origin 解析（无论用户从 localhost/IP/域名访问都正确）。
+//
+// 旧实现用 `http://127.0.0.1:8225` 作为兜底，但这是容器内地址，浏览器无法访问，
+//   导致客户端下载时 "File not found" — 现在改为相对 URL 修复此问题。
+//
+// 需要绝对 URL 的场景（如 NextResponse.redirect）由调用方传入 requestOrigin：
+//   getDownloadSignedUrl(fileKey, ttl, undefined, requestOrigin)
+const getStorageBase = (requestOrigin?: string): string => {
+  if (requestOrigin) return requestOrigin.replace(/\/$/, '');
   const publicBase = process.env['PUBLIC_BASE_URL'];
   if (publicBase) return publicBase.replace(/\/$/, '');
-  // 服务端：用容器内地址
-  const port = process.env['PORT'] || '8225';
-  return `http://127.0.0.1:${port}`;
+  // 相对路径模式：返回空字符串，让 buildPutUrl/buildGetUrl 输出 `/api/...`
+  return '';
 };
 
-const buildPutUrl = (fileKey: string, expires: number, contentType?: string): string => {
+const buildPutUrl = (fileKey: string, expires: number, contentType?: string, requestOrigin?: string): string => {
   const exp = Math.floor(Date.now() / 1000) + expires;
   const payload = `PUT|${fileKey}|${exp}`;
   const sig = sign(payload);
-  const base = getStorageBase();
+  const base = getStorageBase(requestOrigin);
   const q = new URLSearchParams({
     key: fileKey,
     expires: String(exp),
@@ -80,11 +87,11 @@ const buildPutUrl = (fileKey: string, expires: number, contentType?: string): st
   return `${base}/api/storage/_put?${q.toString()}`;
 };
 
-const buildGetUrl = (fileKey: string, expires: number, bucketName?: string): string => {
+const buildGetUrl = (fileKey: string, expires: number, bucketName?: string, requestOrigin?: string): string => {
   const exp = Math.floor(Date.now() / 1000) + expires;
   const payload = `GET|${fileKey}|${exp}|${bucketName ?? ''}`;
   const sig = sign(payload);
-  const base = getStorageBase();
+  const base = getStorageBase(requestOrigin);
   const q = new URLSearchParams({
     key: fileKey,
     expires: String(exp),
@@ -95,23 +102,28 @@ const buildGetUrl = (fileKey: string, expires: number, bucketName?: string): str
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// 对外 API（与原 utils/object.ts 完全一致）
+// 对外 API（与原 utils/object.ts 完全一致 + 新增可选 requestOrigin 参数）
 // ───────────────────────────────────────────────────────────────────────────
+// requestOrigin?: 用于需要绝对 URL 的场景（如 NextResponse.redirect）。
+//   - 不传 → 返回相对 URL（`/api/storage/_put?...`），浏览器自动按当前 origin 解析
+//   - 传入 `https://example.com` → 返回绝对 URL（用于 redirect / 跨端调用）
 export const getUploadSignedUrl = async (
   fileKey: string,
   _contentLength: number,
   expiresIn: number = UPLOAD_TTL,
   _bucketName?: string,
+  requestOrigin?: string,
 ): Promise<string> => {
-  return buildPutUrl(fileKey, expiresIn);
+  return buildPutUrl(fileKey, expiresIn, undefined, requestOrigin);
 };
 
 export const getDownloadSignedUrl = async (
   fileKey: string,
   expiresIn: number = DOWNLOAD_TTL,
   bucketName?: string,
+  requestOrigin?: string,
 ): Promise<string> => {
-  return buildGetUrl(fileKey, expiresIn, bucketName);
+  return buildGetUrl(fileKey, expiresIn, bucketName, requestOrigin);
 };
 
 export const putObject = async (

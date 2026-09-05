@@ -180,6 +180,28 @@ export async function uploadBook(
   book: Book,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  // Feed/RSS books are intentionally fileless — only their metadata
+  // (title, feedUrl, cover) syncs. Skip the file upload entirely so the
+  // sync engine doesn't try to upload a non-existent blob and fail.
+  if (book.url && book.url.startsWith('feed://')) {
+    // Still upload cover if we have one, so other devices see the feed thumbnail.
+    const completedFiles = { count: 0 };
+    const coverExist = await fs.exists(getCoverFilename(book), 'Books');
+    if (coverExist) {
+      const lfp = getCoverFilename(book);
+      const cfp = `${CLOUD_BOOKS_SUBDIR}/${getCoverFilename(book)}`;
+      await uploadFileToCloud(fs, resolveFilePath, lfp, cfp, 'Books', () => {}, book.hash);
+      completedFiles.count++;
+    }
+    book.deletedAt = null;
+    book.fileSyncDeletionRequestedAt = null;
+    book.updatedAt = Date.now();
+    book.uploadedAt = Date.now();
+    book.downloadedAt = Date.now();
+    book.coverDownloadedAt = Date.now();
+    return;
+  }
+
   const completedFiles = { count: 0 };
   const coverExist = await fs.exists(getCoverFilename(book), 'Books');
 
@@ -309,6 +331,26 @@ export async function downloadBook(
   redownload: boolean = false,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  // Feed/RSS books are fileless — there's no book blob to download.
+  // Only the cover (if any) needs downloading.
+  if (book.url && book.url.startsWith('feed://')) {
+    if (!onlyCover && redownload) {
+      const needDownCover = !(await fs.exists(getCoverFilename(book), 'Books')) || redownload;
+      if (needDownCover) {
+        const lfp = getCoverFilename(book);
+        const cfp = `${CLOUD_BOOKS_SUBDIR}/${lfp}`;
+        try {
+          await downloadCloudFile(appService, localBooksDir, lfp, cfp, () => {});
+          book.coverDownloadedAt = Date.now();
+        } catch (error) {
+          console.log(`Failed to download cover for feed book: '${book.title}'`, error);
+        }
+      }
+    }
+    book.downloadedAt = Date.now();
+    return;
+  }
+
   let bookDownloaded = false;
   let bookCoverDownloaded = false;
   const completedFiles = { count: 0 };
