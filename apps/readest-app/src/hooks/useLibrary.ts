@@ -3,7 +3,7 @@ import { useEnv } from '@/context/EnvContext';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { pullEncryptedSettings } from '@/services/sync/encryptedSettingsSync';
-import type { SystemSettings } from '@/types/settings';
+import type { SystemSettings, ReadSettings } from '@/types/settings';
 import type { ViewSettings } from '@/types/book';
 
 export const useLibrary = () => {
@@ -55,7 +55,7 @@ export const useLibrary = () => {
         if (remoteView) {
           currentSettings = { ...currentSettings, globalViewSettings: remoteView.settings };
         }
-        const remoteRead = await pullEncryptedSettings<ViewSettings>('global_read');
+        const remoteRead = await pullEncryptedSettings<ReadSettings>('global_read');
         if (remoteRead) {
           currentSettings = { ...currentSettings, globalReadSettings: remoteRead.settings };
         }
