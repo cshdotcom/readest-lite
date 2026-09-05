@@ -3,6 +3,76 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.3] — 2026-09-05
+
+### Added — 第三轮用户反馈功能 + 修复
+
+#### 1. RSS feed 书籍分享 — 不需要文件
+**用户原话**：「在分享的时候，它会显示找不到这本书的原文件这个你要修一下」
+「另外一个用户在看到这本书的时候转存的时候是直接在数据库中再复制一份数据，同样的数据到另外一个用户数据表」
+「相同的资源，它不会重复重复再复制一次，而是共用一份资源」
+
+**实现**：
+- `BookShare` schema 新增 `bookUrl` 列（migration `015_book_share_url.sql`）
+- `share/create/route.ts` 在 `bookUrl` 是 `feed://` 时跳过 file lookup，直接创建「无文件分享」
+- `shareServer.resolveActiveShare` 检测到 feed:// 时返回 `isFeedBook=true` + descriptor URL，不需要 `bookFile`
+- `share/[token]/download/route.ts` 对 feed:// 分享返回 descriptor JSON（不是文件 redirect）
+- 接收方根据 descriptor + bookHash 重建订阅，不需要下载文件
+- ACL 安全：owner 删除书籍并选「云端 + 数据删除」时，原 file lookup 返回 `source_deleted` → 接收方访问返回 410
+
+#### 2. RSS feed 书籍上传按钮 + 自动同步
+**用户原话**：「它并没有上传按钮，你要加进去，目前似乎并不能真的上传上去」
+「默认它是选自动上传或下载的他就一起上传下载，反正跟其他的没区别，一样的规则」
+
+**实现**：
+- `getBookContextMenuItemIds` 现在对 feed:// 书籍也暴露 `upload` / `download` / `share` 菜单项
+- `cloudService.uploadBook()` 已有 feed:// short-circuit（v8.18.1）：上传封面 + 标记为已上传，跳过 blob 上传
+- `cloudService.downloadBook()` 同理：feed:// 书籍只下载封面，标记 downloadedAt
+- 自动同步行为与普通书籍完全一致：sync engine 跑 `library.json` 时正常处理
+
+#### 3. RSS 站点 favicon 自动识别
+**用户原话**：「目前并没有看到rss类数据能够自动识别站点的图标，要增加所有常用站点图标识别语法」
+「没有显示在这本书的对应书的封面的一部分位置当中」
+
+**实现**：
+- 新增 `services/rss/favicon.ts` 的 `fetchFeedFavicon()` — 按以下顺序查找 favicon：
+  1. `<link rel="icon" type="image/svg+xml">`（SVG 优先）
+  2. `<link rel="icon">`（任意类型）
+  3. `<link rel="apple-touch-icon">`
+  4. `<link rel="shortcut icon">`
+  5. `/favicon.ico`
+- 走 `isProxyEnabled()` 时通过 `/api/proxy/resource` 服务端代理（绕过 GFW）
+- 5 秒超时，失败时回退到默认 RSS 橙色图标
+- `feedBook.ts` 的 `ensureFeedBookCover()` 在生成 SVG 封面时把 favicon 作为 avatar 嵌入
+
+#### 4. 移除批量下载的「Advanced Options」
+**用户原话**：「批量下载不需要另外高级选项，因为所有的高级选项语法都已经包括在每一个url的输入框中了」
+
+**实现**：
+- `RemoteDownloadDialog.tsx` 的「批量下载」tab 移除全局 Cookies/Headers 输入区
+- 每个 URL 行自带 `URL | cookie:VALUE | header:Key: VALUE` 指令
+- 帮助文案改为「每个 URL 行自带 cookie / header 指令 — 不需要全局高级选项」
+
+#### 5. 64 条新中文翻译
+覆盖所有 v8.18.x 新增的「Readest Lite」品牌字符串 + 阅读统计 / 下载任务 / 管理员 UI / feed 术语。
+
+#### 6. ITERATION_PROMPT.md — 完整 Lite 维护者提示词
+新增仓库根目录的 `ITERATION_PROMPT.md`，包含：
+- Lite 与上游的核心差异（绝不改回上游）
+- Lite 自定义文件清单（绝对不能被上游覆盖）
+- 10 个关键设计决策（相对 URL、getRemoteBookFilename 非空、代理强制登录、feed:// 分享/同步、批量 URL 语法、favicon 检测、笔记面板优雅降级、设置同步等）
+- 后端安全清单（认证、CORS、输入校验、用户隔离、SSRF、配额、签名 URL TTL）
+- CI 失败排查清单（按错误类型分类的解决方案）
+- 版本管理 + 文档清单
+
+#### 7. 修复「Readest Lite Lite」双重品牌 bug
+`o/page.tsx` 中 sed 把 'Readest app' 误改成 'Readest Lite Lite app'，已修复为 'Open in Readest Lite app'。
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.18.2] — 2026-09-05
 
 ### Fixed — 第二轮用户反馈 bug 修复
