@@ -3,8 +3,13 @@
  * Audiobookshelf (ABS) pairing requires a configured ABS server. Lite
  * doesn't ship ABS integration. Stubs return empty/null so TTS narration
  * pairing falls through to the default TTS path.
+ *
+ * Uses the canonical NarrationTrack from MultiTrackNarrationClock (not a
+ * local definition) so consumers in TTSController type-check against the
+ * same shape MediaOverlayClient expects.
  */
 
+import type { NarrationTrack } from '@/services/tts/mediaOverlay/MultiTrackNarrationClock';
 import type { Book } from '@/types/book';
 
 export const ABS_PAIRED_FILE_ID = 'abs';
@@ -35,23 +40,10 @@ export interface PairedAudiobookAbsSource {
   itemId: string;
 }
 
-export interface NarrationTrack {
-  href: string;
-  start: number;
-  end: number;
-  text?: string;
-}
-
 export const absNarrationTracks = (
   _source: PairedAudiobookAbsSource,
   _href?: string,
 ): NarrationTrack[] | null => null;
-
-/** Resolve tracks for a specific href (MediaOverlayClient shape). */
-export const absNarrationTracksForHref = (
-  source: PairedAudiobookAbsSource,
-  _href: string,
-): NarrationTrack[] | null => absNarrationTracks(source);
 
 export interface AbsPreviewClip {
   url: string;
