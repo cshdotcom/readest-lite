@@ -31,12 +31,13 @@ export const useLibrary = () => {
       // v8.18.4: Pull encrypted settings from server and merge.
       // Best-effort — if vault isn't unlocked or no remote copy exists,
       // we keep the local settings as-is.
+      let currentSettings: SystemSettings = settings;
       try {
         const remoteSystem = await pullEncryptedSettings<SystemSettings>('system');
         if (remoteSystem) {
           // Last-writer-wins merge: remote overrides local for fields that
           // differ, but we keep local-only fields (like libraryHashes).
-          const merged = { ...settings, ...remoteSystem.settings };
+          const merged: SystemSettings = { ...settings, ...remoteSystem.settings };
           // Preserve local globalView/Read if remote doesn't have them
           if (!remoteSystem.settings.globalViewSettings && settings.globalViewSettings) {
             merged.globalViewSettings = settings.globalViewSettings;
@@ -44,29 +45,25 @@ export const useLibrary = () => {
           if (!remoteSystem.settings.globalReadSettings && settings.globalReadSettings) {
             merged.globalReadSettings = settings.globalReadSettings;
           }
-          setSettings(merged);
+          currentSettings = merged;
           // Persist merged settings locally so the next boot is fast
           await saveSettings(envConfig, merged);
-          setSettings(merged);
-        } else {
-          setSettings(settings);
         }
 
         // Pull global view/read settings independently
         const remoteView = await pullEncryptedSettings<ViewSettings>('global_view');
         if (remoteView) {
-          const merged = { ...settings, globalViewSettings: remoteView.settings };
-          setSettings(merged);
+          currentSettings = { ...currentSettings, globalViewSettings: remoteView.settings };
         }
         const remoteRead = await pullEncryptedSettings<ViewSettings>('global_read');
         if (remoteRead) {
-          const merged = { ...settings, globalReadSettings: remoteRead.settings };
-          setSettings(merged);
+          currentSettings = { ...currentSettings, globalReadSettings: remoteRead.settings };
         }
       } catch {
         // Remote pull failed — keep local settings
-        setSettings(settings);
       }
+
+      setSettings(currentSettings);
 
       setLibrary(await appService.loadLibraryBooks());
       setLibraryLoaded(true);
