@@ -4,6 +4,7 @@ import { SystemSettings } from '@/types/settings';
 import { EnvConfigType } from '@/services/environment';
 import { initDayjs } from '@/utils/time';
 import { broadcastGlobalSettings } from '@/utils/settingsSync';
+import { pushEncryptedSettings } from '@/services/sync/encryptedSettingsSync';
 
 export type FontPanelView = 'main-fonts' | 'custom-fonts';
 
@@ -39,6 +40,28 @@ interface SettingsState {
   applyUILanguage: (uiLanguage?: string) => void;
 }
 
+// v8.18.4: Debounce encrypted settings push — rapid settings changes
+// (e.g. dragging a slider) shouldn't fire one PUT per change. 3s is long
+// enough to coalesce a burst of edits but short enough that a deliberate
+// "save and close" still fires promptly.
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+const DEBOUNCE_MS = 3000;
+
+const scheduleEncryptedPush = (settings: SystemSettings): void => {
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    void pushEncryptedSettings('system', settings);
+    // Also push globalView and globalRead settings if present
+    if (settings.globalViewSettings) {
+      void pushEncryptedSettings('global_view', settings.globalViewSettings);
+    }
+    if (settings.globalReadSettings) {
+      void pushEncryptedSettings('global_read', settings.globalReadSettings);
+    }
+    pushTimer = null;
+  }, DEBOUNCE_MS);
+};
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   settings: {} as SystemSettings,
   settingsDialogBookKey: '',
@@ -54,6 +77,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     // Keep other open windows' in-memory global settings in sync so a stale
     // window doesn't clobber this write on its next save (issue #4580).
     void broadcastGlobalSettings(settings);
+    // v8.18.4: Debounced encrypted push to server for cross-device sync.
+    // Best-effort — if the vault isn't unlocked the push is a no-op.
+    scheduleEncryptedPush(settings);
   },
   setSettingsDialogBookKey: (bookKey) => set({ settingsDialogBookKey: bookKey }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
