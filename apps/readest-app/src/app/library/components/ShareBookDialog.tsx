@@ -13,7 +13,12 @@ import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
 import { Book } from '@/types/book';
-import { SHARE_DEFAULT_EXPIRATION_DAYS, SHARE_EXPIRATION_DAYS } from '@/services/constants';
+import {
+  SHARE_DEFAULT_EXPIRATION_DAYS,
+  SHARE_EXPIRATION_DAYS,
+  SHARE_EXPIRATION_CUSTOM,
+  SHARE_EXPIRATION_PERMANENT,
+} from '@/services/constants';
 import { ShareApiError, createShare, revokeShare } from '@/libs/share';
 import { formatBytes } from '@/utils/book';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -41,6 +46,8 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
   const settings = useSettingsStore((state) => state.settings);
 
   const [expirationDays, setExpirationDays] = useState<number>(SHARE_DEFAULT_EXPIRATION_DAYS);
+  // v8.18.4: 自定义日历选择器
+  const [customDate, setCustomDate] = useState<string>('');
   // Off by default — sharing the current page reveals where the user is in
   // the book, which is mild privacy data. Recipient still gets the book; the
   // toggle only adds the cfi to the link. Mirrors the dialog's reset effect.
@@ -57,6 +64,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
   useEffect(() => {
     if (!isOpen) return;
     setExpirationDays(SHARE_DEFAULT_EXPIRATION_DAYS);
+    setCustomDate('');
     setIncludeCfi(false);
     setGenerating(false);
     setUploadProgress(null);
@@ -114,13 +122,42 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
         }
       }
 
+      // v8.18.4: 计算最终 expirationDays — 0=永久, -1=自定义日历
+      let finalExpirationDays = expirationDays;
+      if (expirationDays === SHARE_EXPIRATION_CUSTOM) {
+        if (!customDate) {
+          setErrorMessage(_('Please pick a date'));
+          setGenerating(false);
+          return;
+        }
+        // 自定义日期 → 计算剩余天数（至少 1 天，最多 365 天）
+        const target = new Date(customDate);
+        target.setHours(23, 59, 59, 999);
+        const now = new Date();
+        const diffMs = target.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+        if (diffDays < 1) {
+          setErrorMessage(_('Date must be at least 1 day from now'));
+          setGenerating(false);
+          return;
+        }
+        if (diffDays > 365) {
+          setErrorMessage(_('Date must be within 365 days'));
+          setGenerating(false);
+          return;
+        }
+        finalExpirationDays = diffDays;
+      }
+
       const response = await createShare({
         bookHash: book.hash,
-        expirationDays,
+        expirationDays: finalExpirationDays,
         title: book.title,
         author: book.author ?? null,
         format: book.format,
         cfi: cfi && includeCfi ? cfi : null,
+        // v8.18.4: feed:// 书籍分享需要 bookUrl descriptor
+        bookUrl: book.url && book.url.startsWith('feed://') ? book.url : undefined,
       });
 
       setCreated({
@@ -286,12 +323,33 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                   value={expirationDays}
                   onChange={setExpirationDays}
                   disabled={generating}
-                  options={SHARE_EXPIRATION_DAYS.map((n) => ({
-                    value: n,
-                    label: _('{{count}} days', { count: n }),
-                  }))}
+                  options={[
+                    ...SHARE_EXPIRATION_DAYS.map((n) => ({
+                      value: n,
+                      label: _('{{count}} days', { count: n }),
+                    })),
+                    // v8.18.4: 永久 + 自定义日历选择
+                    { value: SHARE_EXPIRATION_PERMANENT, label: _('Permanent') },
+                    { value: SHARE_EXPIRATION_CUSTOM, label: _('Custom') },
+                  ]}
                 />
               </div>
+
+              {/* v8.18.4: 自定义日期选择器 — 仅当 expirationDays === -1 (Custom) 时显示 */}
+              {expirationDays === SHARE_EXPIRATION_CUSTOM && (
+                <div className='flex min-h-12 items-center justify-between gap-3 px-4 py-2'>
+                  <span className='text-base-content text-sm font-medium'>{_('Pick date')}</span>
+                  <input
+                    type='date'
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    disabled={generating}
+                    min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    className='input input-bordered input-sm w-auto'
+                  />
+                </div>
+              )}
 
               {cfi && (
                 <label className='flex min-h-12 cursor-pointer select-none items-center justify-between gap-3 px-4 py-2'>

@@ -1,4 +1,4 @@
-# Readest Lite — 迭代提示词（v8.18.3）
+# Readest Lite — 迭代提示词（v8.18.4）
 
 > 这是 Readest Lite 的「持续迭代提示词」。每次新对话开始时把它丢给助手，能让助手
 > 快速进入「Lite 维护者」上下文，避免每次都重复解释 Lite 与上游 Readest 的区别。
@@ -56,6 +56,12 @@ apps/readest-app/src/components/settings/integrations/{ABSForm,LocalSendForm,clo
 apps/readest-app/src/app/reader/components/audiobook/AudiobookPairingDialog.tsx # 渲染 null
 apps/readest-app/src/services/sync/providers/gdrive/googleDriveConnect.ts
 apps/readest-app/src/services/sync/providers/onedrive/{onedriveConnect,webAuthCodeFlow}.ts
+apps/readest-app/src/services/rss/favicon.ts       # v8.18.3 favicon 自动识别
+apps/readest-app/src/services/rss/feedBook.ts       # v8.18.3 favicon 嵌入封面
+apps/readest-app/src/app/library/components/RemoteDownloadDialog.tsx # v8.18.3 移除 Advanced Options
+apps/readest-app/src/app/library/components/ShareBookDialog.tsx # v8.18.4 永久+日历
+apps/readest-app/src/pages/api/storage/delete.ts   # v8.18.4 自动 revoke shares
+apps/readest-app/src/pages/api/settings/{index,save}.ts # v8.18.4 加密设置同步
 ```
 
 ## 关键设计决策
@@ -96,27 +102,58 @@ apps/readest-app/src/services/sync/providers/onedrive/{onedriveConnect,webAuthCo
 `uploadBook()` 在 `cloudService.ts` 中检测到 `book.url.startsWith('feed://')` 时跳过 blob 上传，
 只上传封面 + 标记为已上传。`downloadBook()` 同理。这样 RSS 订阅能跟普通书一样走自动同步。
 
-### 6. feed:// 书籍分享
+### 6. feed:// 书籍分享 — 接收方独立，owner 删除自动失效
 
-`shareServer.ts` 的 `resolveActiveShare` 检测到 `bookUrl.startsWith('feed://')` 时：
-- 不要求 `bookFile`（cover 仍可上传）
-- 返回 `isFeedBook: true` + `bookUrl: '<feed://descriptor>'`
-- 接收方根据 descriptor + bookHash 重建订阅，不需要下载文件
+**关键**：接收方 import 后是**完全独立**的副本 — 字节级复制到接收方命名空间
+（`<recipientUid>/Readest/...`）+ 独立 DB row。原 owner 删除自己的书**不影响**接收方的副本。
 
-`share/create/route.ts` 在 `bookUrl` 为 feed:// 时跳过 file lookup，直接创建「无文件分享」。
-`share/[token]/download/route.ts` 在 `isFeedBook` 时返回 descriptor JSON 而非文件 redirect。
+- `shareServer.ts` 的 `resolveActiveShare` 检测到 `bookUrl.startsWith('feed://')` 时
+  不要求 `bookFile`（cover 仍可上传），返回 `isFeedBook: true` + descriptor URL
+- `share/create/route.ts` 在 `bookUrl` 为 feed:// 时跳过 file lookup，直接创建「无文件分享」
+- `share/[token]/download/route.ts` 在 `isFeedBook` 时返回 descriptor JSON 而非文件 redirect
+- `share/[token]/import/route.ts` 在 `isFeedBook` 时只复制 cover 到接收方命名空间，
+  返回 descriptor 让接收方客户端重建订阅
 
-**ACL 安全**：owner 删除书籍并选「云端 + 数据删除」时，分享被原 owner 的 file 查找返回
-`source_deleted`，接收方访问返回 410。这是当前的实现 — **不需要数据库层面的 ACL 副本**，
-因为 Lite 是单容器 + 共享原 owner 的 file 表 row（不是复制一份到接收方的 DB）。
+**ACL 安全**：owner 删除书籍时，`pages/api/storage/delete.ts` 自动 revoke 该
+`(userId, bookHash)` 的所有活跃 BookShare 行（`revokedAt = now()`）。接收方访问已 revoke
+的分享链接时返回 410 `revoked`。
 
-### 7. 批量下载 URL 输入框语法
+接收方已保存的副本不受影响 — 字节级复制后是独立 owner 的独立 row，
+原 owner 的 file 删除不会级联到接收方的 file。
+
+### 7. 分享过期时间 — 永久 + 自定义日历
+
+`ShareBookDialog.tsx` 的「Expires in」选项：
+- `[1, 3, 7]` 天 — 预设
+- `Permanent` (expirationDays=0) — 服务端把 expiresAt 设为 9999-12-31
+- `Custom` (expirationDays=-1) — 弹出 `<input type='date'>` 日历选择器，
+  客户端计算天数（1-365）传给服务端
+
+服务端 API 已支持 `expirationDays` 0 (永久) 和 1-365 任意整数。
+
+### 8. 加密设置同步（v8.18.4 新增）
+
+`UserSetting` 表（migration `016_user_settings.sql`）存储每个用户的：
+- `scope = 'system'` — SystemSettings（KOSync、Readwise、OPDS、proxy 等）
+- `scope = 'global_view'` — globalViewSettings（字体大小、主题、布局）
+- `scope = 'global_read'` — globalReadSettings（翻页、自动滚动、TTS 等）
+
+`encryptedPayload` = base64(JSON(CipherEnvelope))，用密码派生的 AES 密钥加密。
+服务端只存密文，不解密 — 跨设备同步时其他设备 GET 后在客户端解密。
+
+API：
+- `GET /api/settings?scope=system` — 取最新密文
+- `PUT /api/settings?scope=system` — 上传密文（upsert）
+
+**安全**：服务端无法读取用户设置内容，只做存储转发。
+
+### 9. 批量下载 URL 输入框语法
 
 `RemoteDownloadDialog.tsx` 的「批量下载」tab 没有「Advanced Options」全局配置。
 每个 URL 行自带指令：`URL | cookie:VALUE | header:Key: VALUE`。
 绝对不要为「方便」加回全局 Cookies/Headers 输入框 — 那会让用户混淆「全局 vs per-URL」。
 
-### 8. RSS 订阅源封面 — 自动识别站点 favicon
+### 10. RSS 订阅源封面 — 自动识别站点 favicon
 
 `services/rss/favicon.ts` 的 `fetchFeedFavicon()` 按以下顺序查找：
 1. 站点 HTML `<link rel="icon" type="image/svg+xml">`
@@ -130,17 +167,17 @@ apps/readest-app/src/services/sync/providers/onedrive/{onedriveConnect,webAuthCo
 
 `feedBook.ts` 的 `ensureFeedBookCover()` 在生成 SVG 封面时把 favicon 作为 avatar 嵌入。
 
-### 9. 删除文章批注点击的优雅降级
+### 11. 删除文章批注点击的优雅降级
 
 `BooknoteItem.handleClickItem` 用 try/catch 包住 `goTo(cfi)`。RSS 文章被删除但批注
 仍在 config.json 时，跳转失败 → 显示 toast「The highlighted location is no longer
 available in this book.」而不是让面板崩溃。
 
-### 10. 设置跨设备同步
+### 12. 阅读统计清除
 
-`DEFAULT_SYSTEM_SETTINGS.syncCategories.settings = true` 默认开启。跨设备设置同步
-**需要用户先配置 WebDAV / S3 等云同步 provider**。没有 provider 时设置只保存在本地
-（Lite 不带 Readest Cloud）。
+`DELETE /api/usage/stats` 删除当前用户的 `StatPage` + `UsageStat` 行（需 Bearer auth）。
+Danger Zone 中的「Clear Reading Statistics」按钮触发此 API。
+书籍、进度、批注不受影响。
 
 ## 后端安全清单
 
@@ -154,6 +191,7 @@ available in this book.」而不是让面板崩溃。
 6. **SSRF 防护**：代理路由 `isPrivateHost()` 拒绝 localhost / 10.x / 172.16-31 / 192.168 / metadata
 7. **配额**：`storageQuotaMB` / `translationQuotaKB` > 0 时按用户累计
 8. **签名 URL TTL**：upload 1800s / download 1800s / share 视场景
+9. **分享自动 revoke**：删除 file 时 `bookShare.updateMany` 撤销同 bookHash 的活跃分享
 
 ## CI 失败排查清单
 
@@ -168,6 +206,8 @@ CI 通常在 7-10 分钟内跑完。如果失败，按以下顺序查：
    看 `import` 是否上游覆盖了 Lite 自定义文件
 5. `error TS2307: Cannot find module '@/...'` — 检查 `tsconfig.json` paths 别名
 6. `Build failed because of webpack errors` — 通常是上面的 TS 错误导致 webpack 退出
+7. `error TS6133: 'xxx' is declared but its value is never read` — noUnusedLocals
+   严格模式，删掉未使用的变量或加 `_` 前缀
 
 ## Dockerfile OOM
 
@@ -193,4 +233,13 @@ CI 通常在 7-10 分钟内跑完。如果失败，按以下顺序查：
 - `CHANGELOG.md` — 新版本条目（用户视角的「修了什么」）
 - `apps/readest-app/package.json` — `version` 字段
 - `apps/readest-app/public/locales/zh-CN/translation.json` — 所有新字符串的中文翻译
+- `ITERATION_PROMPT.md` — 更新设计决策 + Lite 自定义文件清单
 - GitHub Release + tag（v8.x.y）+ GHCR image 自动构建
+
+## 数据库 Migration 清单
+
+每次 schema 变更都要：
+1. 修改 `prisma/schema.prisma`
+2. 在 `docker/volumes/db/migrations/` 加 `NNN_xxx.sql`
+3. 容器启动时自动跑 migration（无需手动操作）
+4. 已有 migration 不可修改（防止生产环境数据不一致）

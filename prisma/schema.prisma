@@ -44,6 +44,7 @@ model User {
   statPages          StatPage[]
   usageStats         UsageStat[]
   downloadTasks      DownloadTask[]
+  userSettings       UserSetting[]
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -382,4 +383,27 @@ model UsageStat {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, usageType, usageDate])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// user_settings (PK: user_id, scope) — v8.18.4 加密设置同步
+// ───────────────────────────────────────────────────────────────────────────
+// 每个用户的前端设置（SystemSettings + GlobalViewSettings + GlobalReadSettings）
+// 加密后存服务端，跨设备同步。scope 区分：
+//   'system'      — SystemSettings（KOSync、Readwise、OPDS、proxy 等）
+//   'global_view' — globalViewSettings（字体大小、主题、布局）
+//   'global_read' — globalReadSettings（翻页、自动滚动、TTS 等）
+//
+// 数据模型：encryptedPayload = base64(JSON(CipherEnvelope)) — 用密码派生的
+// AES 密钥加密的 JSON 序列化的 settings 对象。服务端只存密文，不解密。
+model UserSetting {
+  userId           String
+  scope            String   // 'system' | 'global_view' | 'global_read'
+  encryptedPayload String   // base64(JSON(CipherEnvelope))
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, scope])
+  @@index([userId])
 }

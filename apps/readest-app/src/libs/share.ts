@@ -5,13 +5,15 @@ const SHARE_API = getAPIBaseUrl() + '/share';
 
 export interface CreateShareInput {
   bookHash: string;
-  expirationDays: number; // must be one of [1, 3, 7]
+  expirationDays: number; // 0 = permanent, 1-365 = N days
   title: string;
   author?: string | null;
   format: string;
   // Note: `size` is intentionally not part of the input. The server reads the
   // canonical size from the user's `files` row to avoid client/server drift.
   cfi?: string | null;
+  // v8.18.4: feed:// descriptor URL for RSS book sharing (no file needed)
+  bookUrl?: string | null;
 }
 
 export interface CreateShareResponse {

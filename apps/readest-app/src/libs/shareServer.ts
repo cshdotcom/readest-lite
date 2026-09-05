@@ -64,6 +64,12 @@ export const resolveActiveShare = async (
   if (row.revokedAt) return { ok: false, reason: { kind: 'revoked' } };
   if (new Date(row.expiresAt).getTime() < Date.now()) return { ok: false, reason: { kind: 'expired' } };
 
+  const isFeedBook = !!row.bookUrl && row.bookUrl.startsWith('feed://');
+
+  // v8.18.4: feed:// 分享 — owner 删除书时 delete.ts 自动 revoke BookShare 行，
+  // 所以 row.revokedAt 检查（上面）已经覆盖了 owner 删除的情况。
+  // feed:// 不需要在 files 表里查 bookFile — 它没有文件，只有 descriptor。
+  // 但仍需要查 cover（feed 书也有 cover.png 用于书架展示）。
   const files = await prismaClient.file.findMany({
     where: { userId: row.userId, bookHash: row.bookHash, deletedAt: null },
     select: { fileKey: true },
@@ -71,11 +77,8 @@ export const resolveActiveShare = async (
   const bookFile = files.find((f) => !isCoverKey(f.fileKey));
   const coverFile = files.find((f) => isCoverKey(f.fileKey));
 
-  // v8.18.3: feed:// books have no book file on disk. The share is still
-  // valid as long as the original book row exists in the owner's library
-  // (bookHash lookup). Recipients read the feedUrl descriptor from the
-  // BookShare row's bookUrl column and rebuild the subscription.
-  const isFeedBook = !!row.bookUrl && row.bookUrl.startsWith('feed://');
+  // 普通书籍：owner 删除文件 → files 表没匹配行 → source_deleted
+  // feed:// 书籍：上面 row.revokedAt 检查已覆盖删除场景
   if (!bookFile && !isFeedBook) {
     return { ok: false, reason: { kind: 'source_deleted' } };
   }

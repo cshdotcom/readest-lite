@@ -831,6 +831,10 @@ export const READEST_NODE_BASE_URL = '';
 // 服务端 share/create 和 share/list 路由直接读 process.env.PUBLIC_BASE_URL
 export const SHARE_BASE_URL = `${READEST_WEB_BASE_URL}/s`;
 export const SHARE_EXPIRATION_DAYS = [1, 3, 7] as const;
+// v8.18.4: 0 = 永久（expiresAt = 9999-12-31）；-1 = 自定义日历选择
+export const SHARE_EXPIRATION_CUSTOM = -1;
+export const SHARE_EXPIRATION_PERMANENT = 0;
+export const SHARE_DEFAULT_EXPIRATION_DAYS = 3;
 
 // Send to Readest — the domain inbound capture emails are addressed to, the
 // R2 bucket holding raw inbound payloads, and the per-user cap on undrained
@@ -844,7 +848,6 @@ export const SEND_INBOX_PENDING_LIMIT = 50;
 // overhead. Beyond this size a clipped article is almost certainly an
 // over-illustrated page that would never read well in the EPUB anyway.
 export const SEND_INBOX_FILE_MAX_BYTES = 40 * 1024 * 1024;
-export const SHARE_DEFAULT_EXPIRATION_DAYS = 3;
 export const SHARE_MAX_PER_USER = 50;
 export const SHARE_TOKEN_LENGTH = 22;
 export const SHARE_PRESIGN_TTL_SECONDS = 300;
