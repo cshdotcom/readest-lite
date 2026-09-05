@@ -68,7 +68,7 @@ import { CatalogDialog } from './components/OPDSDialog';
 import { FeedsView } from './components/feeds/FeedsView';
 import AddFeedModal from './components/feeds/AddFeedModal';
 import { fetchAndParseFeed } from '@/services/rss/feedClient';
-import { createFeedBook, generateFeedCoverSvg, rasterizeCoverSvg } from '@/services/rss/feedBook';
+import { createFeedBook, ensureFeedBookCover } from '@/services/rss/feedBook';
 import { MigrateDataWindow } from './components/MigrateDataWindow';
 import { BackupWindow } from './components/BackupWindow';
 import { CacheManagerWindow } from './components/CacheManagerWindow';
@@ -533,12 +533,10 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     const parsed = await fetchAndParseFeed(url);
     const book = createFeedBook(url, parsed);
     if (appService) {
+      // v8.18.5: 使用 ensureFeedBookCover 而非 generateFeedCoverSvg，
+      // 这样会自动抓取站点 favicon 并嵌入封面。
       try {
-        const cover = generateFeedCoverSvg(url, book.title);
-        const pngBytes = await rasterizeCoverSvg(cover);
-        await appService.createDir(book.hash, 'Books', true);
-        await appService.writeFile(getCoverFilename(book), 'Books', pngBytes);
-        book.coverImageUrl = await appService.generateCoverImageUrl(book);
+        book.coverImageUrl = await ensureFeedBookCover(appService, book);
       } catch (e) {
         console.warn('Failed to generate feed book cover:', e);
       }

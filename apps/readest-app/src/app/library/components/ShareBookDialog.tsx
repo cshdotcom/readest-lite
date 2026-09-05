@@ -8,7 +8,6 @@ import {
   IoShareSocialOutline,
 } from 'react-icons/io5';
 import Dialog from '@/components/Dialog';
-import SegmentedControl from '@/components/SegmentedControl';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
@@ -130,7 +129,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
           setGenerating(false);
           return;
         }
-        // 自定义日期 → 计算剩余天数（至少 1 天，最多 365 天）
+        // 自定义日期 → 计算剩余天数（至少 1 天，最多 3650 天 ≈ 10 年）
         const target = new Date(customDate);
         target.setHours(23, 59, 59, 999);
         const now = new Date();
@@ -141,8 +140,8 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
           setGenerating(false);
           return;
         }
-        if (diffDays > 365) {
-          setErrorMessage(_('Date must be within 365 days'));
+        if (diffDays > 3650) {
+          setErrorMessage(_('Date must be within 10 years'));
           setGenerating(false);
           return;
         }
@@ -316,23 +315,49 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
               {/* Both rows share min-h-12 so the segmented control's internal
                   pill height doesn't make this row visibly taller than the
                   toggle row below. */}
-              <div className='flex min-h-12 items-center justify-between gap-3 px-4 py-2'>
-                <span className='text-base-content text-sm font-medium'>{_('Expires in')}</span>
-                <SegmentedControl<number>
-                  ariaLabel={_('Expires in')}
-                  value={expirationDays}
-                  onChange={setExpirationDays}
-                  disabled={generating}
-                  options={[
-                    ...SHARE_EXPIRATION_DAYS.map((n) => ({
-                      value: n,
-                      label: _('{{count}} days', { count: n }),
-                    })),
-                    // v8.18.4: 永久 + 自定义日历选择
-                    { value: SHARE_EXPIRATION_PERMANENT, label: _('Permanent') },
-                    { value: SHARE_EXPIRATION_CUSTOM, label: _('Custom') },
-                  ]}
-                />
+              <div className='flex min-h-12 flex-wrap items-center justify-between gap-2 px-4 py-2'>
+                <span className='text-base-content text-sm font-medium shrink-0'>{_('Expires in')}</span>
+                <div className='flex flex-wrap gap-1'>
+                  {SHARE_EXPIRATION_DAYS.map((n) => (
+                    <button
+                      key={n}
+                      type='button'
+                      onClick={() => setExpirationDays(n)}
+                      disabled={generating}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        expirationDays === n
+                          ? 'bg-base-100 shadow-sm'
+                          : 'text-base-content/60 hover:bg-base-200'
+                      }`}
+                    >
+                      {_('{{count}}d', { count: n })}
+                    </button>
+                  ))}
+                  <button
+                    type='button'
+                    onClick={() => setExpirationDays(SHARE_EXPIRATION_PERMANENT)}
+                    disabled={generating}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      expirationDays === SHARE_EXPIRATION_PERMANENT
+                        ? 'bg-base-100 shadow-sm'
+                        : 'text-base-content/60 hover:bg-base-200'
+                    }`}
+                  >
+                    {_('Permanent')}
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => setExpirationDays(SHARE_EXPIRATION_CUSTOM)}
+                    disabled={generating}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      expirationDays === SHARE_EXPIRATION_CUSTOM
+                        ? 'bg-base-100 shadow-sm'
+                        : 'text-base-content/60 hover:bg-base-200'
+                    }`}
+                  >
+                    {_('Custom')}
+                  </button>
+                </div>
               </div>
 
               {/* v8.18.4: 自定义日期选择器 — 仅当 expirationDays === -1 (Custom) 时显示 */}
@@ -345,7 +370,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                     onChange={(e) => setCustomDate(e.target.value)}
                     disabled={generating}
                     min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                    max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    max={new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                     className='input input-bordered input-sm w-auto'
                   />
                 </div>
