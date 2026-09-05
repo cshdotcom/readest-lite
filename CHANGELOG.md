@@ -3,6 +3,69 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.1] — 2026-09-05
+
+### Fixed — 用户反馈的关键 bug 修复
+
+#### 1. 客户端下载报「文件找不到」（严重）
+**根因**：`getStorageBase()` 在 `PUBLIC_BASE_URL` 未设置时返回 `http://127.0.0.1:8225`（容器内地址），浏览器无法访问该地址，导致下载预签名 URL 全部 404。
+
+**修复**：默认返回相对 URL（`/api/storage/_get?...`），浏览器自动按当前 origin 解析。需要绝对 URL 的场景（如 `NextResponse.redirect`）由调用方传入 `requestOrigin`，从请求 URL 派生 origin。
+
+**影响文件**：
+- `utils/localStorage.ts` — `getUploadSignedUrl` / `getDownloadSignedUrl` 新增可选 `requestOrigin` 参数
+- `app/api/share/[token]/{download,cover,og.png}/route.ts` — 传入 request origin
+
+#### 2. 长按书籍无法唤出操作栏（严重）
+**根因**：`BookshelfItem` 的 `onLongPress` 在 web 平台只调用 `handleSelectItem()`（进入选择模式），因为 `hasContextMenu` 在 web 上为 false。用户长按看不到任何操作菜单。
+
+**修复**：web 平台长按现在会弹出 `BookContextMenuPopup`（与 Linux 桌面一致），用户可看到 Delete / Upload / Download / Details / Share 等操作。`useLongPress` hook 现在会把指针起始位置传给 `onLongPress` 回调。
+
+#### 3. RSS / feed 书籍无法上传（严重）
+**根因**：`feed://` 书籍是有意设计的无文件书籍（只存元数据）。`uploadBook()` 试图上传（不存在的）文件 blob，抛出 "Book file not uploaded" 错误。
+
+**修复**：检测到 `book.url.startsWith('feed://')` 时，跳过 blob 上传，只上传封面（如有），并标记书籍为已上传。`downloadBook()` 同样跳过 blob 下载。
+
+#### 4. 多处显示「Readest」而非「Readest Lite」
+**修复**：以下用户可见字符串全部改为「Readest Lite」：
+- AppLockScreen：「Unlock Readest」→ 「Unlock Readest Lite」
+- AppLockScreen：「Readest is locked...」→ 「Readest Lite is locked...」
+- AppLockDialog：「every time you open Readest」→ 「every time you open Readest Lite」
+- ControlPanel：「Help improve Readest」→ 「Help improve Readest Lite」
+- IntegrationsPanel：「your Readest account」→ 「your Readest Lite account」
+- IntegrationsPanel：「Connect Readest to external services」→ 「Connect Readest Lite to external services」
+- UpdaterWindow：「A new version of Readest is available」→ 「A new version of Readest Lite is available」
+- UpdaterWindow：「Readest {{newVersion}} is available」→ 「Readest Lite {{newVersion}} is available」
+- UpdaterWindow：「What's New in Readest」→ 「What's New in Readest Lite」
+
+#### 5. 翻译词典代理（Server Proxy）丢失
+**根因**：v0.12.1→v0.12.6 端口覆盖了 google/wikipedia/wiktionary/chineseDict provider，使其直接 fetch 目标 URL，绕过了 Lite 的服务器代理。
+
+**修复**：
+- 恢复 `services/translators/providers/google.ts` — proxyEnabled=true 时走 `/api/translate/google`
+- 恢复 `services/dictionaries/providers/{wikipedia,wiktionary}Provider.ts` — 走 `/api/proxy/wiki`
+- 恢复 `services/dictionaries/chineseDict.ts` — 走 `fetchViaWikiProxy`
+- IntegrationsPanel 新增「Network」分区，含「Server Proxy」开关
+
+#### 6. About 页面三个网站排版优化
+**修复**：从竖直堆叠改为 3 列网格布局（`sm:grid-cols-3`）：
+- 桌面端：三个网站卡片并排
+- 移动端：自动堆叠
+- 移除了冗余的 URL 文字（改为更简洁的「GitHub 仓库 / 原版仓库 / 官网」）
+
+#### 7. v0.12.6 新增功能中文字符串
+**修复**：在 `public/locales/zh-CN/translation.json` 中新增约 94 条中文翻译，覆盖：
+- 阅读统计（Reading Statistics / Sync History / Book Ranking 等）
+- 下载任务（Download Tasks / Pause All / Resume All / Retry All Failed 等）
+- 管理员 UI（Create User / Edit User / Storage Quota 等）
+- 网络代理（Network / Server Proxy）
+- 品牌相关（About Readest Lite / Sign in to Readest Lite 等）
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.18.0] — 2026-09-05
 
 ### Added — 上游 v0.12.1 → v0.12.6 完整合并（约 95%）
