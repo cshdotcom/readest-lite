@@ -53,6 +53,7 @@ interface AccountActionsProps {
   onUpdateEmail: () => void;
   onConfirmDelete: () => void;
   onConfirmDeleteAllBooks?: () => void;
+  onClearReadingStats?: () => void;
   onRestorePurchase?: () => void;
   onManageSubscription?: () => void;
   onManageStorage?: () => void;
@@ -68,6 +69,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
   onUpdateEmail,
   onConfirmDelete,
   onConfirmDeleteAllBooks,
+  onClearReadingStats,
   onRestorePurchase,
   onManageSubscription,
   onManageStorage,
@@ -76,7 +78,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const [pendingAction, setPendingAction] = useState<'account' | 'books' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'account' | 'books' | 'stats' | null>(null);
 
   const confirmations = {
     account: {
@@ -89,9 +91,16 @@ const AccountActions: React.FC<AccountActionsProps> = ({
     books: {
       title: _('Delete All Books?'),
       message: _(
-        'This action cannot be undone. Every book will be removed from this device and from your Readest cloud library, along with reading progress, bookmarks, and annotations. Books you imported in place keep their original files, and books uploaded to cloud storage stay there until you remove them under Manage Storage. Other signed-in devices keep their own copies.',
+        'This action cannot be undone. Every book will be removed from this device and from your Readest Lite cloud library, along with reading progress, bookmarks, and annotations. Books you imported in place keep their original files, and books uploaded to cloud storage stay there until you remove them under Manage Storage. Other signed-in devices keep their own copies.',
       ),
       onConfirm: onConfirmDeleteAllBooks,
+    },
+    stats: {
+      title: _('Clear Reading Statistics?'),
+      message: _(
+        'This action cannot be undone. All your reading time, books-read count, daily averages and ranking history will be permanently erased from this server. Your books, progress and annotations are not affected.',
+      ),
+      onConfirm: onClearReadingStats,
     },
   };
   const confirmation = pendingAction ? confirmations[pendingAction] : null;
@@ -172,6 +181,12 @@ const AccountActions: React.FC<AccountActionsProps> = ({
       <div className='mt-8 flex flex-col gap-3 rounded-lg border border-red-200 p-4'>
         <h3 className='text-sm font-semibold text-red-600'>{_('Danger Zone')}</h3>
         <div className='flex flex-col gap-4 md:grid md:grid-cols-2 lg:grid-cols-3'>
+          <button
+            onClick={() => setPendingAction('stats')}
+            className='w-full rounded-lg bg-red-100 px-6 py-3 font-medium text-red-600 transition-colors hover:bg-red-200 md:w-auto'
+          >
+            {_('Clear Reading Statistics')}
+          </button>
           <button
             onClick={() => setPendingAction('books')}
             className='w-full rounded-lg bg-red-100 px-6 py-3 font-medium text-red-600 transition-colors hover:bg-red-200 md:w-auto'

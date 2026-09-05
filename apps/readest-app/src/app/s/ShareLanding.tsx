@@ -162,7 +162,7 @@ const ShareLanding = () => {
     return (
       <main className='bg-base-200 flex min-h-dvh flex-col items-center justify-center p-4 sm:p-8'>
         <Card>
-          <BrandHeader title={_('Loading shared book…')} alt={_('Readest logo')} />
+          <BrandHeader title={_('Loading shared book…')} alt={_('Readest Lite logo')} />
           <div
             className='mt-6 flex flex-col items-center gap-3 py-4'
             role='status'
@@ -192,7 +192,7 @@ const ShareLanding = () => {
         <div className='flex flex-col items-center gap-2 px-5 pb-2 pt-5 sm:px-7 sm:pb-3 sm:pt-7'>
           <Image
             src='/icon.png'
-            alt={_('Readest logo')}
+            alt={_('Readest Lite logo')}
             width={40}
             height={40}
             priority
@@ -308,7 +308,7 @@ const ShareLanding = () => {
                       rel='noopener'
                       className='text-primary font-medium hover:underline'
                     >
-                      {_('Download Readest')}
+                      {_('Download Readest Lite')}
                     </a>
                   </p>
                 </>

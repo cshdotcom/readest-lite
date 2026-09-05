@@ -117,13 +117,13 @@ const OpenAnnotationLanding = () => {
     <main className='bg-base-200 flex min-h-dvh flex-col items-center justify-center p-4 sm:p-8'>
       <Card>
         <BrandHeader
-          title={_('Open in Readest')}
+          title={_('Open in Readest Lite')}
           subtitle={
             showManualOpen
               ? _("If Readest didn't open automatically, choose an option below:")
               : _('Continue reading where you left off.')
           }
-          alt={_('Readest logo')}
+          alt={_('Readest Lite logo')}
         />
 
         {/* Loading state — visible until the desktop timeout fires (or always
@@ -135,7 +135,7 @@ const OpenAnnotationLanding = () => {
             aria-live='polite'
           >
             <span className='loading loading-dots loading-md text-primary' aria-hidden='true' />
-            <span className='text-base-content/70 text-sm'>{_('Opening Readest...')}</span>
+            <span className='text-base-content/70 text-sm'>{_('Opening Readest Lite...')}</span>
           </div>
         )}
 
@@ -148,7 +148,7 @@ const OpenAnnotationLanding = () => {
         >
           <a href={appUrl} className='btn btn-primary btn-block' rel='noopener'>
             <IoBookOutline className='h-5 w-5' aria-hidden='true' />
-            {_('Open in Readest app')}
+            {_('Open in Readest Lite Lite app')}
           </a>
           <a href={webReaderHref} className='btn btn-ghost btn-block' rel='noopener'>
             <IoOpenOutline className='h-5 w-5' aria-hidden='true' />

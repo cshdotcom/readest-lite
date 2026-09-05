@@ -110,7 +110,21 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({
     eventDispatcher.dispatch('navigate', { bookKey, cfi });
 
     onClick?.();
-    getView(bookKey)?.goTo(cfi);
+    try {
+      getView(bookKey)?.goTo(cfi);
+    } catch (err) {
+      // The target CFI may point to an article that no longer exists in the
+      // book (e.g. RSS feed deleted the article but the annotation persists
+      // in config.json). Catch the renderer error so the notes panel stays
+      // usable instead of crashing; the user can still copy / delete the
+      // orphan note. We log so the failure is visible in diagnostics.
+      console.warn('[BooknoteItem] goTo(cfi) failed — the underlying section may be gone:', cfi, err);
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('The highlighted location is no longer available in this book.'),
+        timeout: 3000,
+      });
+    }
   };
 
   const deleteNote = (note: BookNote) => {
@@ -143,7 +157,7 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({
     const url = buildAnnotationUrl({ bookHash, noteId: item.id, cfi: item.cfi }, linkType);
     const linkLabel = item.page
       ? _('Page: {{number}}', { number: item.page })
-      : _('Open in Readest');
+      : _('Open in Readest Lite');
     return {
       bookHash,
       markdown: buildAnnotationCopyMarkdown({

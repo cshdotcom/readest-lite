@@ -13,7 +13,8 @@ import { useUserActions } from '@/hooks/useUserActions';
 import { navigateToLibrary } from '@/utils/nav';
 import { eventDispatcher } from '@/utils/event';
 import { Toast } from '@/components/Toast';
-import LegalLinks from '@/components/LegalLinks';
+import { getAPIBaseUrl } from '@/services/environment';
+import { getAccessToken } from '@/utils/access';
 import ProfileHeader from './components/Header';
 import UserInfo from './components/UserInfo';
 import UsageStats from './components/UsageStats';
@@ -80,6 +81,42 @@ const ProfilePage = () => {
 
   const handleDeleteWithMessage = () => {
     handleConfirmDelete(_('Failed to delete user. Please try again later.'));
+  };
+
+  const handleClearReadingStats = async () => {
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        eventDispatcher.dispatch('toast', {
+          type: 'error',
+          message: _('Not authenticated'),
+        });
+        return;
+      }
+      const res = await fetch(`${getAPIBaseUrl()}/usage/stats`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed: ${res.status}`);
+      }
+      const data = await res.json();
+      eventDispatcher.dispatch('toast', {
+        type: 'success',
+        message: _(
+          'Reading statistics cleared. {{pages}} stat rows and {{usage}} usage rows deleted.',
+          { pages: data.deletedStatPages ?? 0, usage: data.deletedUsageStats ?? 0 },
+        ),
+      });
+      // Refresh the page so the UI cards update.
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      console.error('Clear reading stats failed:', err);
+      eventDispatcher.dispatch('toast', {
+        type: 'error',
+        message: _('Failed to clear reading statistics'),
+      });
+    }
   };
 
   const handleManageStorage = () => setShowStorageManager(true);
@@ -162,6 +199,7 @@ const ProfilePage = () => {
                     onResetPassword={handleResetPassword}
                     onUpdateEmail={handleUpdateEmail}
                     onConfirmDelete={handleDeleteWithMessage}
+                    onClearReadingStats={handleClearReadingStats}
                     onRestorePurchase={() => {
                       eventDispatcher.dispatch('toast', {
                         type: 'info',

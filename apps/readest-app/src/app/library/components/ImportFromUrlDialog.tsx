@@ -73,7 +73,7 @@ const ImportFromUrlDialog: React.FC<ImportFromUrlDialogProps> = ({ isOpen, onClo
     >
       <div className='flex flex-col gap-4 pb-6 pt-2'>
         <p className='text-base-content/60 text-sm leading-relaxed'>
-          {_('Paste an article link. Readest clips the page and saves it to your library.')}
+          {_('Paste an article link. Readest Lite clips the page and saves it to your library.')}
         </p>
         <input
           type='url'

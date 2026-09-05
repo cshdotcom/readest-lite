@@ -663,7 +663,7 @@ const actionItems = [
   },
   {
     id: 'action.about',
-    labelKey: _('About Readest'),
+    labelKey: _('About Readest Lite'),
     keywords: ['about', 'readest', 'version', 'info'],
   },
   {

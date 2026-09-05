@@ -79,7 +79,7 @@ const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({
 {% endif %}## {{ title }}
 **${_('Author')}**: {{ author }}
 
-**${_('Exported from Readest')}**: {{ exportDate | date('%Y-%m-%d') }}
+**${_('Exported from Readest Lite')}**: {{ exportDate | date('%Y-%m-%d') }}
 
 ---
 
@@ -320,7 +320,7 @@ const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({
 
       // Add export date
       if (exportConfig.includeDate) {
-        lines.push(`**${_('Exported from Readest')}**: ${new Date().toISOString().slice(0, 10)}`);
+        lines.push(`**${_('Exported from Readest Lite')}**: ${new Date().toISOString().slice(0, 10)}`);
         lines.push('');
       }
 
@@ -469,13 +469,13 @@ const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({
           >
             <option value='markdown'>{_('Markdown')}</option>
             <option value='text'>{_('Plain Text')}</option>
-            <option value='json'>{_('JSON (Readest)')}</option>
+            <option value='json'>{_('JSON (Readest Lite)')}</option>
           </select>
         </div>
 
         {isJson && (
           <p className='text-base-content/70 text-xs'>
-            {_('A machine-readable file that Readest can import back into any book.')}
+            {_('A machine-readable file that Readest Lite can import back into any book.')}
           </p>
         )}
 

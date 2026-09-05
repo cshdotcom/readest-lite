@@ -39,7 +39,11 @@ export const getRemoteBookFilename = (book: Book) => {
   } else if (getStorageType() === 's3') {
     return `${book.hash}/${book.hash}.${EXTS[book.format]}`;
   } else {
-    return '';
+    // 'local' storage — Readest Lite: same shape as 'r2' (friendly filename inside
+    // hash dir). Returning '' used to leave the cloud path with a trailing slash,
+    // which the upload's isSafeObjectKeyName rejected with "Invalid fileName"
+    // (Chinese titles showed this most visibly — see issue #XXX).
+    return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
   }
 };
 export const getLocalBookFilename = (book: Book) => {

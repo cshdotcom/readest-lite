@@ -1788,7 +1788,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       accept: '.json,application/json',
       extensions: ['json'],
       multiple: false,
-      dialogTitle: _('Select Readest Annotations File'),
+      dialogTitle: _('Select Readest Lite Annotations File'),
     });
     if (result.error || result.files.length === 0) return;
 
@@ -1806,7 +1806,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     if (!payload) {
       eventDispatcher.dispatch('toast', {
         type: 'warning',
-        message: _('This is not a Readest annotations file.'),
+        message: _('This is not a Readest Lite annotations file.'),
         timeout: 3000,
       });
       return;
@@ -1826,7 +1826,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       try {
         conversion = await convertAnnotationExportToBookNotes(payload, bookDoc);
       } catch (e) {
-        console.warn('Failed to convert Readest annotations:', e);
+        console.warn('Failed to convert Readest Lite annotations:', e);
         eventDispatcher.dispatch('toast', {
           type: 'warning',
           message: _('Failed to import annotations.'),

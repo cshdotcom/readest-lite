@@ -436,8 +436,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
               label={_('Set PIN…')}
               tooltip={
                 appService?.isMobileApp
-                  ? _('Require a PIN (and biometrics, if available) to open Readest')
-                  : _('Require a 4-digit PIN to open Readest')
+                  ? _('Require a PIN (and biometrics, if available) to open Readest Lite')
+                  : _('Require a 4-digit PIN to open Readest Lite')
               }
               onClick={() => openAppLockDialog('set')}
             />
@@ -468,10 +468,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
       </MenuItem>
       <hr aria-hidden='true' className='border-base-200 my-1' />
       {user && userProfilePlan === 'free' && (
-        <MenuItem label={_('Upgrade to Readest Premium')} onClick={handleUpgrade} />
+        <MenuItem label={_('Upgrade to Readest Lite Premium')} onClick={handleUpgrade} />
       )}
-      {isWebAppPlatform() && <MenuItem label={_('Download Readest')} onClick={downloadReadest} />}
-      <MenuItem label={_('About Readest')} onClick={showAboutReadest} />
+      {isWebAppPlatform() && <MenuItem label={_('Download Readest Lite')} onClick={downloadReadest} />}
+      <MenuItem label={_('About Readest Lite')} onClick={showAboutReadest} />
     </Menu>
   );
 };
