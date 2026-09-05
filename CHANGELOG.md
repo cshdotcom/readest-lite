@@ -3,6 +3,127 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.0] — 2026-09-05
+
+### Added — 上游 v0.12.1 → v0.12.6 完整合并（约 95%）
+
+**主要新功能（来自上游 v0.12.6 的 42 个 feat PR）：**
+- Notebook as a linked writing workspace（#5928）
+- Customizable keyboard and mouse bindings（#5907）
+- Lyric-style sentence view in the Read Aloud player（#5755, #5908）
+- Select chapters when importing web novels（#5892）
+- Jump from a footnote popup to the location in the book（#5889）
+- From Web Browser import with an in-app browser（#5775, #5870）
+- TOC wrap long headings onto multiple lines（#5858）
+- Pair an Audiobookshelf audiobook and read along（#5807, #5856）— *stub only in Lite*
+- Select text across PDF pages（#5809, #5831）
+- Show the book cover full screen from the sidebar（#5813, #5827）
+- Join PDF line wraps into paragraphs when copying（#5814, #5828）
+- RSVP exact WPM entry and 10 WPM nudge（#5820, #5825）
+- PDF page labels as reference pages（#5822, #5824）
+- Expose book title/series as data attributes for custom UI CSS（#5776, #5806）
+- Inline note editing（#5780）
+- data-eink attribute for per-device custom CSS（#5803）
+- Audiobookshelf integration（#5801）— *stub only in Lite*
+- Bundled dictionary plugin and Yomitan support（#5764）— *stub only in Lite*
+- OPDS auto-download toggles and catalog reordering（#5746, #5760）
+- Pair local audiobooks with ebooks（#5754）— *stub only in Lite*
+- Hide-covers privacy option for the bookshelf（#5733）
+- Right-to-left page order for fixed-layout books（#5712）
+- Resume Auto Scroll when reopening a book（#5631, #5710）
+- Optional document metadata on KOSync progress uploads（#5704）
+- Symmetric minimal mini-player with centered play button（#5707）
+- Cloud shelves and safe provider deletion（#5701）
+- LocalSend receive and send for KOReader devices（#5611, #5687）— *stub only in Lite*
+- Smooth Auto Scroll at low speeds（#5679）
+- Home/End jump to start/end of book（#5660, #5673）
+- Flash the target of in-page footnote jumps（#5647, #5655）
+- LocalSend send/receive over LAN（#5611）— *stub only in Lite*
+- Download progress overlay on book covers（#5736）
+- Queue chapter downloads with per-book persistence（#5690）
+- En-hu / En-vi Wordlens gloss packs（#5737, #5738）— *skipped, no wordlens in Lite*
+- Nix packaging（#5605）— *skipped*
+- Reference pages support（#5822）
+- 「Nearby BookDrop」branding（#5915）
+- Tier stat_pages history into R2 segments（#5835）— *stub only in Lite*
+- Add From Web Browser import（#5775）— *stub only in Lite*
+- Audiobookshelf audiobook streaming and podcasts（#5801）— *stub only in Lite*
+- Brand the LAN transfer as Nearby BookDrop（#5915）
+
+**基础架构大升级：**
+- Tailwind CSS 3 → 4（CSS-based config, removed tailwind.config.ts）
+- daisyUI 4 → 5（major upgrade）
+- @tailwindcss/postcss 替换 tailwindcss + autoprefixer
+- TypeScript 7（@typescript/native-preview / tsgo）
+- React 19.2.5 → 19.2.8
+- Next.js 16.2.6 → 16.3.3
+- @tauri-apps/api 2.10.1 → 2.11.1
+
+**新增依赖：**
+- @noble/hashes（crypto）
+- katex + marked-katex-extension（math rendering）
+- @tailwindcss/postcss（Tailwind v4 PostCSS plugin）
+
+**移除依赖：**
+- autoprefixer（Tailwind v4 内置）
+- @sentry/cli（无 Sentry 集成）
+- @googleapis/androidpublisher（无 Play Store 发布）
+- @tauri-apps/plugin-biometric（无生物识别）
+- music-metadata（无 audiobook pairing）
+
+**为 Lite 创建 stub 的不适用功能：**
+- Audiobookshelf (ABS) — server integration, native-only（AudiobookController/storage/mapping/AudiobookClock/absPairing + store/absServerStore）
+- LocalSend — LAN transfer, native-only（devicePrefs + LocalSendManager + LocalSendForm + store/localsendStore）
+- Yomitan dictionaries — native plugin system（services/dictionaries/plugins/* + services/plugins/*）
+- Wordlens gloss packs — Hungarian, Vietnamese
+- Nix packaging
+- KOReader plugin (Lua + Rust binary)
+- Stats archive (R2 + PostgREST)（libs/statsArchive + app/api/stats/*）
+- Audiobook pairing (pairedAudiobook service)
+- Web browser in-app import (Tauri-only)（WebSourcesDialog + useWebBrowserDownloads）
+- Google Drive / OneDrive cloud sync providers（stubbed connect flows returning not-supported）
+- BookOrbit (KOReader cross-device sync) — full type + service kept; UI gated by stub
+- iCloud — already stubbed in v0.12.1
+- S3 — already stubbed in v0.12.1
+
+**类型系统扩展（v0.12.6）：**
+- `Book`：absMediaType ('podcast'), episodeCount
+- `BookConfig`：audiobook (PairedAudiobook), hardcover (HardcoverBookLink)
+- `BookFormat`：add 'ABS'
+- `BookNoteType`：add 'notebook'
+- `KeyBinding`：ctrlKey/altKey/shiftKey/metaKey/altGraphKey (customizable bindings)
+- `SyncCategory`：add 'abs_server'
+- `BookOrbitSettings`：export as named interface + add strategy/customHeaders
+- `SystemSettings`：add absServers, webSources
+- `AppService`：add stats(path, base), unavailableRootDir, isRootDirUsable,
+  supportsCoverThumbnailOptimization, requestCoverThumbnail
+- `libraryStore.LibraryState`：add coverThumbnails + setBookCoverThumbnail
+- `ImportFromFolderResult`：add autoImport (optional)
+- `ConnectGoogleDriveResult/ConnectOneDriveResult`：add accountLabel
+- `parseBookDeepLink`：optional autoplay flag
+- `ReplicaAdapter` (absServer)：implement full interface
+- `HtmlAudioClock`：implement NarrationTrackPlayer (play/pause/addEventListener)
+- `CryptoSession`：copy upstream version with invalidatePassphrase
+- `isWrongPassphraseError`：add to libs/errors.ts
+- `sha256File`：signature changed to (file: Blob, chunkSize)
+
+**修复 / 改进：**
+- tsconfig：添加 rootDir '../..'（用于 js-mdict 包导入）
+- DEFAULT_SYSTEM_SETTINGS：添加 absServers: [], webSources: []
+- BaseAppService：添加 stats 方法实现
+- appLocalStore：恢复 markBooksDownloaded 实现（v8.17 已有，bulk copy 时丢失）
+- bookorbit 默认设置：添加 strategy: 'prompt'
+- AccountActions：onConfirmDeleteAllBooks 设为 optional
+- Bookshelf：handleBookPurge + contentSearch + onSearchContents 设为 optional
+- 删除 user/components/PlanCard.tsx 和 PlansComparison.tsx（上游付费计划组件）
+- 删除 app/api/stripe/（Lite 无 Stripe 付费计划）
+- 删除 100+ 个测试文件（针对 ABS/audiobook/localsend/yomitan/plugins 等不适用功能）
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.17.0] — 2026-09-04
 
 ### Added — 上游 v0.11.20 → v0.12.1 完整合并
