@@ -3,6 +3,79 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.4] — 2026-09-05
+
+### Added — 分享永久/自定义日历 + 加密设置同步 + 自动撤销 + ITERATION_PROMPT 更新
+
+#### 1. 分享过期时间 — 永久 + 自定义日历
+**用户原话**：「分享书籍不是还支持无限过期时间和自定义过期时间吗，还有个日历选择框」
+
+**实现**：`ShareBookDialog.tsx` 的「Expires in」现在有 5 个选项：
+- `1 天 / 3 天 / 7 天` — 预设（原有）
+- `Permanent`（永久）— `expirationDays=0`，服务端把 `expiresAt` 设为 `9999-12-31`
+- `Custom`（自定义）— `expirationDays=-1`，弹出 `<input type='date'>` 日历选择器，
+  客户端计算剩余天数（1-365）传给服务端
+
+服务端 API 已支持 `expirationDays` 0 (永久) 和 1-365 任意整数。
+
+#### 2. 接收方副本完全独立 + owner 删除自动失效
+**用户原话**：「原用户的书与接受分享用户数据是毫无关联的」
+「如果有个用户保存了，原来用户删除了那还在不在」
+
+**实现**：
+- 接收方 import 时，服务端 `copyObject()` 把文件字节级复制到接收方命名空间
+  （`<recipientUid>/Readest/...`）+ 插入独立 DB row
+- **接收方的副本完全独立** — 原 owner 删除自己的书**不影响**接收方的副本
+- 原 owner 删除书籍时，`pages/api/storage/delete.ts` 自动 revoke 该
+  `(userId, bookHash)` 的所有活跃 `BookShare` 行（`revokedAt = now()`）
+- 接收方访问已 revoke 的分享链接 → 返回 410 `revoked`
+- **接收方已保存的副本不受影响** — 独立 owner 的独立 row，原 owner 删除不级联
+
+#### 3. feed:// source_deleted bug 修复
+`shareServer.ts` 的 `resolveActiveShare` 现在先检查 `row.revokedAt`
+（由 `delete.ts` 自动 revoke 设置），所以 feed:// 分享的 owner 删除书后，
+接收方访问正确返回 410 `revoked` 而非跳过检查继续可用。
+
+#### 4. 加密设置同步（UserSetting 表）
+**用户原话**：「每个用户的用户前端设置和配置全部加密存储服务端实现同步安全一点」
+
+**实现**：
+- 新增 `UserSetting` Prisma model（migration `016_user_settings.sql`）
+- 按 `scope` 分区存储：
+  - `system` — SystemSettings（KOSync、Readwise、OPDS、proxy 等）
+  - `global_view` — globalViewSettings（字体大小、主题、布局）
+  - `global_read` — globalReadSettings（翻页、自动滚动、TTS 等）
+- `encryptedPayload` = base64(JSON(CipherEnvelope))，用密码派生的 AES 密钥加密
+- **服务端只存密文，不解密** — 跨设备同步时其他设备 GET 后在客户端解密
+- API：
+  - `GET /api/settings?scope=system` — 取最新密文
+  - `PUT /api/settings?scope=system` — 上传密文（upsert）
+
+#### 5. ITERATION_PROMPT.md 完整更新
+**用户原话**：「最后记得更新完整提示词」
+
+更新内容：
+- 版本号 bump 到 v8.18.4
+- Lite 自定义文件清单新增 v8.18.4 的文件（favicon.ts、feedBook.ts、
+  RemoteDownloadDialog.tsx、ShareBookDialog.tsx、delete.ts、settings/{index,save}.ts）
+- 12 个关键设计决策（新增 #6 接收方独立+自动 revoke、#7 永久+日历、#8 加密设置同步）
+- 后端安全清单新增 #9 分享自动 revoke
+- CI 失败排查新增 #7 TS6133 noUnusedLocals
+- 新增「数据库 Migration 清单」段落
+
+#### 6. 5 条新中文翻译
+- `Permanent` → 「永久」
+- `Custom` → 「自定义」
+- `Pick date` → 「选择日期」
+- `Please pick a date` → 「请选择一个日期」
+- `Date must be at least 1 day from now` → 「日期必须至少从现在起 1 天后」
+- `Date must be within 365 days` → 「日期必须在 365 天内」
+
+### CI Status
+- `CI` workflow: ✅ success
+- `Docker Image` workflow: ✅ success
+- `CodeQL Advanced`: ❌ failure (pre-existing, not blocking)
+
 ## [v8.18.3] — 2026-09-05
 
 ### Added — 第三轮用户反馈功能 + 修复
