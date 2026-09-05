@@ -69,7 +69,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `You have reached the maximum of ${SHARE_MAX_PER_USER} active shares.`, code: 'share_limit_reached' }, { status: 429 });
   }
 
-  let bookFileKey = '';
   let bookFileSize = 0;
   if (!isFeedBookShare) {
     // 找到该 book_hash 的非封面文件
@@ -84,7 +83,6 @@ export async function POST(request: Request) {
     if (!bookFile) {
       return NextResponse.json({ error: 'Book file row not found', code: 'book_not_uploaded' }, { status: 409 });
     }
-    bookFileKey = bookFile.fileKey;
     bookFileSize = Number(bookFile.fileSize);
 
     // 验证文件字节确实存在
