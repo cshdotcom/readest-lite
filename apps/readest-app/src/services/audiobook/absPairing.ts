@@ -46,6 +46,12 @@ export const absNarrationTracks = (
   _source: PairedAudiobookAbsSource,
 ): NarrationTrack[] | null => null;
 
+/** Resolve tracks for a specific href (MediaOverlayClient shape). */
+export const absNarrationTracksForHref = (
+  source: PairedAudiobookAbsSource,
+  _href: string,
+): NarrationTrack[] | null => absNarrationTracks(source);
+
 export interface AbsPreviewClip {
   url: string;
   start: number;

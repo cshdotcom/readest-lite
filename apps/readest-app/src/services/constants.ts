@@ -154,6 +154,10 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
     },
   },
 
+  // v0.12.6: ABS servers + web sources (Lite: empty arrays)
+  absServers: [],
+  webSources: [],
+
   kosync: DEFAULT_KOSYNC_SETTINGS,
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,

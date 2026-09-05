@@ -24,4 +24,8 @@ export class HtmlAudioClock implements AudiobookClock {
   destroy(): void {
     // No-op in Lite
   }
+
+  async load(_url: string, _startAt: number): Promise<void> {
+    // No-op in Lite — no actual audio element playback
+  }
 }

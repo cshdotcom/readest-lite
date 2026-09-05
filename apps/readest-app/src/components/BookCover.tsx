@@ -94,7 +94,7 @@ const BookCover: React.FC<BookCoverProps> = memo<BookCoverProps>(
         return;
       }
       return observeCoverForThumbnail(element, () =>
-        appService.requestCoverThumbnail(bookRef.current),
+        appService.requestCoverThumbnail?.(bookRef.current),
       );
     }, [
       book.hash,

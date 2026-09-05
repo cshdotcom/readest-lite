@@ -509,7 +509,8 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     // Toggling "purge all reading data" on the confirmation routes the whole
     // batch through the purge path, which also wipes each book's reading-data
     // sidecars (config/nav) instead of leaving the metadata folder behind.
-    const deleteBook = purgeData ? handleBookPurge : handleBookDelete;
+    // Lite doesn't expose the purge action, so fall back to handleBookDelete.
+    const deleteBook = purgeData && handleBookPurge ? handleBookPurge : handleBookDelete;
     const concurrency = 20;
 
     for (let i = 0; i < books.length; i += concurrency) {

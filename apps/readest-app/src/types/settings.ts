@@ -3,6 +3,8 @@ import { CustomFont } from '@/styles/fonts';
 import { CustomTexture } from '@/styles/textures';
 import { HighlightColor, HighlightStyle, UserHighlightColor, ViewSettings } from './book';
 import { OPDSCatalog } from './opds';
+import type { ABSServer } from './audiobookshelf';
+import type { WebSource } from './webSource';
 import type { AISettings } from '@/services/ai/types';
 import type { NotebookTab } from '@/store/notebookStore';
 import type { DictionarySettings, ImportedDictionary } from '@/services/dictionaries/types';
@@ -98,6 +100,25 @@ export interface ReadwiseSettings {
   includeCoverImage?: boolean;
   /** Advanced: override the Readwise API base URL */
   baseUrl?: string;
+}
+
+/** v0.12.6: BookOrbit settings (KOReader cross-device sync service). */
+export interface BookOrbitSettings {
+  enabled: boolean;
+  /** Base server origin, e.g. https://books.example.com (no /api/v1/koreader suffix). */
+  serverUrl: string;
+  username: string;
+  userkey: string;
+  password?: string;
+  deviceId: string;
+  deviceName: string;
+  strategy: KOSyncStrategy;
+  syncProgress: boolean;
+  /** Annotations and bookmarks. */
+  syncNotes: boolean;
+  syncStats: boolean;
+  syncBookStates: boolean;
+  customHeaders?: Record<string, string>;
 }
 
 export interface HardcoverSettings {
@@ -402,6 +423,10 @@ export interface SystemSettings {
   customDictionaries: ImportedDictionary[];
   dictionarySettings: DictionarySettings;
   opdsCatalogs: OPDSCatalog[];
+  /** v0.12.6: Audiobookshelf servers (Lite uses empty array — no ABS). */
+  absServers: ABSServer[];
+  /** v0.12.6: Saved sites for the "From Web Browser" import. Device-local. */
+  webSources?: WebSource[];
   metadataSeriesCollapsed: boolean;
   metadataOthersCollapsed: boolean;
   metadataDescriptionCollapsed: boolean;
@@ -425,22 +450,8 @@ export interface SystemSettings {
   hardcover: HardcoverSettings;
   /** v0.12.1: Readest Cloud settings (Lite stub — not available) */
   readestCloud?: { enabled?: boolean; disabledAt?: number };
-  /** v0.12.1: BookOrbit settings (Lite stub — not available) */
-  bookorbit: {
-    enabled: boolean;
-    serverUrl: string;
-    username: string;
-    userkey: string;
-    password?: string;
-    deviceId: string;
-    deviceName: string;
-    strategy: KOSyncStrategy;
-    syncProgress: boolean;
-    syncNotes: boolean;
-    syncStats: boolean;
-    syncBookStates: boolean;
-    customHeaders?: Record<string, string>;
-  };
+  /** v0.12.6: BookOrbit settings (KOReader cross-device sync). */
+  bookorbit: BookOrbitSettings;
   webdav: WebDAVSettings;
   /** v0.12.1: Cloud sync provider settings (stubs for Lite — not used but needed for type compat) */
   googleDrive: { enabled: boolean; lastSyncedAt?: number; providerSelectedAt?: number; strategy?: KOSyncStrategy; deviceId?: string; syncProgress?: boolean; syncNotes?: boolean; syncBooks?: boolean; fullSync?: boolean; accountLabel?: string };

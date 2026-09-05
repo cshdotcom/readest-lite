@@ -3,7 +3,7 @@
  * Audiobook text-chapter mapping is not supported in web-only Lite.
  */
 
-import type { TOCItem } from '@/libs/reader';
+import type { TOCItem } from '@/libs/document';
 
 export interface AudiobookTextChapter {
   title: string;

@@ -7,15 +7,9 @@
 
 import type { ReplicaAdapter } from '@/services/sync/replicaRegistry';
 import type { ReplicaRow } from '@/types/replica';
+import type { ABSServer } from '@/types/audiobookshelf';
 
-export interface ABSServer {
-  id: string;
-  name: string;
-  url: string;
-  username?: string;
-  token?: string;
-  deletedAt?: number | null;
-}
+export type { ABSServer } from '@/types/audiobookshelf';
 
 export const absServerAdapter: ReplicaAdapter<ABSServer> = {
   kind: 'abs_server',

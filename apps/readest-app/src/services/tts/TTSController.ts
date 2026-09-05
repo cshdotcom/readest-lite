@@ -482,7 +482,7 @@ export class TTSController extends EventTarget {
         this.ttsMediaOverlayClient.attachSource({
           ...(narrator ? { narrator } : {}),
           textHighlight: false,
-          resolveTracks: async () =>
+          resolveTracks: async (_href: string) =>
             (await import('@/services/audiobook/absPairing')).absNarrationTracks(source),
           loadBlob: async () => {
             throw new Error('Audiobookshelf server not found');

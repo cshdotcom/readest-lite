@@ -70,12 +70,17 @@ export abstract class BaseAppService implements AppService {
   hasIAP = false;
   canCustomizeRootDir = false;
   canReadExternalDir = false;
+  /** v0.12.6: Native cover thumbnail optimization (Tauri-only; Lite false). */
+  supportsCoverThumbnailOptimization = false;
   supportsCanvasContext2DFilter = true;
   supportsViewTransitionsAPI = false;
   supportsViewTransitionGroup = false;
   distChannel = 'readest' as DistChannel;
   storefrontRegionCode: string | null = null;
   isOnlineCatalogsAccessible = true;
+
+  /** v0.12.6: Last discovered unusable root dir (Tauri-only; Lite null). */
+  unavailableRootDir: string | null = null;
 
   protected CURRENT_MIGRATION_VERSION = 20251124;
 
@@ -150,6 +155,18 @@ export abstract class BaseAppService implements AppService {
 
   async prepareBooksDir() {
     this.localBooksDir = await this.fs.getPrefix('Books');
+  }
+
+  /** v0.12.6: Probe whether the Books root dir is writable. Native-only override. */
+  async isRootDirUsable(): Promise<boolean> {
+    try {
+      if (!(await this.fs.exists('', 'Books'))) {
+        await this.fs.createDir('', 'Books', true);
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async openFile(path: string, base: BaseDir): Promise<File> {

@@ -9,15 +9,9 @@
 import { create } from 'zustand';
 import type { Book } from '@/types/book';
 import type { EnvConfigType } from '@/services/environment';
+import type { ABSServer } from '@/types/audiobookshelf';
 
-export interface ABSServer {
-  id: string;
-  name: string;
-  url: string;
-  username?: string;
-  token?: string;
-  deletedAt?: number | null;
-}
+export type { ABSServer } from '@/types/audiobookshelf';
 
 export interface ABSServerStore {
   servers: ABSServer[];

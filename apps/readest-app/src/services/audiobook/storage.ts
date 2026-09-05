@@ -5,7 +5,7 @@
 
 export type AudiobookStorage = Pick<
   import('@/types/book').Book,
-  'hash' | 'title' | 'coverAspectRatio'
+  'hash' | 'title' | 'coverImageUrl'
 >;
 
 export interface AudiobookImportFile {
