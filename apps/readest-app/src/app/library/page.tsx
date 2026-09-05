@@ -10,7 +10,7 @@ import { Book } from '@/types/book';
 import { AppService, DeleteAction } from '@/types/system';
 import { buildBookLookupIndex } from '@/services/bookService';
 import { navigateToLibrary, navigateToLogin, navigateToReader } from '@/utils/nav';
-import { getCoverFilename, getBookWithUpdatedMetadata, listFormater } from '@/utils/book';
+import { getBookWithUpdatedMetadata, listFormater } from '@/utils/book';
 import { getImportErrorMessage } from '@/services/errors';
 import { ingestFile } from '@/services/ingestService';
 import { eventDispatcher } from '@/utils/event';
