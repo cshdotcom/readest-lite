@@ -224,6 +224,10 @@ model BookShare {
   revokedAt      DateTime?
   downloadCount  Int      @default(0)
   createdAt      DateTime @default(now())
+  // v8.18.3: feed:// 书籍分享时存储 descriptor URL；普通书籍留空。
+  // 当 bookUrl 以 'feed://' 开头时，分享不需要 book file — 接收方根据
+  // descriptor + bookHash 重建订阅。
+  bookUrl        String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

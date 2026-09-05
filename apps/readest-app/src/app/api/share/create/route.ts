@@ -1,5 +1,7 @@
 // 改造自原 src/app/api/share/create/route.ts。
 // 改造点：supabase → prisma；quota 检查跳过（无限）。
+// v8.18.3: feed:// 书籍无文件 — 允许在 bookUrl 为 feed:// descriptor 时
+// 跳过 file lookup，直接创建「无文件分享」。
 import { NextResponse } from 'next/server';
 import { prismaClient } from '@/utils/db';
 import { validateUserAndToken } from '@/utils/access';
@@ -13,6 +15,7 @@ import {
 interface CreateShareBody {
   bookHash?: unknown; expirationDays?: unknown; title?: unknown;
   author?: unknown; format?: unknown; cfi?: unknown;
+  bookUrl?: unknown; // v8.18.3: feed:// descriptor URL for RSS books
 }
 
 const isAllowedExpiration = (value: unknown): value is number =>
@@ -21,7 +24,7 @@ const isAllowedExpiration = (value: unknown): value is number =>
 const trimText = (value: unknown, max: number): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 };
 
@@ -54,6 +57,10 @@ export async function POST(request: Request) {
     if (cfi && isControlChar(cfi)) return NextResponse.json({ error: 'cfi contains invalid characters' }, { status: 400 });
   }
 
+  // v8.18.3: feed:// 书籍通过 descriptor URL 分享，无需文件
+  const bookUrl = trimText(body.bookUrl, 2048);
+  const isFeedBookShare = !!bookUrl && bookUrl.startsWith('feed://');
+
   // 活跃分享计数
   const activeCount = await prismaClient.bookShare.count({
     where: { userId: user.id, revokedAt: null, expiresAt: { gt: new Date() } },
@@ -62,24 +69,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `You have reached the maximum of ${SHARE_MAX_PER_USER} active shares.`, code: 'share_limit_reached' }, { status: 429 });
   }
 
-  // 找到该 book_hash 的非封面文件
-  const bookFiles = await prismaClient.file.findMany({
-    where: { userId: user.id, bookHash, deletedAt: null },
-    select: { fileKey: true, fileSize: true },
-  });
-  if (bookFiles.length === 0) {
-    return NextResponse.json({ error: 'Book is not uploaded yet', code: 'book_not_uploaded' }, { status: 409 });
-  }
-  const bookFile = bookFiles.find((f) => !/\.(png|jpe?g|webp|gif)$/i.test(f.fileKey));
-  if (!bookFile) {
-    return NextResponse.json({ error: 'Book file row not found', code: 'book_not_uploaded' }, { status: 409 });
-  }
-  const size = Number(bookFile.fileSize);
+  let bookFileKey = '';
+  let bookFileSize = 0;
+  if (!isFeedBookShare) {
+    // 找到该 book_hash 的非封面文件
+    const bookFiles = await prismaClient.file.findMany({
+      where: { userId: user.id, bookHash, deletedAt: null },
+      select: { fileKey: true, fileSize: true },
+    });
+    if (bookFiles.length === 0) {
+      return NextResponse.json({ error: 'Book is not uploaded yet', code: 'book_not_uploaded' }, { status: 409 });
+    }
+    const bookFile = bookFiles.find((f) => !/\.(png|jpe?g|webp|gif)$/i.test(f.fileKey));
+    if (!bookFile) {
+      return NextResponse.json({ error: 'Book file row not found', code: 'book_not_uploaded' }, { status: 409 });
+    }
+    bookFileKey = bookFile.fileKey;
+    bookFileSize = Number(bookFile.fileSize);
 
-  // 验证文件字节确实存在
-  const exists = await objectExists(bookFile.fileKey);
-  if (!exists) {
-    return NextResponse.json({ error: 'Book upload is incomplete; please retry', code: 'upload_incomplete' }, { status: 409 });
+    // 验证文件字节确实存在
+    const exists = await objectExists(bookFile.fileKey);
+    if (!exists) {
+      return NextResponse.json({ error: 'Book upload is incomplete; please retry', code: 'upload_incomplete' }, { status: 409 });
+    }
   }
 
   const { raw, hash } = await generateShareToken();
@@ -92,7 +104,9 @@ export async function POST(request: Request) {
     data: {
       tokenHash: hash, token: raw, userId: user.id, bookHash,
       bookTitle: title, bookAuthor: author, bookFormat: format,
-      bookSize: BigInt(size), cfi, expiresAt,
+      bookSize: BigInt(bookFileSize), cfi, expiresAt,
+      // v8.18.3: feed:// descriptor URL（普通书籍留空）
+      bookUrl: isFeedBookShare ? bookUrl : null,
     },
   });
 

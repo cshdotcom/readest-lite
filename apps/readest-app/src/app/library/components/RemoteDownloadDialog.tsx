@@ -179,7 +179,8 @@ export default function RemoteDownloadDialog({ open, onClose }: RemoteDownloadDi
     if (!user) return;
     // v8.10.1: 解析每行 URL 的 per-URL cookie:/header: 指令
     // 格式: URL | cookie:VALUE | header:Key: VALUE
-    // 没有指令的行使用全局 Cookies/Headers（Advanced Options 里设的）
+    // v8.18.3: 移除「Advanced Options」全局 Cookies/Headers — 每个 URL 独立携带
+    // 自己的指令，无指令的行就是纯 URL。
     const parsedItems = parseBatchText(batchText);
     if (parsedItems.length === 0) return;
 
@@ -189,14 +190,11 @@ export default function RemoteDownloadDialog({ open, onClose }: RemoteDownloadDi
     const token = await getAccessToken();
     if (!token) { setError('Not authenticated'); setSubmitting(false); return; }
 
-    const globalHeaders = buildHeadersObject();
-    const globalCookiesStr = cookies.trim();
-
-    // 合并 per-URL 和全局配置：per-URL 优先，没有则用全局
+    // 每行 URL 自带指令，不需要全局合并
     const items = parsedItems.map((item) => ({
       url: item.url,
-      cookies: item.cookies || (globalCookiesStr || undefined),
-      headers: item.headers || (Object.keys(globalHeaders).length > 0 ? globalHeaders : undefined),
+      cookies: item.cookies,
+      headers: item.headers,
     }));
 
     try {
@@ -399,10 +397,9 @@ export default function RemoteDownloadDialog({ open, onClose }: RemoteDownloadDi
                 {_('Per-URL syntax:')} <code className='text-[10px] bg-base-200 px-1 rounded'>URL | cookie:VALUE | header:Key: VALUE</code>
               </p>
               <p className='text-xs text-base-content/40 mt-0.5'>
-                {_('URLs without directives use the global Cookies/Headers from Advanced Options below.')}
+                {_('Each URL line carries its own cookie / header directives — no global Advanced Options needed.')}
               </p>
             </div>
-            {advancedSection}
           </div>
         )}
 

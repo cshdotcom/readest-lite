@@ -977,16 +977,24 @@ export const getBookContextMenuItemIds = (
     ids.push('clearStatus');
   }
   ids.push('showDetails', 'showInFinder', 'searchGoodreads');
-  // A feed book has no file to move: every transfer action would fail, and the
-  // share dialog uploads before it can hand out a link (issue #5307).
-  if (!isFeedBook(book)) {
-    if (book.uploadedAt && !book.downloadedAt) ids.push('download');
-    if (!book.uploadedAt && book.downloadedAt) ids.push('upload');
-    // Share is offered for any local-or-uploaded book; the dialog uploads first
-    // if the book hasn't been pushed yet.
-    if (book.downloadedAt || book.uploadedAt) ids.push('share');
-    // LocalSend needs the file on this device; cloud-only books are excluded.
-    if (opts?.localSend && (book.downloadedAt || book.filePath)) ids.push('sendNearby');
+  // Feed/RSS books are intentionally fileless — they sync via the regular
+  // library.json + cover.png routes (uploadBook() in cloudService.ts has a
+  // feed:// short-circuit that uploads just the cover and marks the book as
+  // uploaded). So we expose the same upload / download / share menu items
+  // as for ordinary books. Sharing a feed book creates a "no-file" share —
+  // the recipient gets the feed:// descriptor and rebuilds the subscription
+  // locally (see shareServer.ts handling for feed books).
+  if (book.uploadedAt && !book.downloadedAt) ids.push('download');
+  if (!book.uploadedAt && book.downloadedAt) ids.push('upload');
+  // For feed books without a local cache (first subscription), allow upload
+  // directly so the user can push the subscription to other devices.
+  if (!book.uploadedAt && isFeedBook(book)) ids.push('upload');
+  // Share is offered for any local-or-uploaded book; the dialog uploads first
+  // if the book hasn't been pushed yet.
+  if (book.downloadedAt || book.uploadedAt) ids.push('share');
+  // LocalSend needs the file on this device — feed books have no file.
+  if (opts?.localSend && !isFeedBook(book) && (book.downloadedAt || book.filePath)) {
+    ids.push('sendNearby');
   }
   ids.push('delete');
   return ids;

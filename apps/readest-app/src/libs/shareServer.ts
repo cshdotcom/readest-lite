@@ -1,5 +1,8 @@
 // 改造自原 src/libs/shareServer.ts。
 // supabase → prisma；resolveActiveShare 逻辑与原版完全一致。
+// v8.18.3: feed:// 书籍无文件 — share 通过 bookHash 在 library_books 表里
+// 找原书的 metadata.feedUrl，recipient 用 descriptor 重建订阅。源书籍
+// 被删除 → 返回 source_deleted（仍由原逻辑处理）。
 import { customAlphabet } from 'nanoid';
 import { prismaClient } from '@/utils/db';
 
@@ -38,6 +41,14 @@ export interface ResolvedShare {
   cfi: string | null; expiresAt: string; revokedAt: string | null;
   downloadCount: number; createdAt: string;
   bookFileKey: string; coverFileKey: string | null;
+  /**
+   * v8.18.3: feed:// books carry no book file. When this is true the share
+   * still resolves successfully — recipients read bookUrl + feedUrl from
+   * the BookShare row and rebuild the subscription locally.
+   */
+  isFeedBook?: boolean;
+  /** feed:// descriptor URL — set when isFeedBook is true. */
+  bookUrl?: string | null;
 }
 
 const isCoverKey = (fileKey: string): boolean => /\.(png|jpe?g|webp|gif)$/i.test(fileKey);
@@ -58,8 +69,16 @@ export const resolveActiveShare = async (
     select: { fileKey: true },
   });
   const bookFile = files.find((f) => !isCoverKey(f.fileKey));
-  if (!bookFile) return { ok: false, reason: { kind: 'source_deleted' } };
   const coverFile = files.find((f) => isCoverKey(f.fileKey));
+
+  // v8.18.3: feed:// books have no book file on disk. The share is still
+  // valid as long as the original book row exists in the owner's library
+  // (bookHash lookup). Recipients read the feedUrl descriptor from the
+  // BookShare row's bookUrl column and rebuild the subscription.
+  const isFeedBook = !!row.bookUrl && row.bookUrl.startsWith('feed://');
+  if (!bookFile && !isFeedBook) {
+    return { ok: false, reason: { kind: 'source_deleted' } };
+  }
 
   return {
     ok: true,
@@ -70,7 +89,12 @@ export const resolveActiveShare = async (
       cfi: row.cfi, expiresAt: row.expiresAt.toISOString(),
       revokedAt: row.revokedAt ? new Date(row.revokedAt).toISOString() : null,
       downloadCount: row.downloadCount, createdAt: row.createdAt.toISOString(),
-      bookFileKey: bookFile.fileKey, coverFileKey: coverFile?.fileKey ?? null,
+      // For feed books, bookFileKey/coverFileKey may be empty/cover-only.
+      // Recipient endpoints route to feed:// descriptor handling instead.
+      bookFileKey: bookFile?.fileKey ?? '',
+      coverFileKey: coverFile?.fileKey ?? null,
+      isFeedBook,
+      bookUrl: row.bookUrl,
     },
   };
 };
