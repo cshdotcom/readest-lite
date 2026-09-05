@@ -106,8 +106,10 @@ export const getOrphanedBookEntries = async (
   const isSettled = (dir: string) => {
     let result = settled.get(dir);
     if (!result) {
-      result = appService
-        .stats(dir, 'Books')
+      result = (appService.stats
+        ? appService.stats(dir, 'Books')
+        : Promise.resolve({} as { mtime: Date | null })
+      )
         .then(({ mtime }) => !!mtime && now - mtime.getTime() >= ORPHAN_SETTLE_MS)
         .catch(() => false);
       settled.set(dir, result);
