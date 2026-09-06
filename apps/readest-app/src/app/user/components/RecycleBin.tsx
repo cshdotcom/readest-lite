@@ -45,6 +45,16 @@ export default function RecycleBin() {
   const [loading, setLoading] = useState(true);
   const [showAllModal, setShowAllModal] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredItems = searchQuery.trim()
+    ? items.filter((i) =>
+        i.bookTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        i.bookFormat.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        i.bookHash.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : items;
 
   const fetchItems = useCallback(async () => {
     if (!user) return;

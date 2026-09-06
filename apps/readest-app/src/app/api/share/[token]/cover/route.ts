@@ -16,7 +16,12 @@ export async function GET(request: Request, { params }: RouteParams) {
   const { share } = result;
   if (!share.coverFileKey) return NextResponse.json({ error: 'No cover for this share' }, { status: 404 });
 
-  const requestOrigin = new URL(request.url).origin;
+  // v8.19.5: Use forwarded headers instead of request.url — behind a reverse
+  // proxy (Cloudflare/Nginx), request.url is http://0.0.0.0:8225/... which
+  // produces broken redirect URLs.
+  const proto = request.headers.get('x-forwarded-proto') || 'http';
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+  const requestOrigin = host ? `${proto}://${host}` : new URL(request.url).origin;
   let url: string;
   try {
     url = await getDownloadSignedUrl(share.coverFileKey, SHARE_PRESIGN_TTL_SECONDS, undefined, requestOrigin);

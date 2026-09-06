@@ -37,7 +37,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   // Derive absolute origin from request URL so NextResponse.redirect works
   // when PUBLIC_BASE_URL is not set (relative URLs cannot be used for redirect).
-  const requestOrigin = new URL(request.url).origin;
+  // v8.19.5: Use forwarded headers instead of request.url
+  const proto = request.headers.get('x-forwarded-proto') || 'http';
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+  const requestOrigin = host ? `${proto}://${host}` : new URL(request.url).origin;
   let url: string;
   try {
     url = await getDownloadSignedUrl(share.bookFileKey, SHARE_PRESIGN_TTL_SECONDS, undefined, requestOrigin);
