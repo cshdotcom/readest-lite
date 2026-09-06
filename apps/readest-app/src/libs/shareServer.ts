@@ -72,7 +72,7 @@ export const resolveActiveShare = async (
   // 但仍需要查 cover（feed 书也有 cover.png 用于书架展示）。
   const files = await prismaClient.file.findMany({
     where: { userId: row.userId, bookHash: row.bookHash, deletedAt: null },
-    select: { fileKey: true },
+    select: { fileKey: true, originalFileKey: true },
   });
   const bookFile = files.find((f) => !isCoverKey(f.fileKey));
   const coverFile = files.find((f) => isCoverKey(f.fileKey));
@@ -94,8 +94,12 @@ export const resolveActiveShare = async (
       downloadCount: row.downloadCount, createdAt: row.createdAt.toISOString(),
       // For feed books, bookFileKey/coverFileKey may be empty/cover-only.
       // Recipient endpoints route to feed:// descriptor handling instead.
-      bookFileKey: bookFile?.fileKey ?? '',
-      coverFileKey: coverFile?.fileKey ?? null,
+      //
+      // v8.19.0: 跨用户去重后，sharer 的 row 可能是 reference（originalFileKey != null）。
+      // 物理文件在 originalFileKey 路径下，下载/封面端点必须用 owner 的 fileKey 才能
+      // 拿到字节。这里在 resolve 阶段就把 fileKey 解引用为 originalFileKey（如果有）。
+      bookFileKey: bookFile ? (bookFile.originalFileKey ?? bookFile.fileKey) : '',
+      coverFileKey: coverFile ? (coverFile.originalFileKey ?? coverFile.fileKey) : null,
       isFeedBook,
       bookUrl: row.bookUrl,
     },

@@ -1,9 +1,15 @@
 // 改造自原 src/pages/api/storage/delete.ts。
+// v8.19.0: 跨用户去重后的删除 —
+//   - reference 行（originalFileKey != null）：硬删自己 + 把 owner.refCount - 1；
+//     owner.refCount 归 0 时物理删除 owner 的文件并删除 owner 行
+//   - owner 行（originalFileKey == null）：refCount - 1；归 0 物理删除 + 硬删；
+//     仍 > 0 则软删自己 + 保留物理文件给其他 reference 用户
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken } from '@/utils/access';
 import { deleteObject } from '@/utils/object';
 import { prismaClient } from '@/utils/db';
+import { deleteFileWithRefCount } from '@/utils/fileDedup';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
@@ -23,8 +29,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (fileRecord.userId !== user.id) return res.status(403).json({ error: 'Unauthorized access to the file' });
 
     try {
-      await deleteObject(fileKey);
-      await prismaClient.file.delete({ where: { id: fileRecord.id } });
+      await deleteFileWithRefCount(
+        {
+          id: fileRecord.id,
+          userId: fileRecord.userId,
+          fileKey: fileRecord.fileKey,
+          originalFileKey: fileRecord.originalFileKey,
+          refCount: fileRecord.refCount,
+        },
+        deleteObject,
+      );
       return res.status(200).json({ message: 'File deleted successfully' });
     } catch (error) {
       console.error('Error deleting file:', error);

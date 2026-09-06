@@ -188,18 +188,26 @@ model BookNote {
 
 // ───────────────────────────────────────────────────────────────────────────
 // files (PK: id; UNIQUE: file_key)
+// v8.19.0: 文件去重 + 引用计数
+//   - contentHash: 书籍内容的 hash，用于跨用户去重
+//   - refCount: 多少用户引用此物理文件（owner=1, reference=0）
+//   - originalFileKey: 引用文件指向 owner 的 fileKey（owner 自身为 NULL）
 // ───────────────────────────────────────────────────────────────────────────
 model File {
-  id          String   @id @default(uuid())
-  userId      String
-  bookHash    String?
-  fileKey     String   @unique
-  fileSize    BigInt
-  replicaKind String?
-  replicaId   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now())
-  deletedAt   DateTime?
+  id              String   @id @default(uuid())
+  userId          String
+  bookHash        String?
+  fileKey         String   @unique
+  fileSize        BigInt
+  replicaKind     String?
+  replicaId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+  deletedAt       DateTime?
+  // v8.19.0: 去重字段
+  contentHash     String?  // 书籍内容的 hash（去重 key）
+  originalFileKey String?  // 引用文件指向 owner 的 fileKey；owner 自身为 NULL
+  refCount        Int      @default(1) // owner=1, reference=0
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -208,6 +216,9 @@ model File {
   @@index([fileKey, deletedAt])
   @@index([userId, replicaKind, replicaId])
   @@index([userId, bookHash])
+  // v8.19.0: 去重查询索引
+  @@index([contentHash, deletedAt])
+  @@index([originalFileKey])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

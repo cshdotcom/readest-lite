@@ -1,5 +1,7 @@
 // 改造自原 src/pages/api/storage/download.ts。
 // supabase → prisma；getDownloadSignedUrl 改为返回本地签名 GET URL。
+// v8.19.0: 跨用户去重后，reference 行（originalFileKey != null）的物理文件在
+// owner 的 fileKey 路径下。这里在签名 URL 时切换到 originalFileKey。
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { getDownloadSignedUrl } from '@/utils/object';
@@ -60,7 +62,7 @@ async function processFileKeys(
 ): Promise<Record<string, string | undefined>> {
   const records = await prismaClient.file.findMany({
     where: { userId, fileKey: { in: fileKeys }, deletedAt: null },
-    select: { userId: true, fileKey: true, bookHash: true },
+    select: { userId: true, fileKey: true, bookHash: true, originalFileKey: true },
   });
   const fileRecordMap = new Map(records.map((r) => [r.fileKey, r]));
 
@@ -99,8 +101,11 @@ async function processFileKeys(
         downloadUrls[fileKey] = undefined;
         return;
       }
+      // v8.19.0: reference 行的物理文件在 originalFileKey 路径下。
+      // 签名 URL 切换到 originalFileKey，让客户端从 owner 的命名空间取字节。
+      const physicalKey = rec.originalFileKey ?? rec.fileKey;
       try {
-        downloadUrls[fileKey] = await getDownloadSignedUrl(rec.fileKey, 1800, undefined, requestOrigin);
+        downloadUrls[fileKey] = await getDownloadSignedUrl(physicalKey, 1800, undefined, requestOrigin);
       } catch {
         downloadUrls[fileKey] = undefined;
       }

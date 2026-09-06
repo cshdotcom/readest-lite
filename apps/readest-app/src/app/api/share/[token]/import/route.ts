@@ -4,6 +4,7 @@ import { prismaClient } from '@/utils/db';
 import { copyObject, objectExists } from '@/utils/object';
 import { validateUserAndToken } from '@/utils/access';
 import { rejectionToHttp, resolveActiveShare } from '@/libs/shareServer';
+import { createFileWithDedup, probeDedupOwner } from '@/utils/fileDedup';
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -101,11 +102,76 @@ export async function POST(request: Request, { params }: RouteParams) {
   const destBookKey = remap(share.bookFileKey);
   if (!destBookKey) return NextResponse.json({ error: 'Cannot remap shared file' }, { status: 500 });
 
+  // v8.19.0: 跨用户去重 — 先探测是否有可去重的 owner row（同 bookHash + 同扩展名
+  // + originalFileKey IS NULL + userId != 当前用户）。如果有，调 createFileWithDedup
+  // 创建 reference 行，不复制物理文件；如果没有，回退到原 copyObject 路径。
+  let deduped = false;
+  let dedupedFileId: string | null = null;
+  if (share.bookHash) {
+    try {
+      const owner = await probeDedupOwner(share.bookHash, destBookKey, user.id);
+      if (owner) {
+        // 找到可去重的 owner → 创建 reference 行（不复制字节）
+        const dedupRes = await createFileWithDedup({
+          userId: user.id,
+          bookHash: share.bookHash,
+          fileKey: destBookKey,
+          fileSize: BigInt(share.bookSize),
+        });
+        if (dedupRes.kind === 'reference') {
+          deduped = true;
+          dedupedFileId = dedupRes.fileId;
+        }
+        // 如果返回 'owner'，说明并发竞态下 owner 被删除了 — 走 copyObject 回退
+      }
+    } catch (err) {
+      console.error('Share import dedup probe failed, falling back to copy:', err);
+    }
+  }
+
+  if (deduped && dedupedFileId) {
+    // cover 也尝试去重（与 sharer 的 cover.png 共享同一份物理文件）
+    if (share.coverFileKey) {
+      const destCoverKey = remap(share.coverFileKey);
+      if (destCoverKey) {
+        try {
+          const coverExists = await objectExists(share.coverFileKey);
+          if (coverExists) {
+            await createFileWithDedup({
+              userId: user.id,
+              bookHash: share.bookHash,
+              fileKey: destCoverKey,
+              fileSize: BigInt(0),
+            });
+          }
+        } catch (err) {
+          console.error('Share import cover dedup failed (non-fatal):', err);
+        }
+      }
+    }
+    return NextResponse.json({
+      fileId: dedupedFileId,
+      alreadyOwned: false,
+      deduped: true,
+      bookHash: share.bookHash,
+      cfi: share.cfi,
+    });
+  }
+
   const sourceExists = await objectExists(share.bookFileKey);
   if (!sourceExists) return NextResponse.json({ error: 'Shared book is no longer available', code: 'source_deleted' }, { status: 410 });
 
+  // 去重未命中 → 复制物理文件（原逻辑）
   const insertedBook = await prismaClient.file.create({
-    data: { userId: user.id, bookHash: share.bookHash, fileKey: destBookKey, fileSize: BigInt(share.bookSize) },
+    data: {
+      userId: user.id,
+      bookHash: share.bookHash,
+      fileKey: destBookKey,
+      fileSize: BigInt(share.bookSize),
+      contentHash: share.bookHash,
+      refCount: 1,
+      originalFileKey: null,
+    },
     select: { id: true },
   });
 
@@ -129,7 +195,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         if (coverExists) {
           await copyObject(share.coverFileKey, destCoverKey);
           await prismaClient.file.create({
-            data: { userId: user.id, bookHash: share.bookHash, fileKey: destCoverKey, fileSize: BigInt(0) },
+            data: {
+              userId: user.id,
+              bookHash: share.bookHash,
+              fileKey: destCoverKey,
+              fileSize: BigInt(0),
+              contentHash: share.bookHash,
+              refCount: 1,
+              originalFileKey: null,
+            },
           });
         }
       } catch (err) {

@@ -1,9 +1,11 @@
 // 改造自原 src/pages/api/storage/purge.ts。
+// v8.19.0: 跨用户去重后的批量删除 — 使用 deleteFileWithRefCount 处理每个 row。
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken } from '@/utils/access';
 import { deleteObject } from '@/utils/object';
 import { prismaClient } from '@/utils/db';
+import { deleteFileWithRefCount } from '@/utils/fileDedup';
 
 interface BulkDeleteResult {
   success: string[];
@@ -37,8 +39,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await Promise.allSettled(
       fileRecords.map(async (rec) => {
         try {
-          await deleteObject(rec.fileKey);
-          await prismaClient.file.delete({ where: { id: rec.id } });
+          await deleteFileWithRefCount(
+            {
+              id: rec.id,
+              userId: rec.userId,
+              fileKey: rec.fileKey,
+              originalFileKey: rec.originalFileKey,
+              refCount: rec.refCount,
+            },
+            deleteObject,
+          );
           success.push(rec.fileKey);
         } catch (error) {
           failed.push({ fileKey: rec.fileKey, error: error instanceof Error ? error.message : 'Unknown error' });

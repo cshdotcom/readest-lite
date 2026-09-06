@@ -4,11 +4,14 @@
 // 2. quota 检查改为查 files 表实际总和（无限配额，跳过 enforcement）
 // 3. temp 路径仍走 putObject（本地文件系统）
 // 4. uploadUrl 返回本地签名 PUT URL（/api/storage/_put）
+// 5. v8.19.0: 跨用户去重 — 同 bookHash + 同扩展名的 owner row 存在时，
+//    新用户创建 reference row（不复制物理文件），返回 { uploadUrl: null, deduped: true }
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken, getActualStorageUsage } from '@/utils/access';
 import { getDownloadSignedUrl, getUploadSignedUrl, isSafeObjectKeyName } from '@/utils/object';
 import { prismaClient } from '@/utils/db';
+import { createFileWithDedup } from '@/utils/fileDedup';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
@@ -63,21 +66,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fileKey = `${user.id}/${fileName}`;
     const existing = await prismaClient.file.findUnique({ where: { fileKey } });
     let objSize = fileSize;
+
     if (existing) {
+      // 已有 row（同 user + 同 fileKey）。可能是：
+      //   (a) owner row 重新上传（正常覆盖）
+      //   (b) reference row 重新上传（不应发生 — dedup 后客户端不会再 PUT）
+      // 两种情况都直接返回签名 URL 让客户端覆盖（owner）/ 跳过（reference）。
       objSize = Number(existing.fileSize);
-    } else {
-      await prismaClient.file.create({
-        data: {
-          userId: user.id,
-          bookHash: bookHash ?? null,
-          replicaKind: replicaKind ?? null,
-          replicaId: replicaId ?? null,
+      const uploadUrl = await getUploadSignedUrl(fileKey, objSize, 1800);
+      // 如果是 reference row，告诉客户端无需上传
+      if (existing.originalFileKey) {
+        return res.status(200).json({
+          uploadUrl: null,
           fileKey,
-          fileSize: BigInt(fileSize),
-        },
+          deduped: true,
+          usage: usage + Number(existing.fileSize),
+          quota,
+        });
+      }
+      return res.status(200).json({ uploadUrl, fileKey, usage: usage + Number(fileSize), quota });
+    }
+
+    // v8.19.0: 跨用户去重 — 同 bookHash + 同扩展名的 owner row 存在时
+    // 创建 reference row，不复制物理文件，返回 deduped: true 让客户端跳过 PUT。
+    const createRes = await createFileWithDedup({
+      userId: user.id,
+      bookHash: bookHash ?? null,
+      fileKey,
+      fileSize: BigInt(fileSize),
+      replicaKind: replicaKind ?? null,
+      replicaId: replicaId ?? null,
+    });
+
+    if (createRes.kind === 'reference') {
+      // 引用创建成功 — 不需要上传物理文件
+      const refRow = await prismaClient.file.findUnique({ where: { id: createRes.fileId } });
+      objSize = refRow ? Number(refRow.fileSize) : Number(fileSize);
+      return res.status(200).json({
+        uploadUrl: null,
+        fileKey,
+        deduped: true,
+        usage: usage + objSize,
+        quota,
       });
     }
 
+    // 新 owner row — 返回签名 URL 让客户端 PUT
     const uploadUrl = await getUploadSignedUrl(fileKey, objSize, 1800);
     return res.status(200).json({ uploadUrl, fileKey, usage: usage + Number(fileSize), quota });
   } catch (error) {

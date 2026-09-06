@@ -62,8 +62,17 @@ export const uploadFile = async (
       }),
     });
 
-    const { uploadUrl, downloadUrl }: { uploadUrl: string; downloadUrl?: string } =
-      await response.json();
+    const { uploadUrl, downloadUrl, deduped }: {
+      uploadUrl: string | null;
+      downloadUrl?: string;
+      deduped?: boolean;
+    } = await response.json();
+
+    // v8.19.0: 跨用户去重命中 — 服务端已创建 reference row，无需再 PUT 物理文件。
+    if (deduped === true || uploadUrl === null) {
+      return temp || media ? downloadUrl : undefined;
+    }
+
     if (isWebAppPlatform()) {
       await webUpload(file, uploadUrl, onProgress);
     } else {
