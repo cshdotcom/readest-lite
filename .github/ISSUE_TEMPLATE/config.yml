@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 NodeByte 社区讨论
-    url: https://nodebyte.cn
+    url: https://nodebyte.cn/forums
     about: 提问、功能建议请到 NodeByte 社区发帖，不要新建 Issue
   - name: 🐛 Bug 反馈
-    url: https://nodebyte.cn
+    url: https://nodebyte.cn/forums
     about: 提交程序相关 Bug
