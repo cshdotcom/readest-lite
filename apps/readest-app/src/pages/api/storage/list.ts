@@ -29,7 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const bookHash = reqQuery.bookHash as string | undefined;
     const search = reqQuery.search as string | undefined;
 
-    const where = { userId: user.id, deletedAt: null, ...(bookHash ? { bookHash } : {}), ...(search ? { fileKey: { contains: search } } : {}) };
+    // v8.19.7: Exclude hidden avatar files from file manager list
+    const where = { userId: user.id, deletedAt: null, NOT: { fileKey: { startsWith: 'avatar/' } }, ...(bookHash ? { bookHash } : {}), ...(search ? { fileKey: { contains: search } } : {}) };
 
     const validSortColumns = ['createdAt', 'updatedAt', 'fileSize', 'fileKey'];
     const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'createdAt';
