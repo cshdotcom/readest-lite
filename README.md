@@ -28,6 +28,8 @@ https://github.com/cshdotcom/readest-lite
 Readest-Lite 完全开源，遵循 AGPL-3.0 协议，源码可免费获取、部署、商用。
 在遵守 AGPL-3.0 协议前提下，个人、商业场景的使用与分发都是自由的；
 若你需要**闭源商用（不公开衍生源码）**，则必须联系作者获取独立商业授权，否则视为侵权。
+详见:
+[关于Readest－Lite商业授权要求](https://nodebyte.cn/888.html)
 
 > ⚠️ 所有问题优先前往 NodeByte 社区：https://nodebyte.cn
 > 仅确认的程序Bug才提交Issue
