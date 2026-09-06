@@ -761,12 +761,7 @@ const IntegrationsPanel: React.FC = () => {
               status={absStatus}
               onClick={() => setSubPage('audiobookshelf')}
             />
-            <IntegrationRow
-              icon={RiSendPlaneLine}
-              title={_('Send to Readest')}
-              status={_('Email books to your library')}
-              onClick={() => setSubPage('send')}
-            />
+
             {isTauriAppPlatform() && (
               <IntegrationRow
                 icon={RiWifiLine}

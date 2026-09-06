@@ -83,10 +83,15 @@ const serwist = new Serwist({
         ],
       }),
     },
-    // Other external resources
+    // Other external resources — v8.19.1: exclude upstream readest.com URLs
+    // that cause CORS errors in Lite (download.readest.com, storage.readest.com)
     {
       matcher: ({ url }) => {
         if (url.pathname.startsWith('/api/')) {
+          return false;
+        }
+        // Don't cache upstream readest.com URLs — they CORS-fail in Lite
+        if (url.hostname === 'download.readest.com' || url.hostname === 'storage.readest.com') {
           return false;
         }
         return /^https?.*/.test(url.href);
