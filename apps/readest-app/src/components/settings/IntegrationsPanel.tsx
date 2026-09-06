@@ -9,7 +9,6 @@ import {
   RiBookReadLine,
   RiBook3Line,
   RiDiscordLine,
-  RiSendPlaneLine,
   RiWifiLine,
   RiCloudLine,
   RiCloudFill,
