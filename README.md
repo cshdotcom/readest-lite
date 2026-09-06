@@ -27,6 +27,10 @@ https://github.com/cshdotcom/readest-lite
 ### 4. 商用补充约束
 个人非盈利使用、分发完全自由；
 企业、商业主体通过售卖本源码、付费部署服务进行商业盈利，需提前联系作者获取书面商用授权，未经授权商用分发视为侵权。
+
+> ⚠️ 所有问题优先前往 NodeByte 社区：https://nodebyte.cn
+> 仅确认的程序Bug才提交Issue
+
 [LICENSE_NOTICE.md](LICENSE_NOTICE.md)
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
