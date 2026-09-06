@@ -48,6 +48,8 @@ model User {
   usageStats         UsageStat[]
   downloadTasks      DownloadTask[]
   userSettings       UserSetting[]
+  // v8.19.0: 回收站条目（删除书籍时移入回收站，30 天后自动清理）
+  recycleBinItems    RecycleBinItem[]
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -420,4 +422,26 @@ model UserSetting {
 
   @@id([userId, scope])
   @@index([userId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// recycle_bin_items (PK: id) — v8.19.0 回收站
+// 用户删除书籍时，书籍元数据 + 文件 key 入回收站，30 天后自动清理。
+// 还原时把 Book.deletedAt 清回 null，并恢复 File 行（如有）。
+// 永久删除则物理删除文件 + 删除 Book / BookConfig / BookNote 行。
+// ───────────────────────────────────────────────────────────────────────────
+model RecycleBinItem {
+  id          String   @id @default(uuid())
+  userId      String
+  bookHash    String
+  bookTitle   String
+  bookFormat  String
+  fileKey     String?
+  deletedAt   DateTime @default(now()) // 移入回收站的时间
+  expiresAt   DateTime                  // 自动清理时间（默认 deletedAt + 30 天）
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, expiresAt])
 }

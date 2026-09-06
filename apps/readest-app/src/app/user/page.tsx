@@ -26,6 +26,7 @@ import { SyncCategoriesSection } from './components/SyncCategoriesSection';
 import UserManagement from './components/UserManagement';
 import DownloadTasks from './components/DownloadTasks';
 import ReadingStatsCard from './components/ReadingStatsCard';
+import RecycleBin from './components/RecycleBin';
 
 // Readest Lite — 用户中心。
 // Pro 体系已删除：移除 PlansComparison / Checkout / Stripe / IAP / useAvailablePlans。
@@ -198,6 +199,8 @@ const ProfilePage = () => {
                   <ReadingStatsCard />
                   {/* v8.7: 下载任务（所有用户可见，跨设备同步） */}
                   <DownloadTasks />
+                  {/* v8.19.0: 回收站（所有用户可见，30 天后自动清理） */}
+                  <RecycleBin />
                   <AccountActions
                     userPlan={'pro'}
                     iapAvailable={false}

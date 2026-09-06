@@ -28,6 +28,10 @@ services:
       - DATABASE_URL=file:/data/db/readest.db
       - BOOKS_DIR=/data/books
       - INBOX_DIR=/data/inbox
+      # v8.19.0: 回收站自动清理天数（默认 30 天）
+      - RECYCLE_BIN_EXPIRE_DAYS=${RECYCLE_BIN_EXPIRE_DAYS:-30}
+      # v8.19.0: 超级管理员邮箱（容器启动时把此用户提升为 super_admin）
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-}
       # 可选：JWT 密钥。不设则用 ADMIN_EMAIL+ADMIN_PASSWORD 派生（生产环境建议显式设置）
       # - JWT_SECRET=
       # 可选：DeepL 翻译（默认关闭，设 DEEPL_ENABLED=true + API key 启用）
