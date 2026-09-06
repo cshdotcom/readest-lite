@@ -50,6 +50,7 @@ model User {
   userSettings       UserSetting[]
   // v8.19.0: 回收站条目（删除书籍时移入回收站，30 天后自动清理）
   recycleBinItems    RecycleBinItem[]
+  auditLogs         AuditLog[]
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -418,6 +419,27 @@ model RecycleBinItem {
 
   @@index([userId])
   @@index([userId, expiresAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// audit_logs (PK: id) — v8.19.6 操作日志管理 + 回滚
+// ───────────────────────────────────────────────────────────────────────────
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String   // 操作者（执行操作的管理员）
+  targetUserId String?  // 被操作的目标用户（可为空）
+  action      String   // 'book_move' | 'book_copy' | 'book_delete' | 'user_delete' | 'recycle_clear' | 'role_change'
+  description String   // 操作描述
+  metadata    String?  // JSON: 操作详情（bookHash, targetUid, etc.）
+  createdAt   DateTime @default(now())
+  rolledBack  Boolean  @default(false)
+  rolledBackAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([targetUserId])
+  @@index([createdAt])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

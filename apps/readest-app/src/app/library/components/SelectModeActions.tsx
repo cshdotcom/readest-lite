@@ -71,6 +71,7 @@ const SelectModeActions: React.FC<SelectModeActionsProps> = ({
   const _ = useTranslation();
 
   const hasSelection = selectedBooks.length > 0;
+  const [showMore, setShowMore] = useState(false);
   const hasValidBooks = selectedBooks.every((id) => isMd5(id));
   const hasSingleSelection = selectedBooks.length === 1;
   const rootRef = useRef<HTMLDivElement | null>(null);
