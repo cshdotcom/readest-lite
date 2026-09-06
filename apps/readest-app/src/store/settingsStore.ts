@@ -5,6 +5,7 @@ import { EnvConfigType } from '@/services/environment';
 import { initDayjs } from '@/utils/time';
 import { broadcastGlobalSettings } from '@/utils/settingsSync';
 import { pushEncryptedSettings } from '@/services/sync/encryptedSettingsSync';
+import { pushReadingStats } from '@/services/sync/statsSync';
 
 export type FontPanelView = 'main-fonts' | 'custom-fonts';
 
@@ -62,6 +63,44 @@ const scheduleEncryptedPush = (settings: SystemSettings): void => {
   }, DEBOUNCE_MS);
 };
 
+// v8.19.4: Reading stats sync — push a snapshot of local StatPage rows via
+// the encrypted settings channel (scope='reading_stats'). Stats change
+// far less frequently than settings (a flush only happens on page change
+// or idle), so a longer 10s debounce is fine — it coalesces a burst of
+// page flips without delaying a deliberate "stop reading and close" by
+// more than 10s. The push reads from the per-tab StatisticsDb singleton
+// (opened on demand) and serialises every local page_stat_data row.
+let statsPushTimer: ReturnType<typeof setTimeout> | null = null;
+const STATS_DEBOUNCE_MS = 10_000;
+
+const scheduleReadingStatsPush = (envConfig: EnvConfigType): void => {
+  if (statsPushTimer) clearTimeout(statsPushTimer);
+  statsPushTimer = setTimeout(() => {
+    statsPushTimer = null;
+    void (async () => {
+      try {
+        const appService = await envConfig.getAppService();
+        // Dynamic import keeps the statisticsDb module (and its heavy
+        // DatabaseService wiring) out of the bundle of every page that
+        // imports settingsStore but never reads a book (e.g. login).
+        const { StatisticsDb } = await import('@/services/statistics/statisticsDb');
+        const db = await StatisticsDb.open(appService);
+        // getEventsForPush(0) = all events with start_time > 0 (i.e. every
+        // local row). This is a snapshot — the server upserts by (bookHash,
+        // page, startTime), so re-pushing identical rows is a no-op.
+        const { events } = await db.getEventsForPush(0);
+        if (events.length === 0) return;
+        await pushReadingStats(events);
+      } catch (err) {
+        // Best-effort: a failure here (vault locked, db torn down, network)
+        // must never surface as an unhandled rejection — settings sync is
+        // not blocked by stats sync.
+        console.warn('[settingsStore] reading stats push failed:', err);
+      }
+    })();
+  }, STATS_DEBOUNCE_MS);
+};
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   settings: {} as SystemSettings,
   settingsDialogBookKey: '',
@@ -80,6 +119,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     // v8.18.4: Debounced encrypted push to server for cross-device sync.
     // Best-effort — if the vault isn't unlocked the push is a no-op.
     scheduleEncryptedPush(settings);
+    // v8.19.4: Debounced reading-stats snapshot push. Best-effort, separate
+    // timer so a heavy stats payload doesn't delay the user-facing settings
+    // push (and vice versa).
+    scheduleReadingStatsPush(envConfig);
   },
   setSettingsDialogBookKey: (bookKey) => set({ settingsDialogBookKey: bookKey }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),

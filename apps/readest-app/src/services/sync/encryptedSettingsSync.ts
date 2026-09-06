@@ -13,16 +13,19 @@
  * ciphertext blob, never decrypts it.
  *
  * Scopes:
- *   'system'      → SystemSettings (KOSync, Readwise, OPDS, proxy, etc.)
- *   'global_view' → globalViewSettings (font size, theme, layout)
- *   'global_read' → globalReadSettings (pagination, auto-scroll, TTS)
+ *   'system'       → SystemSettings (KOSync, Readwise, OPDS, proxy, etc.)
+ *   'global_view'  → globalViewSettings (font size, theme, layout)
+ *   'global_read'  → globalReadSettings (pagination, auto-scroll, TTS)
+ *   'reading_stats' → ReadingStatsPayload (v8.19.4: per-page StatPage events
+ *                    for cross-device reading-statistics sync, last-writer-wins
+ *                    per (bookHash, page, startTime))
  */
 import { getAPIBaseUrl } from '@/services/environment';
 import { getAccessToken } from '@/utils/access';
 import { getVaultKey } from '@/utils/vaultState';
 import { encryptToEnvelope, decryptFromEnvelope } from '@/libs/crypto/envelope';
 
-export type SettingsScope = 'system' | 'global_view' | 'global_read';
+export type SettingsScope = 'system' | 'global_view' | 'global_read' | 'reading_stats';
 
 interface ServerResponse {
   scope: SettingsScope;

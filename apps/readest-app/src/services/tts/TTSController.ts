@@ -479,13 +479,30 @@ export class TTSController extends EventTarget {
         // live token, and there is no blob to fall back to. Loaded on demand
         // so the server store (and its settings graph) stays out of this
         // module's imports for every other book.
+        // v8.19.4: ABS is stubbed in Lite — wrap the dynamic import in
+        // try/catch and turn loadBlob into a rejected-but-caught Promise
+        // so a stale paired-audiobook config can never throw out of
+        // attachSource. MediaOverlayClient's loadBlob callers all use
+        // `.catch(() => null)` already, so an empty Blob is never reached.
         this.ttsMediaOverlayClient.attachSource({
           ...(narrator ? { narrator } : {}),
           textHighlight: false,
-          resolveTracks: async (href: string) =>
-            (await import('@/services/audiobook/absPairing')).absNarrationTracks(source, href),
-          loadBlob: async () => {
-            throw new Error('Audiobookshelf server not found');
+          resolveTracks: async (href: string) => {
+            try {
+              const mod = await import('@/services/audiobook/absPairing');
+              return mod.absNarrationTracks(source, href);
+            } catch (err) {
+              console.warn('[tts] absPairing import failed — ABS stub unavailable:', err);
+              return null;
+            }
+          },
+          loadBlob: async (_href: string) => {
+            // ABS is not shipped in Lite. Return an empty Blob instead of
+            // throwing — the ABS code path is only reachable if the user
+            // restored a backup that contained a paired-audiobook config
+            // from upstream Readest, and we'd rather have the audio element
+            // silently fail to play than crash TTS startup.
+            return new Blob([], { type: 'audio/mpeg' });
           },
         });
         return;

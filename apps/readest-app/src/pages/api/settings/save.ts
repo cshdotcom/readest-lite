@@ -1,12 +1,13 @@
 // v8.18.4: 加密设置同步 — PUT /api/settings?scope=system
 // 客户端把本地 SystemSettings 用 VaultContext 密钥加密后 POST 到这里。
 // 服务端只存密文，不解密 — 跨设备同步时其他设备 GET 后在客户端解密。
+// v8.19.4: 新增 'reading_stats' scope — 跨设备同步 StatPage 阅读统计行。
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { validateUserAndToken } from '@/utils/access';
 import { prismaClient } from '@/utils/db';
 
-const ALLOWED_SCOPES = ['system', 'global_view', 'global_read'];
+const ALLOWED_SCOPES = ['system', 'global_view', 'global_read', 'reading_stats'];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);

@@ -3,8 +3,10 @@ import { useEnv } from '@/context/EnvContext';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { pullEncryptedSettings } from '@/services/sync/encryptedSettingsSync';
+import { pullReadingStats } from '@/services/sync/statsSync';
 import type { SystemSettings, ReadSettings } from '@/types/settings';
 import type { ViewSettings } from '@/types/book';
+import type { PageStatEvent } from '@/types/statistics';
 
 export const useLibrary = () => {
   const { envConfig } = useEnv();
@@ -58,6 +60,28 @@ export const useLibrary = () => {
         const remoteRead = await pullEncryptedSettings<ReadSettings>('global_read');
         if (remoteRead) {
           currentSettings = { ...currentSettings, globalReadSettings: remoteRead.settings };
+        }
+
+        // v8.19.4: Pull encrypted reading stats and merge with local StatPage
+        // rows. The merge is last-writer-wins per (bookHash, page, startTime)
+        // — StatisticsDb.applyRemoteEvents already implements this (it
+        // keeps max(duration) per row), so we just hand the remote events
+        // to it with an empty books array (book metadata is already synced
+        // separately by /api/sync). Best-effort: a failure here is logged
+        // and swallowed so a corrupt remote payload never blocks library
+        // load.
+        try {
+          const remoteStats = await pullReadingStats();
+          if (remoteStats && Array.isArray(remoteStats.settings.stats)) {
+            const events = remoteStats.settings.stats as PageStatEvent[];
+            if (events.length > 0) {
+              const { StatisticsDb } = await import('@/services/statistics/statisticsDb');
+              const db = await StatisticsDb.open(appService);
+              await db.applyRemoteEvents([], events);
+            }
+          }
+        } catch (statsErr) {
+          console.warn('[useLibrary] reading stats pull/merge failed:', statsErr);
         }
       } catch {
         // Remote pull failed — keep local settings

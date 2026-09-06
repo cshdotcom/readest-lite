@@ -3,6 +3,47 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.19.4] — 2026-09-06
+
+### Added — 阅读统计加密同步 + 有声书 stub 非阻塞 + Admin 用户详情
+
+#### 1. 阅读统计加密同步到所有设备
+- 新增 `services/sync/statsSync.ts`，复用 v8.18.4 加密设置同步通道
+  （`UserSetting` 表，scope = `'reading_stats'`）
+- `store/settingsStore.ts` 在 `saveSettings` 后调度独立的 10 秒
+  debounce 推送本地 `page_stat_data` 行
+- `hooks/useLibrary.ts` 在 library 加载时拉取并合并到本地
+  `StatisticsDb`（last-writer-wins per (bookHash, page, startTime)）
+- 此前阅读统计仅通过 KOSync 同步最新进度，完整每页历史留在本地
+
+#### 2. 有声书 stub 改为非阻塞
+- `services/audiobook/absPairing.ts` 的 `buildAbsPairingSource` /
+  `loadAbsPairingSource` 不再抛 `Error`，返回空对象 / 原值
+- `services/tts/TTSController.ts` 的 ABS 路径：
+  - 动态 `import('@/services/audiobook/absPairing')` 包 try/catch
+  - `loadBlob` 返回空 `Blob` 而非 throw
+- 此前用户误触 ABS 配对 UI 时 TTS 启动崩溃
+
+#### 3. Admin 用户详情 Modal
+- `UserManagement.tsx` 新增 `UserDetailModal`，admin 在 AllUsersModal
+  点 chevron 打开
+- 展示用户信息（头像 / 邮箱 / 角色 / 创建 / 最后登录 / 配额）+ 书籍列表
+  （搜索 + 排序 by title / upload date / file size）+ 回收站条目
+- 回收站条目支持多选 + 「Restore Selected」/ 「Permanently Delete
+  Selected」
+- 新 API：
+  - `GET /api/admin/users/[id]/books` — admin-only 列出 target 用户书籍
+  - `GET /api/admin/users/[id]/recycle-bin` — admin-only 列出 target
+    用户回收站（先自动清理过期的）
+  - `POST /api/admin/users/[id]/recycle-bin?action=restore|delete` —
+    admin 跨用户恢复 / 永久删除
+- 服务端用 `validateUserAndToken` + `isAdmin` 双重校验
+
+#### 4. ITERATION_PROMPT.md 重写
+- 重写为约 27000 字符的综合迭代文档（原 9800 字符）
+- 覆盖 v8.0 到 v8.19.4 所有设计决策、迁移、API 端点和 Lite 自定义文件清单
+- 新增 12 个 zh-CN 翻译条目（Book List / Restore Selected / Upload Date 等）
+
 ## [v8.18.9] — 2026-09-06
 
 ### Added — 用户头像 + OPDS 布局修复 + 下载任务搜索
