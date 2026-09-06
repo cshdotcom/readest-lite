@@ -221,8 +221,20 @@ export default function RecycleBin() {
         </div>
       ) : (
         <>
+          {items.length > 3 && !collapsed && (
+            <div className='relative'>
+              <input
+                type='text'
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={_('Search recycle bin...')}
+                className='input input-bordered input-sm w-full'
+              />
+            </div>
+          )}
+          {!collapsed && (
           <div className='space-y-2'>
-            {(showAllModal ? items : items.slice(0, 3)).map((it) => {
+            {(showAllModal ? (searchQuery.trim() ? filteredItems : items) : filteredItems.slice(0, 3)).map((it) => {
               const days = daysUntil(it.expiresAt);
               return (
                 <div
@@ -267,7 +279,8 @@ export default function RecycleBin() {
               );
             })}
           </div>
-          {!showAllModal && items.length > 3 && (
+          )}
+          {!collapsed && !showAllModal && items.length > 3 && (
             <button
               onClick={() => setShowAllModal(true)}
               className='btn btn-ghost btn-sm w-full mt-2 text-base-content/60 hover:text-base-content'
@@ -291,7 +304,7 @@ export default function RecycleBin() {
               </button>
             </div>
             <div className='flex-1 overflow-y-auto p-3 space-y-2'>
-              {items.map((it) => {
+              {(searchQuery.trim() ? filteredItems : items).map((it) => {
                 const days = daysUntil(it.expiresAt);
                 return (
                   <div

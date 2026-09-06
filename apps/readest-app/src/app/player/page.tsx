@@ -7,7 +7,7 @@ import { FaHeadphonesAlt } from 'react-icons/fa';
 export default function PlayerPage() {
   const _ = useTranslation();
   const searchParams = useSearchParams();
-  const bookHash = searchParams.get('id') || '';
+  const bookHash = searchParams?.get('id') ?? '';
 
   return (
     <div className='flex min-h-screen flex-col items-center justify-center bg-base-100 p-4'>
