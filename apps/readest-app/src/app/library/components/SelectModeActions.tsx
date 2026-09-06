@@ -9,7 +9,7 @@ import {
   MdOutlineCloudDownload,
   MdWifiTethering,
 } from 'react-icons/md';
-import { IoShareSocialOutline } from 'react-icons/io5';
+import { IoShareSocialOutline, IoEllipsisHorizontal, IoFolderOpenOutline, IoInformationCircleOutline, IoCheckmarkCircleOutline } from 'react-icons/io5';
 import { LuFolderPlus } from 'react-icons/lu';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -198,6 +198,46 @@ const SelectModeActions: React.FC<SelectModeActionsProps> = ({
           <MdDelete className='text-red-500' />
           <div className='text-red-500'>{_('Delete')}</div>
         </button>
+        {/* v8.19.6: 更多 dropdown menu */}
+        <div className='relative'>
+          <button
+            onClick={() => setShowMore(!showMore)}
+            className='flex flex-col items-center justify-center gap-1'
+            aria-label={_('More')}
+          >
+            <div className='text-xl leading-none'>
+              <IoEllipsisHorizontal />
+            </div>
+            <div className='text-xs'>{_('More')}</div>
+          </button>
+          {showMore && (
+            <div className='absolute bottom-full mb-1 right-0 bg-base-100 rounded-lg shadow-xl border border-base-200 py-1 min-w-48 z-50'>
+              <button
+                onClick={() => { onGroup(); setShowMore(false); }}
+                className='flex items-center gap-2 w-full px-4 py-2 hover:bg-base-200 text-sm'
+              >
+                <IoFolderOpenOutline className='w-4 h-4' />
+                {_('Group Books')}
+              </button>
+              {hasSingleSelection && (
+                <button
+                  onClick={() => { onDetails(); setShowMore(false); }}
+                  className='flex items-center gap-2 w-full px-4 py-2 hover:bg-base-200 text-sm'
+                >
+                  <IoInformationCircleOutline className='w-4 h-4' />
+                  {_('Book Details')}
+                </button>
+              )}
+              <button
+                onClick={() => { onStatus(); setShowMore(false); }}
+                className='flex items-center gap-2 w-full px-4 py-2 hover:bg-base-200 text-sm'
+              >
+                <IoCheckmarkCircleOutline className='w-4 h-4' />
+                {_('Set Status')}
+              </button>
+            </div>
+          )}
+        </div>
         <button onClick={onCancel} className='flex flex-col items-center justify-center gap-1'>
           <MdOutlineCancel />
           <div>{_('Cancel')}</div>
