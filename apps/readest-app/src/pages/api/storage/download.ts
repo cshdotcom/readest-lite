@@ -34,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!fileKey || typeof fileKey !== 'string') {
         return res.status(400).json({ error: 'Missing or invalid fileKey' });
       }
-      const downloadUrlsMap = await processFileKeys([fileKey], user.id);
+      const downloadUrlsMap = await processFileKeys([fileKey], user.id, requestOrigin);
       const downloadUrl = downloadUrlsMap[fileKey];
       if (!downloadUrl) return res.status(404).json({ error: 'File not found' });
       return res.status(200).json({ downloadUrl });
@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!fileKeys || !Array.isArray(fileKeys)) return res.status(400).json({ error: 'Missing or invalid fileKeys array' });
     if (fileKeys.length === 0) return res.status(400).json({ error: 'fileKeys array cannot be empty' });
     if (!fileKeys.every((key) => typeof key === 'string')) return res.status(400).json({ error: 'All fileKeys must be strings' });
-    const downloadUrls = await processFileKeys(fileKeys, user.id);
+    const downloadUrls = await processFileKeys(fileKeys, user.id, requestOrigin);
     return res.status(200).json({ downloadUrls });
   } catch (error) {
     console.error(error);
@@ -56,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 async function processFileKeys(
   fileKeys: string[],
   userId: string,
+  requestOrigin?: string,
 ): Promise<Record<string, string | undefined>> {
   const records = await prismaClient.file.findMany({
     where: { userId, fileKey: { in: fileKeys }, deletedAt: null },
