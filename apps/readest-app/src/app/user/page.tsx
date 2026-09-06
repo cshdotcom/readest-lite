@@ -63,7 +63,7 @@ const ProfilePage = () => {
   useTheme({ systemUIVisible: false });
 
   const { quotas } = useQuotaStats();
-  const { handleLogout, handleResetPassword, handleUpdateEmail, handleConfirmDelete } =
+  const { handleLogout, handleResetPassword, handleConfirmDelete } =
     useUserActions();
 
   const handleGoBack = () => {
