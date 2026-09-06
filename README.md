@@ -226,3 +226,7 @@ docker image prune -f    # 清理旧镜像
 
 Inherited from upstream Readest — see [LICENSE](./LICENSE).
 [LICENSE_NOTICE.md](LICENSE_NOTICE.md)
+
+## ☕ 支持作者
+ 如果你觉得这个项目对你有帮助，可以请作者喝杯咖啡，支持后续 Readest-Lite 的开发：
+ ![Support Author](coffe.png)
