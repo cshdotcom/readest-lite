@@ -19,3 +19,12 @@ export const displayNameError = (name: string): string | null => {
   if (/[\u0000-\u001f]/.test(name)) return 'Display name cannot contain control characters';
   return null;
 };
+
+export const isValidAvatarUrl = (url: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  if (url.startsWith('data:image/svg')) return false;
+  if (/\.svg(\?|#|$)/i.test(url)) return false;
+  if (url.startsWith('data:image/')) return true;
+  if (/^https?:\/\//i.test(url)) return true;
+  return false;
+};

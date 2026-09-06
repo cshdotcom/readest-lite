@@ -39,3 +39,9 @@ export const canModifyUserRole = (
   if (newRole === 'admin' && !isSuperAdmin(currentUser)) return false;
   return true;
 };
+
+export const canCreateRole = (currentUser: { role: string; email: string }, role: string): boolean => {
+  if (role === 'super_admin') return false; // can't create super admin via API
+  if (role === 'admin') return isSuperAdmin(currentUser);
+  return isAdmin(currentUser);
+};
