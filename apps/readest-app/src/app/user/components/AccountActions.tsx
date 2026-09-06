@@ -50,7 +50,6 @@ interface AccountActionsProps {
   iapAvailable: boolean;
   onLogout: () => void;
   onResetPassword: () => void;
-  onUpdateEmail: () => void;
   onConfirmDelete: () => void;
   onConfirmDeleteAllBooks?: () => void;
   onClearReadingStats?: () => void;
@@ -66,7 +65,6 @@ const AccountActions: React.FC<AccountActionsProps> = ({
   iapAvailable,
   onLogout,
   onResetPassword,
-  onUpdateEmail,
   onConfirmDelete,
   onConfirmDeleteAllBooks,
   onClearReadingStats,
@@ -164,12 +162,6 @@ const AccountActions: React.FC<AccountActionsProps> = ({
           className='w-full rounded-lg bg-gray-200 px-6 py-3 font-medium text-gray-800 transition-colors hover:bg-gray-300 md:w-auto'
         >
           {_('Reset Password')}
-        </button>
-        <button
-          onClick={onUpdateEmail}
-          className='w-full rounded-lg bg-gray-200 px-6 py-3 font-medium text-gray-800 transition-colors hover:bg-gray-300 md:w-auto'
-        >
-          {_('Update Email')}
         </button>
         <button
           onClick={onLogout}

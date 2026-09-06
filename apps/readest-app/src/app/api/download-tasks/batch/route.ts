@@ -19,22 +19,28 @@ export async function POST(req: NextRequest) {
 
   // ── 批量创建任务 ─────────────────────────────────────────────────────────
   if (action === 'create') {
-    const urls: string[] = Array.isArray(body.urls) ? body.urls : [];
-    if (urls.length === 0) {
+    // v8.18.7: 支持 items 数组（每个含 url/cookies/headers）或 urls 字符串数组
+    const items: Array<{ url: string; cookies?: string; headers?: Record<string, string> }> =
+      Array.isArray(body.items) ? body.items.map((it: { url?: string; cookies?: string; headers?: Record<string, string> }) => ({
+        url: typeof it.url === 'string' ? it.url : '',
+        cookies: it.cookies,
+        headers: it.headers,
+      })).filter((it: { url: string }) => it.url) : [];
+    const urls: string[] = Array.isArray(body.urls) ? body.urls.filter((u: unknown) => typeof u === 'string') : [];
+
+    if (items.length === 0 && urls.length === 0) {
       return NextResponse.json({ error: 'No URLs provided' }, { status: 400 });
     }
-    if (urls.length > MAX_BATCH_CREATE) {
+    if (items.length > MAX_BATCH_CREATE || urls.length > MAX_BATCH_CREATE) {
       return NextResponse.json(
         { error: `Too many URLs: max ${MAX_BATCH_CREATE}` },
         { status: 400 },
       );
     }
 
-    // 校验
-    for (const u of urls) {
-      if (typeof u !== 'string') {
-        return NextResponse.json({ error: `Invalid URL: ${u}` }, { status: 400 });
-      }
+    // 校验所有 URL
+    const allUrls = [...items.map((i) => i.url), ...urls];
+    for (const u of allUrls) {
       try {
         const parsed = new URL(u.trim());
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -45,26 +51,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const cookies = typeof body.cookies === 'string' && body.cookies.trim() ? body.cookies.trim() : null;
-    const headersObj = body.headers && typeof body.headers === 'object' && !Array.isArray(body.headers)
+    const globalCookies = typeof body.cookies === 'string' && body.cookies.trim() ? body.cookies.trim() : null;
+    const globalHeadersObj = body.headers && typeof body.headers === 'object' && !Array.isArray(body.headers)
       ? body.headers as Record<string, string>
       : {};
-    const customHeadersJson = Object.keys(headersObj).length > 0 ? JSON.stringify(headersObj) : null;
 
-    const created = await Promise.all(urls.map(async (u) => {
-      const fallbackName = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.epub`;
-      return prismaClient.downloadTask.create({
-        data: {
-          userId: user.id,
-          url: u.trim(),
-          originalUrl: u.trim(),
-          filename: sanitizeOutputFilename(fallbackName),
-          status: 'pending',
-          cookies,
-          customHeaders: customHeadersJson,
-        },
-      });
-    }));
+    // v8.18.7: 处理 items 数组（每个有自己的 cookies/headers）
+    const created = await Promise.all([
+      // items 数组 — 每个 URL 自带 cookies/headers
+      ...items.map(async (it) => {
+        const itemHeaders = it.headers && typeof it.headers === 'object' ? it.headers : {};
+        const headersJson = Object.keys(itemHeaders).length > 0 ? JSON.stringify(itemHeaders) : null;
+        const itemCookies = it.cookies || null;
+        const fallbackName = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.epub`;
+        return prismaClient.downloadTask.create({
+          data: {
+            userId: user.id,
+            url: it.url.trim(),
+            originalUrl: it.url.trim(),
+            filename: sanitizeOutputFilename(fallbackName),
+            status: 'pending',
+            cookies: itemCookies,
+            customHeaders: headersJson,
+          },
+        });
+      }),
+      // urls 字符串数组 — 用全局 cookies/headers
+      ...urls.map(async (u) => {
+        const globalHeadersJson = Object.keys(globalHeadersObj).length > 0 ? JSON.stringify(globalHeadersObj) : null;
+        const fallbackName = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.epub`;
+        return prismaClient.downloadTask.create({
+          data: {
+            userId: user.id,
+            url: u.trim(),
+            originalUrl: u.trim(),
+            filename: sanitizeOutputFilename(fallbackName),
+            status: 'pending',
+            cookies: globalCookies,
+            customHeaders: globalHeadersJson,
+          },
+        });
+      }),
+    ]);
 
     // 后台异步执行
     for (const t of created) {

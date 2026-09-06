@@ -19,6 +19,59 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
   const { share } = result;
 
+  // v8.18.7: feed:// 书籍分享 — 无文件，只复制 cover，返回 descriptor
+  if (share.isFeedBook) {
+    // 检查接收方是否已有该 bookHash 的 cover row
+    const existingCover = await prismaClient.file.findFirst({
+      where: {
+        userId: user.id,
+        bookHash: share.bookHash,
+        deletedAt: null,
+        fileKey: { endsWith: '/cover.png' },
+      },
+    });
+    const alreadyOwned = !!existingCover;
+
+    // 复制 owner 的 cover.png 到接收方命名空间
+    if (!alreadyOwned && share.coverFileKey) {
+      const sharerPrefix = `${share.userId}/`;
+      const recipientPrefix = `${user.id}/`;
+      const destCoverKey = share.coverFileKey.startsWith(sharerPrefix)
+        ? recipientPrefix + share.coverFileKey.slice(sharerPrefix.length)
+        : null;
+      if (destCoverKey) {
+        try {
+          const coverExists = await objectExists(share.coverFileKey);
+          if (coverExists) {
+            await copyObject(share.coverFileKey, destCoverKey);
+            await prismaClient.file.create({
+              data: {
+                userId: user.id,
+                bookHash: share.bookHash,
+                fileKey: destCoverKey,
+                fileSize: BigInt(0),
+              },
+            });
+          }
+        } catch (err) {
+          console.error('Feed share cover copy failed (non-fatal):', err);
+        }
+      }
+    }
+
+    return NextResponse.json({
+      fileId: share.bookHash,
+      alreadyOwned,
+      bookHash: share.bookHash,
+      cfi: share.cfi,
+      isFeedBook: true,
+      bookUrl: share.bookUrl,
+      bookTitle: share.bookTitle,
+      bookAuthor: share.bookAuthor,
+      bookFormat: share.bookFormat,
+    });
+  }
+
   // 自导入幂等
   if (share.userId === user.id) {
     const own = await prismaClient.file.findFirst({

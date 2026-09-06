@@ -140,8 +140,8 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
           setGenerating(false);
           return;
         }
-        if (diffDays > 3650) {
-          setErrorMessage(_('Date must be within 10 years'));
+        if (diffDays > 999999999) {
+          setErrorMessage(_('Date too far in the future'));
           setGenerating(false);
           return;
         }
@@ -370,7 +370,7 @@ const ShareBookDialog: React.FC<ShareBookDialogProps> = ({ isOpen, book, cfi, on
                     onChange={(e) => setCustomDate(e.target.value)}
                     disabled={generating}
                     min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                    max={new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    max={new Date(Date.now() + 999999 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                     className='input input-bordered input-sm w-auto'
                   />
                 </div>

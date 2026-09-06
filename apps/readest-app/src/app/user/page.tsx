@@ -138,7 +138,7 @@ const ProfilePage = () => {
   }
 
   const avatarUrl = user?.user_metadata?.['picture'] || user?.user_metadata?.['avatar_url'];
-  const userFullName = user?.user_metadata?.['full_name'] || '-';
+  const userFullName = (user as { displayName?: string })?.displayName || user?.user_metadata?.['full_name'] || user?.email?.split('@')[0] || 'User';
   const userEmail = user?.email || '';
 
   return (
@@ -197,7 +197,6 @@ const ProfilePage = () => {
                     iapAvailable={false}
                     onLogout={handleLogout}
                     onResetPassword={handleResetPassword}
-                    onUpdateEmail={handleUpdateEmail}
                     onConfirmDelete={handleDeleteWithMessage}
                     onClearReadingStats={handleClearReadingStats}
                     onRestorePurchase={() => {
