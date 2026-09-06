@@ -110,11 +110,18 @@ export function Navigation({
       ref={headerRef}
       className={clsx(
         'navbar min-h-0 px-2',
-        'flex h-[48px] w-full items-center',
+        'flex h-[48px] w-full items-center overflow-hidden',
         appService?.isMobile ? '' : 'bg-base-100',
       )}
     >
-      <div className={clsx('justify-start gap-1 sm:gap-3', isTrafficLightVisible && 'pl-16!')}>
+      {/* v8.18.9: nav buttons live in a flex-shrink-0 container so they never
+          get squeezed by the search input on narrow screens. */}
+      <div
+        className={clsx(
+          'flex flex-shrink-0 items-center gap-1 sm:gap-3',
+          isTrafficLightVisible && 'pl-16!',
+        )}
+      >
         <div className='flex gap-1'>
           {onBack && (
             <button
@@ -142,8 +149,11 @@ export function Navigation({
         </button>
       </div>
 
-      <div className='grow px-3 sm:px-5'>
-        <div className='exclude-title-bar-mousedown relative flex w-full items-center'>
+      {/* v8.18.9: search input uses flex-1 + min-w-0 so it shrinks before the
+          nav buttons do. Without min-w-0, the inner input's intrinsic width
+          pushes the row wider than the viewport on narrow screens. */}
+      <div className='min-w-0 flex-1 px-3 sm:px-5'>
+        <div className='exclude-title-bar-mousedown relative flex w-full min-w-0 items-center'>
           <span className='text-base-content/50 absolute left-3'>
             <FaSearch className='h-4 w-4' />
           </span>
@@ -183,7 +193,7 @@ export function Navigation({
         </div>
       </div>
 
-      <div className='justify-end gap-2 px-1 flex items-center'>
+      <div className='flex flex-shrink-0 items-center justify-end gap-2 px-1'>
         {hasFacets ? (
           <div className='lg:hidden flex items-center'>
             <Dropdown

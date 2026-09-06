@@ -8,12 +8,16 @@ import { getAPIBaseUrl } from '@/services/environment';
 import { eventDispatcher } from '@/utils/event';
 import { IoClose, IoCreateOutline, IoTrashOutline, IoPersonOutline, IoChevronForwardOutline, IoSearchOutline } from 'react-icons/io5';
 import { MdAdminPanelSettings } from 'react-icons/md';
+import { PiUserCircle } from 'react-icons/pi';
+import UserAvatar from '@/components/UserAvatar';
 
 interface UserItem {
   id: string;
   email: string;
   role: string;
   displayName: string | null;
+  // v8.18.9: 用户头像 URL（管理员 ADMIN_AVATAR_URL 优先级覆盖已在 API 层应用）
+  avatarUrl: string | null;
   storageQuotaMB: number;
   translationQuotaKB: number;
   createdAt: string;
@@ -116,7 +120,17 @@ export default function UserManagement() {
         {(searchQuery.trim() ? filteredUsers : users.slice(0, 3)).map((u) => (
           <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
             <div className='flex items-center gap-3 min-w-0 flex-1'>
-              <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+              {/* v8.18.9: 优先显示用户头像 URL；无头像时回退到 IoPersonOutline 图标 */}
+              {u.avatarUrl ? (
+                <UserAvatar
+                  url={u.avatarUrl}
+                  size={32}
+                  DefaultIcon={PiUserCircle}
+                  className='flex-shrink-0'
+                />
+              ) : (
+                <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+              )}
               <div className='min-w-0'>
                 <div className='font-medium truncate'>
                   {u.displayName || u.email}
@@ -252,7 +266,17 @@ function AllUsersModal({
             filteredUsers.map((u) => (
             <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
               <div className='flex items-center gap-3 min-w-0 flex-1'>
-                <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+                {/* v8.18.9: 优先显示用户头像 URL；无头像时回退到 IoPersonOutline 图标 */}
+                {u.avatarUrl ? (
+                  <UserAvatar
+                    url={u.avatarUrl}
+                    size={32}
+                    DefaultIcon={PiUserCircle}
+                    className='flex-shrink-0'
+                  />
+                ) : (
+                  <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+                )}
                 <div className='min-w-0'>
                   <div className='font-medium truncate'>
                     {u.displayName || u.email}
@@ -303,6 +327,8 @@ function UserEditDialog({ user, onClose, onSaved }: {
   const [email, setEmail] = useState(user?.email || '');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState(user?.displayName || '');
+  // v8.18.9: 用户头像 URL —— 任意 http(s) / data: URL，后端拒绝 SVG
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [storageQuotaMB, setStorageQuotaMB] = useState(user?.storageQuotaMB?.toString() || '0');
   const [translationQuotaKB, setTranslationQuotaKB] = useState(user?.translationQuotaKB?.toString() || '0');
   const [saving, setSaving] = useState(false);
@@ -318,6 +344,9 @@ function UserEditDialog({ user, onClose, onSaved }: {
         storageQuotaMB: parseInt(storageQuotaMB) || 0,
         translationQuotaKB: parseInt(translationQuotaKB) || 0,
       };
+      // v8.18.9: 头像 URL —— 空字符串清空，否则上传。后端会校验格式和拒绝 SVG。
+      // 编辑时只发 avatarUrl 字段（即使没改）；创建时也允许直接附带。
+      body['avatarUrl'] = avatarUrl.trim() || null;
       if (password) body['password'] = password;
       if (!user) body['email'] = email;
 
@@ -384,6 +413,48 @@ function UserEditDialog({ user, onClose, onSaved }: {
               type='text' value={displayName} onChange={(e) => setDisplayName(e.target.value)}
               className='input input-bordered w-full' placeholder={_('Optional')}
             />
+            {/* v8.18.9: 提示用户 displayName 不允许 @ 等特殊字符 */}
+            <p className='text-xs opacity-50 mt-1'>
+              {_('Cannot contain "@", angle brackets, quotes, slashes, or other special characters')}
+            </p>
+          </div>
+          {/* v8.18.9: 头像 URL 输入框 + 实时预览 */}
+          <div>
+            <label className='text-sm font-medium mb-1 block'>{_('Avatar URL')}</label>
+            <input
+              type='url' value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)}
+              className='input input-bordered w-full' placeholder='https://example.com/avatar.png'
+              spellCheck='false'
+            />
+            <p className='text-xs opacity-50 mt-1'>
+              {_('Accepts http(s) or data: URLs. SVG is not allowed.')}
+            </p>
+            {avatarUrl.trim() && (
+              <div className='mt-2 flex items-center gap-2'>
+                <span className='text-xs opacity-60'>{_('Preview')}:</span>
+                <div className='w-10 h-10 rounded-full overflow-hidden bg-base-200 flex items-center justify-center'>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={avatarUrl.trim()}
+                    alt={_('Avatar preview')}
+                    className='w-full h-full object-cover'
+                    referrerPolicy='no-referrer'
+                    onError={(e) => {
+                      // 预览加载失败时显示一个占位图标
+                      const img = e.currentTarget;
+                      img.style.display = 'none';
+                      const parent = img.parentElement;
+                      if (parent && !parent.querySelector('.avatar-preview-fallback')) {
+                        const span = document.createElement('span');
+                        span.className = 'avatar-preview-fallback text-xs opacity-50';
+                        span.textContent = '?';
+                        parent.appendChild(span);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className='grid grid-cols-2 gap-3'>
             <div>

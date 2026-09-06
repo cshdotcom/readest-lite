@@ -3,6 +3,50 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.18.9] — 2026-09-06
+
+### Added — 用户头像 + OPDS 布局修复 + 下载任务搜索
+
+#### 1. 用户头像 URL
+- `User` 表新增 `avatarUrl` 字段（migration `017_user_avatar.sql`）
+- 管理员可在「用户管理」对话框为每个用户设置头像 URL
+- 管理员可用环境变量 `ADMIN_AVATAR_URL` 强制覆盖自己的头像（优先级高于 DB 值）
+- 头像 URL 接受 `http(s)://` 或 `data:image/*`，**拒绝 SVG**（XSS 风险）
+- 用户列表中显示头像，无头像时回退到 `IoPersonOutline` 图标
+- 用户中心「我的资料」也优先显示 `user.avatarUrl`
+
+#### 2. OPDS 导航栏窄屏溢出修复
+- 主页按钮 / 前进 / 后退按钮被搜索框挤压溢出屏幕
+- 搜索输入框改为 `flex-1 + min-w-0`，让其在窄屏优先收缩
+- 导航按钮和右侧操作分别包在 `flex-shrink-0` 容器中
+- 父级 `<header>` 添加 `overflow-hidden`
+
+#### 3. 下载任务搜索
+- `DownloadTasks` 顶部新增搜索框，支持按 URL / 文件名 / 状态过滤
+- 用 `useMemo` 缓存过滤结果，避免每秒轮询时重复过滤
+- 搜索时显示全部匹配项；不搜索时仍只显示前 3 条
+
+#### 4. 用户名创建校验
+- 创建/编辑用户时校验 `displayName` 不能包含 `@`、尖括号、引号、斜杠、控制字符
+- 避免和 email 混淆或注入到 HTML 渲染中
+- 共享校验工具 `utils/userValidation.ts`
+
+### Verified — Quota / Login error / Subscription removal
+
+#### 5. 管理员配额强制执行 ✓
+- `pages/api/storage/upload.ts` 已强制 `storageQuotaMB`（0 = 无限）
+- `app/api/translate/google/route.ts` 已强制 `translationQuotaKB`（0 = 无限）
+- `utils/downloadRunner.ts` 下载完成后写 `File` 表记录 `fileSize`，计入用户存储
+
+#### 6. 登录错误统一 ✓
+- `utils/localAuth.ts` 的 `signInWithPassword` 对「用户不存在」和「密码错误」
+  统一返回 `Invalid login credentials`，避免用户枚举攻击
+
+#### 7. 移除订阅管理 ✓
+- `components/settings/ControlPanel.tsx` 无订阅/Feed 条目（已确认）
+- `app/library/components/SettingsMenu.tsx` 无订阅/Feed 条目（已确认）
+- Lite 所有用户视为 Pro，不需要订阅管理
+
 ## [v8.18.4] — 2026-09-05
 
 ### Added — 分享永久/自定义日历 + 加密设置同步 + 自动撤销 + ITERATION_PROMPT 更新

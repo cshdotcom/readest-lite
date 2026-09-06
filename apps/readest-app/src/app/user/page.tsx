@@ -137,7 +137,13 @@ const ProfilePage = () => {
     );
   }
 
-  const avatarUrl = user?.user_metadata?.['picture'] || user?.user_metadata?.['avatar_url'];
+  // v8.18.9: 优先用 user.avatarUrl（DB 持久化的头像 + ADMIN_AVATAR_URL 优先级覆盖），
+  // 回退到 user_metadata（兼容上游 supabase 字段）。
+  // 双重 cast (User → unknown → {avatarUrl?}) 因为 supabase 的 User 类型没有
+  // avatarUrl 字段，但运行时我们注入的 AuthUser 有。
+  const avatarUrl = (user as unknown as { avatarUrl?: string | null } | null)?.avatarUrl
+    || user?.user_metadata?.['picture']
+    || user?.user_metadata?.['avatar_url'];
   const userFullName = (user as { displayName?: string })?.displayName || user?.user_metadata?.['full_name'] || user?.email?.split('@')[0] || 'User';
   const userEmail = user?.email || '';
 

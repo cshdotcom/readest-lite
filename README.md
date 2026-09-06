@@ -36,7 +36,7 @@ Readest-Lite 完全开源，遵循 AGPL-3.0 协议，源码可免费获取、部
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.18.8-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.18.9-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -80,6 +80,7 @@ docker compose up -d
 | `ADMIN_EMAIL` | ✅ | — | 管理员邮箱，首次启动自动创建账号 |
 | `ADMIN_PASSWORD` | ✅ | — | 管理员密码，建议 16+ 位随机字符 |
 | `ADMIN_USERNAME` | 可选 | — | v8.1：管理员显示名 |
+| `ADMIN_AVATAR_URL` | 可选 | — | v8.18.9：管理员头像 URL（`http(s)://` 或 `data:image/*`，拒绝 SVG）。优先级高于 DB 里手动设置的头像 |
 | `PORT` | 可选 | 8225 | 容器内监听端口 |
 | `JWT_SECRET` | 可选 | 派生值 | JWT 签名密钥，不设时由 ADMIN_EMAIL+ADMIN_PASSWORD 派生 |
 | `PUBLIC_BASE_URL` | 可选 | http://localhost:8225 | 对外访问 URL，反向代理场景下必填 |

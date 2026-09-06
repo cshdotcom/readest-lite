@@ -246,7 +246,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
     setIsDropdownOpen?.(false);
   };
 
-  const avatarUrl = user?.user_metadata?.['picture'] || user?.user_metadata?.['avatar_url'];
+  // v8.18.9: 优先用 user.avatarUrl（DB 持久化的头像 + ADMIN_AVATAR_URL 优先级覆盖），
+  // 回退到 user_metadata（兼容上游 supabase 字段）。
+  const avatarUrl = (user as unknown as { avatarUrl?: string | null } | null)?.avatarUrl
+    || user?.user_metadata?.['picture']
+    || user?.user_metadata?.['avatar_url'];
   const userFullName = user?.user_metadata?.['full_name'];
   const userDisplayName = userFullName ? userFullName.split(' ')[0] : null;
   const themeModeLabel =

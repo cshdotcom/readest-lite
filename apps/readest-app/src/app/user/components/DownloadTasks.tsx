@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/context/AuthContext';
 import { getAPIBaseUrl } from '@/services/environment';
@@ -13,6 +13,7 @@ import {
   IoPauseCircle,
   IoCloudDownloadOutline,
   IoChevronForwardOutline,
+  IoSearchOutline,
 } from 'react-icons/io5';
 import DownloadTaskDetailModal from './DownloadTaskDetailModal';
 import DownloadTasksModal from './DownloadTasksModal';
@@ -89,8 +90,27 @@ export default function DownloadTasks() {
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showAllModal, setShowAllModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const nowRef = useRef(Date.now());
   const [, setTick] = useState(0); // 强制重渲染用
+
+  // v8.18.9: filter tasks by URL, filename, or status. useMemo so we don't
+  // re-filter on every 1s tick — only when tasks or searchQuery actually change.
+  const filteredTasks = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tasks;
+    return tasks.filter((t) =>
+      t.url.toLowerCase().includes(q) ||
+      t.filename.toLowerCase().includes(q) ||
+      t.originalFilename?.toLowerCase().includes(q) ||
+      t.status.toLowerCase().includes(q) ||
+      _(t.status).toLowerCase().includes(q),
+    );
+    // _ is the translation fn — its identity is stable per language; including
+    // it in deps would re-filter on every render. We only need it for the
+    // localized status match, which is fine to read at filter time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, searchQuery]);
 
   const fetchTasks = useCallback(async () => {
     if (!user) return;
@@ -195,10 +215,10 @@ export default function DownloadTasks() {
     return Math.max(0, (end - start) / 1000);
   };
 
-  const hasFailed = tasks.some((t) => t.status === 'failed');
-  const hasCompleted = tasks.some((t) => t.status === 'completed');
-  const hasActive = tasks.some((t) => t.status === 'pending' || t.status === 'in_progress');
-  const hasPaused = tasks.some((t) => t.status === 'paused');
+  const hasFailed = filteredTasks.some((t) => t.status === 'failed');
+  const hasCompleted = filteredTasks.some((t) => t.status === 'completed');
+  const hasActive = filteredTasks.some((t) => t.status === 'pending' || t.status === 'in_progress');
+  const hasPaused = filteredTasks.some((t) => t.status === 'paused');
 
   return (
     <div className='card bg-base-100 border-base-200 shadow-sm border rounded-lg p-4'>
@@ -212,8 +232,35 @@ export default function DownloadTasks() {
         </button>
       </div>
 
-      {/* Batch actions */}
-      {tasks.length > 0 && (
+      {/* v8.18.9: search/filter — filters by URL, filename, or status.
+          Only show when there's more than 1 task; otherwise the input takes
+          more space than the list itself. */}
+      {tasks.length > 1 && (
+        <div className='relative mb-3'>
+          <IoSearchOutline className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none' />
+          <input
+            type='text'
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={_('Search downloads...')}
+            className='input input-bordered input-sm w-full pl-9'
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className='btn btn-ghost btn-xs btn-square absolute right-1 top-1/2 -translate-y-1/2'
+              title={_('Clear Search')}
+              aria-label={_('Clear Search')}
+            >
+              <IoRefresh className='w-3 h-3 rotate-45' />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Batch actions — operate on the full task set, not the filtered view.
+          Showing them only when there are tasks (filtered) keeps the card tidy. */}
+      {filteredTasks.length > 0 && (
         <div className='flex flex-wrap gap-2 mb-3'>
           {hasFailed && (
             <button onClick={() => void doBatch('retry_failed')} className='btn btn-xs btn-warning'>
@@ -256,11 +303,17 @@ export default function DownloadTasks() {
           <p>{_('No download tasks')}</p>
           <p className='text-xs mt-2'>{_('Use "Download from URL" in the library to add tasks.')}</p>
         </div>
+      ) : filteredTasks.length === 0 ? (
+        /* v8.18.9: searching but no matches — distinguish from "no tasks at all" */
+        <div className='text-center py-8 text-base-content/50'>
+          <p>{_('No matching download tasks')}</p>
+        </div>
       ) : (
         <>
           <div className='space-y-2'>
-            {/* v8.10: 默认只显示前 3 条，避免长列表撑爆用户中心 */}
-            {tasks.slice(0, 3).map((task) => {
+            {/* v8.10: 默认只显示前 3 条，避免长列表撑爆用户中心。
+                v8.18.9: 搜索时显示全部匹配项（slice 0,3 only when not searching） */}
+            {(searchQuery.trim() ? filteredTasks : filteredTasks.slice(0, 3)).map((task) => {
               const elapsed = getElapsedSeconds(task);
               const isActive = task.status === 'pending' || task.status === 'in_progress';
               const showProgress = task.status === 'in_progress' || task.status === 'paused';
@@ -358,8 +411,9 @@ export default function DownloadTasks() {
             })}
           </div>
 
-          {/* v8.10: 超过 3 条时显示「查看全部」按钮 */}
-          {tasks.length > 3 && (
+          {/* v8.10: 超过 3 条时显示「查看全部」按钮。
+              v8.18.9: 搜索时不显示——用户已经在看全部匹配项了。 */}
+          {!searchQuery.trim() && filteredTasks.length > 3 && (
             <button
               onClick={() => setShowAllModal(true)}
               className='btn btn-ghost btn-sm w-full mt-2 text-base-content/60 hover:text-base-content'

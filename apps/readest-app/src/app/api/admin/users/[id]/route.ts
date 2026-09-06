@@ -1,8 +1,9 @@
 // 管理员用户管理 API — 单个用户操作
-// PUT    /api/admin/users/[id] — 更新用户（密码/名称/配额）
+// PUT    /api/admin/users/[id] — 更新用户（密码/名称/头像/配额）
 // DELETE /api/admin/users/[id] — 删除用户
 import { NextRequest, NextResponse } from 'next/server';
 import { validateAdmin } from '@/utils/localAuth';
+import { isValidAvatarUrl, isValidDisplayName } from '@/utils/userValidation';
 import { prismaClient } from '@/utils/db';
 import argon2 from 'argon2';
 
@@ -20,7 +21,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     const body = await req.json();
-    const { password, displayName, storageQuotaMB, translationQuotaKB, email } = body;
+    const { password, displayName, avatarUrl, storageQuotaMB, translationQuotaKB, email } = body;
 
     const targetUser = await prismaClient.user.findUnique({ where: { id } });
     if (!targetUser) {
@@ -30,6 +31,36 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     // 不能删除/修改最后一个管理员
     if (targetUser.role === 'admin' && targetUser.id !== adminUser.id) {
       // 允许管理员修改其他管理员，但防止降级最后一个管理员
+    }
+
+    // v8.18.9: 校验 displayName —— 不允许 @ 等特殊字符
+    if (displayName !== undefined && displayName !== null && typeof displayName === 'string' && displayName.trim()) {
+      if (!isValidDisplayName(displayName)) {
+        return NextResponse.json(
+          { error: 'Display name cannot contain "@", angle brackets, quotes, slashes, or other special characters' },
+          { status: 400 },
+        );
+      }
+    }
+
+    // v8.18.9: 校验 avatarUrl —— 拒绝 SVG；允许显式清空（'' 或 null）
+    let normalizedAvatar: string | null | undefined = undefined;
+    if (avatarUrl !== undefined) {
+      if (avatarUrl === null) {
+        normalizedAvatar = null;
+      } else if (typeof avatarUrl === 'string') {
+        if (avatarUrl.trim() === '') {
+          normalizedAvatar = null;
+        } else {
+          if (!isValidAvatarUrl(avatarUrl)) {
+            return NextResponse.json(
+              { error: 'Avatar URL must be a valid http(s) or data: URL and cannot be SVG' },
+              { status: 400 },
+            );
+          }
+          normalizedAvatar = avatarUrl.trim();
+        }
+      }
     }
 
     const updateData: Record<string, unknown> = {};
@@ -42,6 +73,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
     if (displayName !== undefined) {
       updateData['displayName'] = displayName || null;
+    }
+    // v8.18.9: 头像 URL 更新（已校验）
+    if (normalizedAvatar !== undefined) {
+      updateData['avatarUrl'] = normalizedAvatar;
     }
     if (typeof storageQuotaMB === 'number') {
       updateData['storageQuotaMB'] = storageQuotaMB;
@@ -61,6 +96,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         email: true,
         role: true,
         displayName: true,
+        avatarUrl: true,
         storageQuotaMB: true,
         translationQuotaKB: true,
         createdAt: true,

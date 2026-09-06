@@ -26,6 +26,8 @@ export interface AuthUser {
   // Readest Lite 扩展字段
   userRole?: string; // 'admin' | 'user'
   displayName?: string | null;
+  // v8.18.9: 用户头像 URL。管理员可用 ADMIN_AVATAR_URL 环境变量覆盖。
+  avatarUrl?: string | null;
   storageQuotaMB?: number;
   translationQuotaKB?: number;
 }
@@ -60,6 +62,8 @@ const signAccessToken = (user: AuthUser): string => {
       // Readest Lite 多用户字段
       user_role: user.userRole || 'user',
       display_name: user.displayName || null,
+      // v8.18.9: avatar URL 进 JWT，避免每次 API 调用都查库
+      avatar_url: user.avatarUrl || null,
       storage_quota_mb: user.storageQuotaMB ?? 0,
       translation_quota_kb: user.translationQuotaKB ?? 0,
     },
@@ -92,6 +96,7 @@ export const verifyAccessToken = (token: string): AuthUser | null => {
     }) as JwtPayload & {
       sub: string; email: string;
       user_role?: string; display_name?: string | null;
+      avatar_url?: string | null;
       storage_quota_mb?: number; translation_quota_kb?: number;
     };
 
@@ -105,6 +110,8 @@ export const verifyAccessToken = (token: string): AuthUser | null => {
       created_at: new Date((payload.iat ?? 0) * 1000).toISOString(),
       userRole: payload.user_role || 'user',
       displayName: payload.display_name ?? null,
+      // v8.18.9: 从 JWT 读取 avatar_url（管理员 env 覆盖在 validateUserAndToken 中处理）
+      avatarUrl: payload.avatar_url ?? null,
       storageQuotaMB: payload.storage_quota_mb ?? 0,
       translationQuotaKB: payload.translation_quota_kb ?? 0,
     };
@@ -130,6 +137,18 @@ export const verifyRefreshToken = (token: string): { userId: string } | null => 
 // ───────────────────────────────────────────────────────────────────────────
 // validateUserAndToken — 验证 token + 查库确认用户存在
 // ───────────────────────────────────────────────────────────────────────────
+// v8.18.9: 管理员头像可被 ADMIN_AVATAR_URL 环境变量覆盖（优先级高于 DB 值）。
+// 导出供 admin 路由在列表查询时复用，保证 UI 看到的头像和 JWT 里的头像一致。
+export const resolveAvatarUrl = (dbUser: {
+  role: string;
+  avatarUrl: string | null;
+}): string | null => {
+  if (dbUser.role === 'admin' && process.env['ADMIN_AVATAR_URL']) {
+    return process.env['ADMIN_AVATAR_URL'];
+  }
+  return dbUser.avatarUrl;
+};
+
 export const validateUserAndToken = async (
   authHeader: string | null | undefined,
 ): Promise<{ user?: AuthUser; token?: string }> => {
@@ -142,6 +161,8 @@ export const validateUserAndToken = async (
   // 从数据库刷新 role/quota（防止 JWT 过期后权限变更不生效）
   user.userRole = dbUser.role;
   user.displayName = dbUser.displayName;
+  // v8.18.9: 头像从 DB 读取，但管理员受 ADMIN_AVATAR_URL 优先级覆盖
+  user.avatarUrl = resolveAvatarUrl(dbUser);
   user.storageQuotaMB = dbUser.storageQuotaMB;
   user.translationQuotaKB = dbUser.translationQuotaKB;
   return { user, token };
@@ -185,6 +206,8 @@ export const signInWithPassword = async (
     created_at: user.createdAt.toISOString(),
     userRole: user.role,
     displayName: user.displayName,
+    // v8.18.9: 头像从 DB 读取，管理员受 ADMIN_AVATAR_URL 优先级覆盖
+    avatarUrl: resolveAvatarUrl(user),
     storageQuotaMB: user.storageQuotaMB,
     translationQuotaKB: user.translationQuotaKB,
   };
@@ -220,6 +243,8 @@ export const refreshSession = async (refreshToken: string): Promise<AuthSession 
     created_at: user.createdAt.toISOString(),
     userRole: user.role,
     displayName: user.displayName,
+    // v8.18.9: 头像从 DB 读取，管理员受 ADMIN_AVATAR_URL 优先级覆盖
+    avatarUrl: resolveAvatarUrl(user),
     storageQuotaMB: user.storageQuotaMB,
     translationQuotaKB: user.translationQuotaKB,
   };
