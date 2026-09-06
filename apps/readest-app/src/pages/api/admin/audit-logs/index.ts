@@ -16,13 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const limitNum = Math.min(parseInt(String(limit), 10) || 50, 200);
   const skip = (pageNum - 1) * limitNum;
 
-  const where: Record<string, unknown> = {};
-  if (action && typeof action === 'string') where.action = action;
-  if (targetUserId && typeof targetUserId === 'string') where.targetUserId = targetUserId;
+  const where: { action?: string; targetUserId?: string; OR?: { description: { contains: string } }[] } = {};
+  if (action && typeof action === 'string') where['action'] = action;
+  if (targetUserId && typeof targetUserId === 'string') where['targetUserId'] = targetUserId;
   if (search && typeof search === 'string') {
-    where.OR = [
+    where['OR'] = [
       { description: { contains: search } },
-      { action: { contains: search } },
     ];
   }
 
