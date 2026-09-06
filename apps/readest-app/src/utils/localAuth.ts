@@ -169,14 +169,40 @@ export const validateUserAndToken = async (
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// validateAdmin — 仅管理员可通过
+// validateAdmin — 仅管理员可通过（v8.19.0: 含 super_admin）
 // ───────────────────────────────────────────────────────────────────────────
 export const validateAdmin = async (
   authHeader: string | null | undefined,
 ): Promise<{ user?: AuthUser; token?: string }> => {
   const result = await validateUserAndToken(authHeader);
-  if (!result.user || result.user.userRole !== 'admin') return {};
+  if (!result.user) return {};
+  // v8.19.0: super_admin 也算 admin（角色层级 super_admin > admin > user）
+  const role = result.user.userRole ?? 'user';
+  const email = result.user.email ?? '';
+  if (role !== 'admin' && role !== 'super_admin'
+      && !(process.env['SUPER_ADMIN_EMAIL']
+           && email.toLowerCase() === process.env['SUPER_ADMIN_EMAIL'].toLowerCase())) {
+    return {};
+  }
   return result;
+};
+
+// ───────────────────────────────────────────────────────────────────────────
+// validateSuperAdmin — 仅超级管理员可通过
+// ───────────────────────────────────────────────────────────────────────────
+export const validateSuperAdmin = async (
+  authHeader: string | null | undefined,
+): Promise<{ user?: AuthUser; token?: string }> => {
+  const result = await validateUserAndToken(authHeader);
+  if (!result.user) return {};
+  const role = result.user.userRole ?? 'user';
+  const email = result.user.email ?? '';
+  if (role === 'super_admin') return result;
+  if (process.env['SUPER_ADMIN_EMAIL']
+      && email.toLowerCase() === process.env['SUPER_ADMIN_EMAIL'].toLowerCase()) {
+    return result;
+  }
+  return {};
 };
 
 // ───────────────────────────────────────────────────────────────────────────

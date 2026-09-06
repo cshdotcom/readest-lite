@@ -191,10 +191,11 @@ const ProfilePage = () => {
                 </div>
               ) : (
                 <div className='flex flex-col gap-y-8 px-6'>
-                  {/* 管理员可见用户管理 */}
-                  {(user as unknown as { userRole?: string })?.userRole === 'admin' && (
+                  {/* v8.19.0: 管理员可见用户管理（admin 或 super_admin） */}
+                  {(user as unknown as { userRole?: string })?.userRole === 'admin'
+                    || (user as unknown as { userRole?: string })?.userRole === 'super_admin' ? (
                     <UserManagement />
-                  )}
+                  ) : null}
                   {/* v8.10: 阅读统计卡片（横向滚动 + 点击弹出详情 Modal） */}
                   <ReadingStatsCard />
                   {/* v8.7: 下载任务（所有用户可见，跨设备同步） */}

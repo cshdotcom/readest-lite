@@ -24,6 +24,55 @@ interface UserItem {
   lastSignInAt: string | null;
 }
 
+// v8.19.0: 角色标签 — super_admin 金色、admin 蓝色、user 不显示
+const RoleBadge: React.FC<{ role: string }> = ({ role }) => {
+  const _ = useTranslation();
+  if (role === 'super_admin') {
+    return (
+      <span className='ml-2 badge badge-sm' style={{ backgroundColor: '#facc15', color: '#1f2937', borderColor: '#eab308' }}>
+        {_('Super Admin')}
+      </span>
+    );
+  }
+  if (role === 'admin') {
+    return <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>;
+  }
+  return null;
+};
+
+// v8.19.0: 客户端权限判断 — 与服务端 canManageUser 对应
+// 不能跨用户调 isSuperAdmin（依赖 SUPER_ADMIN_EMAIL env，客户端拿不到），
+// 只用 currentUser.userRole。currentUser 在运行时是 Lite AuthUser（含 userRole），
+// 但 TS 类型是 Supabase User（无 userRole 字段）— 用 unknown cast 安全读取。
+type LiteUser = { id?: string; userRole?: string; email?: string };
+const asLiteUser = (u: unknown): LiteUser | null => {
+  if (!u || typeof u !== 'object') return null;
+  const obj = u as Record<string, unknown>;
+  return {
+    id: typeof obj['id'] === 'string' ? obj['id'] : undefined,
+    userRole: typeof obj['userRole'] === 'string' ? obj['userRole'] : undefined,
+    email: typeof obj['email'] === 'string' ? obj['email'] : undefined,
+  };
+};
+const isSuperAdminClient = (user: unknown): boolean => {
+  return asLiteUser(user)?.userRole === 'super_admin';
+};
+const canManageUserClient = (
+  current: unknown,
+  target: { id: string; role: string },
+): boolean => {
+  const c = asLiteUser(current);
+  if (!c || !c.id) return false;
+  if (c.id === target.id) return false;
+  if (c.userRole === 'super_admin') {
+    return target.role !== 'super_admin';
+  }
+  if (c.userRole === 'admin') {
+    return target.role === 'user';
+  }
+  return false;
+};
+
 export default function UserManagement() {
   const _ = useTranslation();
   const { user: currentUser } = useAuth();
@@ -117,54 +166,55 @@ export default function UserManagement() {
           </div>
         )}
         {/* 搜索时显示全部匹配；不搜索时显示前 3 个 */}
-        {(searchQuery.trim() ? filteredUsers : users.slice(0, 3)).map((u) => (
-          <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
-            <div className='flex items-center gap-3 min-w-0 flex-1'>
-              {/* v8.18.9: 优先显示用户头像 URL；无头像时回退到 IoPersonOutline 图标 */}
-              {u.avatarUrl ? (
-                <UserAvatar
-                  url={u.avatarUrl}
-                  size={32}
-                  DefaultIcon={PiUserCircle}
-                  className='flex-shrink-0'
-                />
-              ) : (
-                <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
-              )}
-              <div className='min-w-0'>
-                <div className='font-medium truncate'>
-                  {u.displayName || u.email}
-                  {u.role === 'admin' && (
-                    <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>
-                  )}
+        {(searchQuery.trim() ? filteredUsers : users.slice(0, 3)).map((u) => {
+          const canManage = canManageUserClient(currentUser, u);
+          return (
+            <div key={u.id} className='flex items-center justify-between bg-base-200 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
+              <div className='flex items-center gap-3 min-w-0 flex-1'>
+                {/* v8.18.9: 优先显示用户头像 URL；无头像时回退到 IoPersonOutline 图标 */}
+                {u.avatarUrl ? (
+                  <UserAvatar
+                    url={u.avatarUrl}
+                    size={32}
+                    DefaultIcon={PiUserCircle}
+                    className='flex-shrink-0'
+                  />
+                ) : (
+                  <IoPersonOutline className='w-5 h-5 opacity-50 flex-shrink-0' />
+                )}
+                <div className='min-w-0'>
+                  <div className='font-medium truncate'>
+                    {u.displayName || u.email}
+                    <RoleBadge role={u.role} />
+                  </div>
+                  <div className='text-xs opacity-60 truncate'>{u.email}</div>
                 </div>
-                <div className='text-xs opacity-60 truncate'>{u.email}</div>
+              </div>
+              <div className='flex items-center gap-2 flex-shrink-0 flex-wrap justify-end'>
+                <div className='text-xs opacity-60 text-right whitespace-nowrap'>
+                  <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
+                  <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
+                </div>
+                {canManage && (
+                  <button
+                    onClick={() => setEditingUser(u)}
+                    className='btn btn-ghost btn-xs flex-shrink-0'
+                  >
+                    {_('Edit')}
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    onClick={() => handleDelete(u.id, u.email)}
+                    className='btn btn-ghost btn-xs text-error flex-shrink-0'
+                  >
+                    <IoTrashOutline className='w-4 h-4' />
+                  </button>
+                )}
               </div>
             </div>
-            <div className='flex items-center gap-2 flex-shrink-0 flex-wrap justify-end'>
-              <div className='text-xs opacity-60 text-right whitespace-nowrap'>
-                <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
-                <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
-              </div>
-              {u.id !== currentUser?.id && (
-                <button
-                  onClick={() => setEditingUser(u)}
-                  className='btn btn-ghost btn-xs flex-shrink-0'
-                >
-                  {_('Edit')}
-                </button>
-              )}
-              {u.id !== currentUser?.id && u.role !== 'admin' && (
-                <button
-                  onClick={() => handleDelete(u.id, u.email)}
-                  className='btn btn-ghost btn-xs text-error flex-shrink-0'
-                >
-                  <IoTrashOutline className='w-4 h-4' />
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* v8.10.2: 超过 3 个用户且不搜索时显示「查看全部」按钮 */}
@@ -209,7 +259,7 @@ function AllUsersModal({
   onDelete,
 }: {
   users: UserItem[];
-  currentUser: { id?: string } | null;
+  currentUser: { id?: string; userRole?: string } | null;
   onClose: () => void;
   onEdit: (u: UserItem) => void;
   onDelete: (id: string, email: string) => void;
@@ -263,7 +313,9 @@ function AllUsersModal({
               {_('No matching users')}
             </div>
           ) : (
-            filteredUsers.map((u) => (
+            filteredUsers.map((u) => {
+            const canManage = canManageUserClient(currentUser, u);
+            return (
             <div key={u.id} className='flex items-center justify-between bg-base-200/50 rounded-lg p-3 min-w-0 gap-2 overflow-hidden'>
               <div className='flex items-center gap-3 min-w-0 flex-1'>
                 {/* v8.18.9: 优先显示用户头像 URL；无头像时回退到 IoPersonOutline 图标 */}
@@ -280,9 +332,7 @@ function AllUsersModal({
                 <div className='min-w-0'>
                   <div className='font-medium truncate'>
                     {u.displayName || u.email}
-                    {u.role === 'admin' && (
-                      <span className='ml-2 badge badge-primary badge-sm'>{_('Admin')}</span>
-                    )}
+                    <RoleBadge role={u.role} />
                   </div>
                   <div className='text-xs opacity-60 truncate'>{u.email}</div>
                 </div>
@@ -292,12 +342,12 @@ function AllUsersModal({
                   <div>{_('Storage')}: {u.storageQuotaMB > 0 ? `${u.storageQuotaMB} MB` : _('Unlimited')}</div>
                   <div>{_('Translation')}: {u.translationQuotaKB > 0 ? `${u.translationQuotaKB} KB` : _('Unlimited')}</div>
                 </div>
-                {u.id !== currentUser?.id && (
+                {canManage && (
                   <button onClick={() => onEdit(u)} className='btn btn-ghost btn-xs flex-shrink-0'>
                     {_('Edit')}
                   </button>
                 )}
-                {u.id !== currentUser?.id && u.role !== 'admin' && (
+                {canManage && (
                   <button
                     onClick={() => onDelete(u.id, u.email)}
                     className='btn btn-ghost btn-xs text-error flex-shrink-0'
@@ -307,7 +357,8 @@ function AllUsersModal({
                 )}
               </div>
             </div>
-            ))
+            );
+            })
           )}
         </div>
         <div className='px-4 py-2 border-t border-base-200 text-xs text-base-content/50 text-center'>
@@ -324,6 +375,7 @@ function UserEditDialog({ user, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const _ = useTranslation();
+  const { user: currentUser } = useAuth();
   const [email, setEmail] = useState(user?.email || '');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -331,8 +383,13 @@ function UserEditDialog({ user, onClose, onSaved }: {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [storageQuotaMB, setStorageQuotaMB] = useState(user?.storageQuotaMB?.toString() || '0');
   const [translationQuotaKB, setTranslationQuotaKB] = useState(user?.translationQuotaKB?.toString() || '0');
+  // v8.19.0: 角色变更 — super_admin 可以把 user 升级为 admin 或降级为 user
+  const [role, setRole] = useState(user?.role || 'user');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // v8.19.0: 只有 super_admin 才能改角色
+  const canChangeRole = isSuperAdminClient(currentUser) && user !== null && user.role !== 'super_admin';
 
   const handleSave = async () => {
     setSaving(true);
@@ -349,6 +406,10 @@ function UserEditDialog({ user, onClose, onSaved }: {
       body['avatarUrl'] = avatarUrl.trim() || null;
       if (password) body['password'] = password;
       if (!user) body['email'] = email;
+      // v8.19.0: 角色变更（仅 super_admin）
+      if (canChangeRole && user && role !== user.role) {
+        body['role'] = role;
+      }
 
       const url = user
         ? `${getAPIBaseUrl()}/admin/users/${user.id}`
@@ -474,6 +535,23 @@ function UserEditDialog({ user, onClose, onSaved }: {
               <p className='text-xs opacity-50 mt-1'>0 = {_('Unlimited')}</p>
             </div>
           </div>
+          {/* v8.19.0: 角色变更 — 仅 super_admin 可见，且不能改 super_admin */}
+          {canChangeRole && (
+            <div>
+              <label className='text-sm font-medium mb-1 block'>{_('Role')}</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className='select select-bordered w-full'
+              >
+                <option value='user'>{_('User')}</option>
+                <option value='admin'>{_('Admin')}</option>
+              </select>
+              <p className='text-xs opacity-50 mt-1'>
+                {_('Super admin role can only be set via SUPER_ADMIN_EMAIL env var.')}
+              </p>
+            </div>
+          )}
           {error && <div className='text-sm text-red-500'>{error}</div>}
         </div>
 

@@ -1,9 +1,10 @@
 // 管理员用户管理 API
 // GET  /api/admin/users — 列出所有用户
-// POST /api/admin/users — 创建新用户
+// POST /api/admin/users — 创建新用户（仅 admin+，role 受 canCreateRole 限制）
 import { NextRequest, NextResponse } from 'next/server';
 import { validateAdmin, resolveAvatarUrl } from '@/utils/localAuth';
 import { isValidAvatarUrl, isValidDisplayName } from '@/utils/userValidation';
+import { canCreateRole, isAdmin, isSuperAdmin } from '@/utils/permissions';
 import { prismaClient } from '@/utils/db';
 import argon2 from 'argon2';
 import { randomUUID } from 'crypto';
@@ -37,7 +38,12 @@ export async function GET(req: NextRequest) {
     avatarUrl: resolveAvatarUrl(u),
   }));
 
-  return NextResponse.json({ users: usersWithAvatar });
+  return NextResponse.json({
+    users: usersWithAvatar,
+    // v8.19.0: 告知前端当前调用者角色，UI 用于决定是否显示"超级管理员"标签
+    // 和是否允许创建/管理其他管理员
+    currentUserRole: isSuperAdmin(user) ? 'super_admin' : (isAdmin(user) ? 'admin' : 'user'),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { email, password, displayName, avatarUrl, storageQuotaMB, translationQuotaKB } = body;
+    const { email, password, displayName, avatarUrl, storageQuotaMB, translationQuotaKB, role } = body;
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
@@ -82,13 +88,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User already exists' }, { status: 409 });
     }
 
+    // v8.19.0: 角色层级 — admin 只能创建 user，super_admin 可以创建 admin 或 user
+    // 不允许创建 super_admin（super_admin 由 SUPER_ADMIN_EMAIL 环境变量控制）
+    const targetRole = role === 'admin' ? 'admin' : 'user';
+    if (!canCreateRole(user, targetRole)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to create a user with this role' },
+        { status: 403 },
+      );
+    }
+
     const encryptedPass = await argon2.hash(password);
     const newUser = await prismaClient.user.create({
       data: {
         id: randomUUID(),
         email: normalizedEmail,
         encryptedPass,
-        role: 'user',
+        role: targetRole,
         displayName: displayName || null,
         // v8.18.9: 头像 URL（已校验非 SVG）
         avatarUrl: normalizedAvatar,

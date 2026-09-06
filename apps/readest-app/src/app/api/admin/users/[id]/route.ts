@@ -1,9 +1,15 @@
 // 管理员用户管理 API — 单个用户操作
-// PUT    /api/admin/users/[id] — 更新用户（密码/名称/头像/配额）
+// PUT    /api/admin/users/[id] — 更新用户（密码/名称/头像/配额/角色）
 // DELETE /api/admin/users/[id] — 删除用户
+// v8.19.0: 角色层级保护 — canManageUser 校验：
+//   - super_admin 可以管理除自己外的所有人，但不能管理其他 super_admin
+//   - admin 只能管理 user
+//   - 不能操作自己（已有逻辑）
+//   - 无人能修改/删除 super_admin
 import { NextRequest, NextResponse } from 'next/server';
 import { validateAdmin } from '@/utils/localAuth';
 import { isValidAvatarUrl, isValidDisplayName } from '@/utils/userValidation';
+import { canManageUser, canCreateRole, isSuperAdmin } from '@/utils/permissions';
 import { prismaClient } from '@/utils/db';
 import argon2 from 'argon2';
 
@@ -21,16 +27,22 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     const body = await req.json();
-    const { password, displayName, avatarUrl, storageQuotaMB, translationQuotaKB, email } = body;
+    const { password, displayName, avatarUrl, storageQuotaMB, translationQuotaKB, email, role } = body;
 
     const targetUser = await prismaClient.user.findUnique({ where: { id } });
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // 不能删除/修改最后一个管理员
-    if (targetUser.role === 'admin' && targetUser.id !== adminUser.id) {
-      // 允许管理员修改其他管理员，但防止降级最后一个管理员
+    // v8.19.0: 角色层级 — 校验当前用户是否可以管理目标用户
+    if (!canManageUser(adminUser, targetUser)) {
+      if (isSuperAdmin(targetUser)) {
+        return NextResponse.json({ error: 'Cannot modify a super admin' }, { status: 403 });
+      }
+      if (targetUser.id === adminUser.id) {
+        return NextResponse.json({ error: 'Cannot modify yourself via admin API' }, { status: 400 });
+      }
+      return NextResponse.json({ error: 'Only super admins can manage admins' }, { status: 403 });
     }
 
     // v8.18.9: 校验 displayName —— 不允许 @ 等特殊字符
@@ -88,6 +100,33 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       updateData['email'] = email.toLowerCase().trim();
     }
 
+    // v8.19.0: 角色变更 — super_admin 可以把 user 升级为 admin 或降级为 user；
+    //   admin 不能改角色（canCreateRole 会拒绝）。
+    //   任何人都不能把用户改为 super_admin（super_admin 由 SUPER_ADMIN_EMAIL 控制）。
+    if (role !== undefined && typeof role === 'string') {
+      const targetRole = role === 'admin' ? 'admin' : (role === 'user' ? 'user' : targetUser.role);
+      if (targetRole !== targetUser.role) {
+        // 校验：当前用户能创建目标角色
+        if (!canCreateRole(adminUser, targetRole)) {
+          return NextResponse.json(
+            { error: 'You do not have permission to assign this role' },
+            { status: 403 },
+          );
+        }
+        // 防止降级最后一个 admin（保护至少有一个 admin）
+        if (targetUser.role === 'admin' && targetRole === 'user') {
+          const adminCount = await prismaClient.user.count({ where: { role: 'admin' } });
+          if (adminCount <= 1) {
+            return NextResponse.json(
+              { error: 'Cannot demote the last admin' },
+              { status: 400 },
+            );
+          }
+        }
+        updateData['role'] = targetRole;
+      }
+    }
+
     const updated = await prismaClient.user.update({
       where: { id },
       data: updateData,
@@ -132,7 +171,17 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
-  // 不能删除最后一个管理员
+  // v8.19.0: 无人能删除 super_admin
+  if (isSuperAdmin(targetUser)) {
+    return NextResponse.json({ error: 'Cannot delete a super admin' }, { status: 403 });
+  }
+
+  // v8.19.0: 角色层级 — 校验当前用户是否可以管理目标用户
+  if (!canManageUser(adminUser, targetUser)) {
+    return NextResponse.json({ error: 'Only super admins can manage admins' }, { status: 403 });
+  }
+
+  // 不能删除最后一个 admin
   if (targetUser.role === 'admin') {
     const adminCount = await prismaClient.user.count({ where: { role: 'admin' } });
     if (adminCount <= 1) {

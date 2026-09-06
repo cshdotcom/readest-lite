@@ -98,6 +98,33 @@ async function main() {
     });
     console.log(`[init] admin user created: ${email} (${userId})`);
   }
+
+  // v8.19.0: 处理 SUPER_ADMIN_EMAIL — 把指定邮箱对应的用户提升为 super_admin
+  // 通常是 ADMIN_EMAIL 自身；但也支持另一个独立用户（必须先用管理员创建该用户）。
+  const superEmail = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+  if (superEmail) {
+    if (superEmail === email) {
+      // 与 ADMIN_EMAIL 相同 — 直接把刚才确保过的 admin 升级为 super_admin
+      const cur = await prisma.user.findUnique({ where: { id: userId } });
+      if (cur && cur.role !== 'super_admin') {
+        await prisma.user.update({ where: { id: userId }, data: { role: 'super_admin' } });
+        console.log(`[init] super_admin role applied to ADMIN_EMAIL: ${email}`);
+      } else if (cur && cur.role === 'super_admin') {
+        console.log(`[init] super_admin already set: ${email}`);
+      }
+    } else {
+      // 不同邮箱 — 必须已存在
+      const existing = await prisma.user.findUnique({ where: { email: superEmail } });
+      if (!existing) {
+        console.warn(`[init] SUPER_ADMIN_EMAIL=${superEmail} but no such user. Create it via admin UI first.`);
+      } else if (existing.role !== 'super_admin') {
+        await prisma.user.update({ where: { id: existing.id }, data: { role: 'super_admin' } });
+        console.log(`[init] super_admin role applied to: ${superEmail}`);
+      } else {
+        console.log(`[init] super_admin already set: ${superEmail}`);
+      }
+    }
+  }
 }
 
 try {
