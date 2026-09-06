@@ -16,6 +16,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { user, token } = await validateUserAndToken(req.headers['authorization']);
     if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
 
+    // v8.18.8: 派生请求 origin 用于绝对 URL（Tauri 客户端需要）
+    const protocol = req.headers['x-forwarded-proto'] || (req.connection?.encrypted ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
+    const requestOrigin = host ? `${protocol}://${host}` : undefined;
+
     if (req.method === 'GET') {
       let { fileKey } = req.query;
       if (req.url?.includes('fileKey=') && req.url?.includes('&')) {
@@ -94,7 +99,7 @@ async function processFileKeys(
         return;
       }
       try {
-        downloadUrls[fileKey] = await getDownloadSignedUrl(rec.fileKey, 1800);
+        downloadUrls[fileKey] = await getDownloadSignedUrl(rec.fileKey, 1800, undefined, requestOrigin);
       } catch {
         downloadUrls[fileKey] = undefined;
       }

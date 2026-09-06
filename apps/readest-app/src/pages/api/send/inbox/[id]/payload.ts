@@ -26,7 +26,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!row.payloadKey) return res.status(409).json({ error: 'Inbox item has no file payload' });
 
   try {
-    const downloadUrl = await getDownloadSignedUrl(row.payloadKey, DOWNLOAD_TTL_SECONDS, SEND_INBOX_BUCKET);
+    // v8.18.8: 从请求 URL 派生 origin，避免 0.0.0.0:8225 问题
+    const protocol = req.headers['x-forwarded-proto'] || (req.connection?.encrypted ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
+    const requestOrigin = host ? `${protocol}://${host}` : undefined;
+    const downloadUrl = await getDownloadSignedUrl(
+      row.payloadKey,
+      DOWNLOAD_TTL_SECONDS,
+      SEND_INBOX_BUCKET,
+      requestOrigin,
+    );
     return res.status(200).json({ downloadUrl });
   } catch (err) {
     console.error('Inbox payload sign failed:', err);

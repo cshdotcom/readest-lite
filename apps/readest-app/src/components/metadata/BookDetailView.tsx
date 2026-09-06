@@ -293,7 +293,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                 </div>
                 <div className='overflow-hidden pe-1 text-end sm:text-start'>
                   <span className='font-bold'>{_('Format')}</span>
-                  <p className='text-neutral-content text-sm'>{book.format || _('Unknown')}</p>
+                  <p className='text-neutral-content text-sm'>{book.url?.startsWith('feed://') ? 'RSS' : (book.format || _('Unknown'))}</p>
                 </div>
                 <div className='overflow-hidden'>
                   <span className='font-bold'>{_('File Size')}</span>

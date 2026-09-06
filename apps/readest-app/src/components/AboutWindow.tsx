@@ -125,24 +125,27 @@ export const AboutWindow = () => {
               <p className='text-neutral-content text-center text-sm' style={{ userSelect: 'none' }}>
                 {_('Version {{version}}', { version: getAppVersion() })} {`(${browserInfo})`}
               </p>
+              <p className='text-neutral-content/60 text-center text-xs mt-1'>
+                {_('Upstream version: {{version}}', { version: '0.12.6' })}
+              </p>
             </div>
           </div>
 
           <hr aria-hidden='true' className='border-base-300 my-8 w-full sm:my-4' />
 
-          {/* 仓库链接区 — 3 个网站用网格 3 列排版（窄屏自动堆叠） */}
-          <div className='grid w-full grid-cols-1 gap-3 px-4 sm:grid-cols-3' dir='ltr'>
+          {/* 仓库链接区 — 4 个网站用网格 2x2/4列排版，12px 圆角，hover 缩放 */}
+          <div className='mx-auto grid w-full max-w-md grid-cols-2 gap-3 px-4 sm:grid-cols-4' dir='ltr'>
             {/* Lite 仓库 */}
             <a
               href='https://github.com/cshdotcom/readest-lite'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-xl bg-base-200/80 px-3 py-3 text-center transition-all duration-200 hover:scale-105 hover:bg-base-300/80'
             >
-              <LiteRepoIcon size={32} />
+              <LiteRepoIcon size={28} />
               <div className='flex flex-col items-center'>
-                <span className='text-sm font-medium'>Readest Lite</span>
-                <span className='text-xs opacity-60'>GitHub 仓库</span>
+                <span className='text-xs font-medium'>Readest Lite</span>
+                <span className='text-[10px] opacity-50'>GitHub 仓库</span>
               </div>
             </a>
 
@@ -151,12 +154,12 @@ export const AboutWindow = () => {
               href='https://github.com/readest/readest'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-xl bg-base-200/80 px-3 py-3 text-center transition-all duration-200 hover:scale-105 hover:bg-base-300/80'
             >
-              <UpstreamRepoIcon size={32} />
+              <UpstreamRepoIcon size={28} />
               <div className='flex flex-col items-center'>
-                <span className='text-sm font-medium'>Readest 上游</span>
-                <span className='text-xs opacity-60'>原版仓库</span>
+                <span className='text-xs font-medium'>Readest 上游</span>
+                <span className='text-[10px] opacity-50'>原版仓库</span>
               </div>
             </a>
 
@@ -165,12 +168,28 @@ export const AboutWindow = () => {
               href='https://cshdotcom.github.io/readestl/'
               target='_blank'
               rel='noopener noreferrer'
-              className='flex flex-col items-center gap-2 rounded-lg bg-base-200 px-3 py-3 text-center transition-colors hover:bg-base-300'
+              className='flex flex-col items-center gap-2 rounded-xl bg-base-200/80 px-3 py-3 text-center transition-all duration-200 hover:scale-105 hover:bg-base-300/80'
             >
-              <FaGithub size={32} className='opacity-70' />
+              <FaGithub size={28} className='opacity-70' />
               <div className='flex flex-col items-center'>
-                <span className='text-sm font-medium'>{_('Website')}</span>
-                <span className='text-xs opacity-60'>官网 / 部署教程</span>
+                <span className='text-xs font-medium'>{_('Website')}</span>
+                <span className='text-[10px] opacity-50'>官网 / 部署</span>
+              </div>
+            </a>
+
+            {/* NodeByte 博社 */}
+            <a
+              href='https://nodebyte.cn'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='flex flex-col items-center gap-2 rounded-xl bg-base-200/80 px-3 py-3 text-center transition-all duration-200 hover:scale-105 hover:bg-base-300/80'
+            >
+              <div className='flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-xs font-bold text-white'>
+                NB
+              </div>
+              <div className='flex flex-col items-center'>
+                <span className='text-xs font-medium'>NodeByte 博社</span>
+                <span className='text-[10px] opacity-50'>交流社区</span>
               </div>
             </a>
           </div>
