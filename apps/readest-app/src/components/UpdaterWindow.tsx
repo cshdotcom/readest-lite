@@ -414,7 +414,7 @@ export const UpdaterContent = ({
     const fetchChangelogs = async (fromVersion: string): Promise<Changelog[]> => {
       try {
         const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-        const res = await fetch(READEST_CHANGELOG_FILE);
+        const res = READEST_CHANGELOG_FILE ? await fetch(READEST_CHANGELOG_FILE) : null;
         const data: ReleaseNotes = await res.json();
         const releases = data.releases;
 

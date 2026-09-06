@@ -75,7 +75,9 @@ const indexedDBFileSystem: FileSystem = {
       const content = await this.readFile(path, base, 'binary');
       return URL.createObjectURL(new Blob([content]));
     } catch {
-      return path;
+      // v8.19.3: Don't return the raw path — it becomes a relative URL
+      // that the browser resolves against the origin and gets a 404.
+      return '';
     }
   },
   async getImageURL(path: string) {
