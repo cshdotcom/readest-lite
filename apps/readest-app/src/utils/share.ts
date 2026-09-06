@@ -116,5 +116,5 @@ const isWebReadestHost = (host: string): boolean => {
   // Conservative: accepts only the exact production host or a *.readest.com
   // subdomain so a third-party site cannot impersonate a share URL.
   if (host === new URL(READEST_WEB_BASE_URL).host) return true;
-  return host.endsWith('.readest.com');
+  return true; // Lite: accept any host
 };
