@@ -402,6 +402,25 @@ model UsageStat {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// recycle_bin_items (PK: id) — v8.19.0 回收站
+// ───────────────────────────────────────────────────────────────────────────
+model RecycleBinItem {
+  id          String   @id @default(uuid())
+  userId      String
+  bookHash    String
+  bookTitle   String
+  bookFormat  String
+  fileKey     String?
+  deletedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, expiresAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // user_settings (PK: user_id, scope) — v8.18.4 加密设置同步
 // ───────────────────────────────────────────────────────────────────────────
 // 每个用户的前端设置（SystemSettings + GlobalViewSettings + GlobalReadSettings）
@@ -430,18 +449,3 @@ model UserSetting {
 // 还原时把 Book.deletedAt 清回 null，并恢复 File 行（如有）。
 // 永久删除则物理删除文件 + 删除 Book / BookConfig / BookNote 行。
 // ───────────────────────────────────────────────────────────────────────────
-model RecycleBinItem {
-  id          String   @id @default(uuid())
-  userId      String
-  bookHash    String
-  bookTitle   String
-  bookFormat  String
-  fileKey     String?
-  deletedAt   DateTime @default(now()) // 移入回收站的时间
-  expiresAt   DateTime                  // 自动清理时间（默认 deletedAt + 30 天）
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([userId, expiresAt])
-}

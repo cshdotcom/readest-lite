@@ -473,10 +473,11 @@ function UserEditDialog({ user, onClose, onSaved }: {
             <input
               type='text' value={displayName} onChange={(e) => setDisplayName(e.target.value)}
               className='input input-bordered w-full' placeholder={_('Optional')}
+              maxLength={100}
             />
-            {/* v8.18.9: 提示用户 displayName 不允许 @ 等特殊字符 */}
+            {/* v8.19.0: 提示用户 displayName 不允许 @ 等特殊字符（含单引号），最长 100 字符 */}
             <p className='text-xs opacity-50 mt-1'>
-              {_('Cannot contain "@", angle brackets, quotes, slashes, or other special characters')}
+              {_('Cannot contain "@", angle brackets, quotes, slashes, or other special characters')} (≤ 100)
             </p>
           </div>
           {/* v8.18.9: 头像 URL 输入框 + 实时预览 */}
