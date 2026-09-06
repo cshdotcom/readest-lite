@@ -12,14 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // v8.18.8: 派生请求 origin 用于绝对 URL（Tauri 客户端需要）
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
+  const requestOrigin = host ? `${protocol}://${host}` : undefined;
+
   try {
     const { user, token } = await validateUserAndToken(req.headers['authorization']);
     if (!user || !token) return res.status(403).json({ error: 'Not authenticated' });
-
-    // v8.18.8: 派生请求 origin 用于绝对 URL（Tauri 客户端需要）
-    const protocol = req.headers['x-forwarded-proto'] || (req.connection?.encrypted ? 'https' : 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
-    const requestOrigin = host ? `${protocol}://${host}` : undefined;
 
     if (req.method === 'GET') {
       let { fileKey } = req.query;

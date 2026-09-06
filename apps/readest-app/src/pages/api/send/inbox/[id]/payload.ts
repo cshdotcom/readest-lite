@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // v8.18.8: 从请求 URL 派生 origin，避免 0.0.0.0:8225 问题
-    const protocol = req.headers['x-forwarded-proto'] || (req.connection?.encrypted ? 'https' : 'http');
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
     const requestOrigin = host ? `${protocol}://${host}` : undefined;
     const downloadUrl = await getDownloadSignedUrl(
