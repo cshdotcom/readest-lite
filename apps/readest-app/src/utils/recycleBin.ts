@@ -104,7 +104,7 @@ export const restoreFromRecycleBin = async (
   const item = await prismaClient.recycleBinItem.findFirst({
     where: { id: itemId, userId },
   });
-  if (!item) return { ok: false, error: 'Recycle bin item not found', physicalDeleted: false };
+  if (!item) return { ok: false, error: 'Recycle bin item not found' };
 
   // 恢复 File row(s)（同 user + bookHash + deletedAt != null）
   await prismaClient.file.updateMany({
@@ -133,7 +133,7 @@ export const permanentlyDeleteFromRecycleBin = async (
   const item = await prismaClient.recycleBinItem.findFirst({
     where: { id: itemId, userId },
   });
-  if (!item) return { ok: false, error: 'Recycle bin item not found', physicalDeleted: false };
+  if (!item) return { ok: false, error: "Recycle bin item not found", physicalDeleted: false };
 
   return permanentlyDeleteItem(userId, item);
 };
