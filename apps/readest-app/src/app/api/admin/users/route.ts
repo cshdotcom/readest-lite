@@ -68,12 +68,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // v8.18.9: 校验 avatarUrl —— 拒绝 SVG
+    // v8.18.9: 校验 avatarUrl —— 接受任意格式包括 SVG
     let normalizedAvatar: string | null = null;
     if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim()) {
       if (!isValidAvatarUrl(avatarUrl)) {
         return NextResponse.json(
-          { error: 'Avatar URL must be a valid http(s) or data: URL and cannot be SVG' },
+          { error: 'Avatar URL must be a valid http(s) or data: URL' },
           { status: 400 },
         );
       }
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         encryptedPass,
         role: targetRole,
         displayName: displayName || null,
-        // v8.18.9: 头像 URL（已校验非 SVG）
+        // v8.18.9: 头像 URL（已校验格式）
         avatarUrl: normalizedAvatar,
         storageQuotaMB: typeof storageQuotaMB === 'number' ? storageQuotaMB : 0,
         translationQuotaKB: typeof translationQuotaKB === 'number' ? translationQuotaKB : 0,

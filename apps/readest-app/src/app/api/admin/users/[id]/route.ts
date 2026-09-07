@@ -55,7 +55,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // v8.18.9: 校验 avatarUrl —— 拒绝 SVG；允许显式清空（'' 或 null）
+    // v8.18.9: 校验 avatarUrl —— 接受任意格式包括 SVG；允许显式清空（'' 或 null）
     let normalizedAvatar: string | null | undefined = undefined;
     if (avatarUrl !== undefined) {
       if (avatarUrl === null) {
@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         } else {
           if (!isValidAvatarUrl(avatarUrl)) {
             return NextResponse.json(
-              { error: 'Avatar URL must be a valid http(s) or data: URL and cannot be SVG' },
+              { error: 'Avatar URL must be a valid http(s) or data: URL' },
               { status: 400 },
             );
           }

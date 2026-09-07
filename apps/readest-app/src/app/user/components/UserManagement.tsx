@@ -403,7 +403,7 @@ function UserEditDialog({ user, onClose, onSaved }: {
   const [email, setEmail] = useState(user?.email || '');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState(user?.displayName || '');
-  // v8.18.9: 用户头像 URL —— 任意 http(s) / data: URL，后端拒绝 SVG
+  // v8.18.9: 用户头像 URL —— 任意 http(s) / data: URL，后端接受任意格式
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [storageQuotaMB, setStorageQuotaMB] = useState(user?.storageQuotaMB?.toString() || '0');
   const [translationQuotaKB, setTranslationQuotaKB] = useState(user?.translationQuotaKB?.toString() || '0');
@@ -413,7 +413,8 @@ function UserEditDialog({ user, onClose, onSaved }: {
   const [error, setError] = useState('');
 
   // v8.19.0: 只有 super_admin 才能改角色
-  const canChangeRole = isSuperAdminClient(currentUser) && user !== null && user.role !== 'super_admin';
+  // v8.19.7: Allow role selection when creating (user === null) OR editing
+  const canChangeRole = isSuperAdminClient(currentUser) && (user === null || user.role !== 'super_admin');
 
   const handleSave = async () => {
     setSaving(true);
@@ -425,14 +426,20 @@ function UserEditDialog({ user, onClose, onSaved }: {
         storageQuotaMB: parseInt(storageQuotaMB) || 0,
         translationQuotaKB: parseInt(translationQuotaKB) || 0,
       };
-      // v8.18.9: 头像 URL —— 空字符串清空，否则上传。后端会校验格式和拒绝 SVG。
+      // v8.18.9: 头像 URL —— 空字符串清空，否则上传。后端会校验格式。
       // 编辑时只发 avatarUrl 字段（即使没改）；创建时也允许直接附带。
       body['avatarUrl'] = avatarUrl.trim() || null;
       if (password) body['password'] = password;
       if (!user) body['email'] = email;
-      // v8.19.0: 角色变更（仅 super_admin）
-      if (canChangeRole && user && role !== user.role) {
-        body['role'] = role;
+      // v8.19.0: 角色变更/创建（仅 super_admin）
+      if (canChangeRole) {
+        if (user) {
+          // Editing: only send if changed
+          if (role !== user.role) body['role'] = role;
+        } else {
+          // Creating: always send role
+          body['role'] = role;
+        }
       }
 
       const url = user
@@ -513,7 +520,7 @@ function UserEditDialog({ user, onClose, onSaved }: {
               spellCheck='false'
             />
             <p className='text-xs opacity-50 mt-1'>
-              {_('Accepts http(s) or data: URLs. SVG is not allowed.')}
+              {_('Accepts http(s), data: URLs, or any image format including SVG.')}
             </p>
             {avatarUrl.trim() && (
               <div className='mt-2 flex items-center gap-2'>

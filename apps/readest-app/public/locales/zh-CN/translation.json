@@ -24,7 +24,7 @@
   "About Readest": "关于 Readest",
   "About Readest Lite": "关于 Readest Lite",
   "Accept": "接受",
-  "Accepts http(s) or data: URLs. SVG is not allowed.": "接受 http(s) 或 data: URL。不允许 SVG。",
+  "Accepts http(s) or data: URLs. SVG is not allowed.": "接受 http(s)、data: URL 或任何图片格式（包括 SVG）。",
   "Accepts http(s), data: URLs, or any image format including SVG": "接受 http(s)、data: URL 或任何图片格式（包括 SVG）",
   "Access Key ID": "访问密钥 ID",
   "Access Token": "访问令牌",
