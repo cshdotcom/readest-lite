@@ -15,7 +15,7 @@ import { navigateToLibrary } from '@/utils/nav';
 import NumberInput from '@/components/settings/NumberInput';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
-import { MdFolderManage } from 'react-icons/md';
+import { MdCreateNewFolder } from 'react-icons/md';
 import { ensureLibraryGroupByType } from '../utils/libraryUtils';
 import GroupManagementModal from './GroupManagementModal';
 
@@ -362,7 +362,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
       <MenuItem
         label={_('Group Management')}
         buttonClass='min-h-8 py-1!'
-        Icon={MdFolderManage}
+        Icon={MdCreateNewFolder}
         onClick={() => {
           setShowGroupManagement(true);
           setIsDropdownOpen?.(false);
