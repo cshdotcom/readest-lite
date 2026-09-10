@@ -65,11 +65,6 @@ const makeAudioBookDoc = (filename: string): BookDoc => {
       title: baseName,
       author: '',
       language: '',
-      publisher: '',
-      description: '',
-      isbn: '',
-      coverUrl: '',
-      publishedDate: 0,
     },
     rendition: { layout: 'reflowable' },
     dir: 'ltr',
@@ -626,6 +621,13 @@ export async function importBook(
     }
     }  // end of else branch (non-audio-book)
 
+    // v8.22.3: 有声书文件短路已设置 loadedBook；非音频文件 try-catch 内会 throw if !loadedBook
+    // 此处统一加一个 guard，确保后续访问安全（用 non-null assertion 而非别名，因为后面有同名 const book: Book）
+    if (!loadedBook) {
+      throw new Error('Failed to load book document');
+    }
+    // v8.22.3: 之后访问用 loadedBook!（non-null assertion）
+
     // v8.22.3: 有声书文件 — fileobj 在 else 分支才赋值，audio book 走 file 直接
     let hash: string;
     if (isPseStream) {
@@ -645,7 +647,7 @@ export async function importBook(
     // alone wrongly collapses distinct files into one book (issue #5411).
     // Salt the hash with the original filename so only same-named PDFs dedupe.
     const metaHash = getMetadataHash(
-      loadedBook.metadata,
+      loadedBook!.metadata,
       format === 'PDF' ? getBaseFilename(filename) : undefined,
     );
     let existingBook = lookupIndex
@@ -687,20 +689,20 @@ export async function importBook(
       }
     }
 
-    const primaryLanguage = getPrimaryLanguage(loadedBook.metadata.language);
+    const primaryLanguage = getPrimaryLanguage(loadedBook!.metadata.language);
     const book: Book = {
       hash,
       format,
       metaHash,
-      title: formatTitle(loadedBook.metadata.title),
-      sourceTitle: formatTitle(loadedBook.metadata.title),
+      title: formatTitle(loadedBook!.metadata.title),
+      sourceTitle: formatTitle(loadedBook!.metadata.title),
       primaryLanguage,
-      author: formatAuthors(loadedBook.metadata.author, primaryLanguage),
+      author: formatAuthors(loadedBook!.metadata.author, primaryLanguage),
       // Cached here because the library list never opens the book: it is a
       // property of the file, so it is re-derived on every (re)import rather
       // than synced as user data.
       hasNarration: hasMediaOverlays(loadedBook) || undefined,
-      metadata: loadedBook.metadata,
+      metadata: loadedBook!.metadata,
       createdAt: existingBook ? existingBook.createdAt : Date.now(),
       uploadedAt: existingBook ? existingBook.uploadedAt : null,
       deletedAt: transient ? Date.now() : null,
@@ -780,7 +782,7 @@ export async function importBook(
       }
     }
     if (saveCover && (!(await fs.exists(getCoverFilename(book), 'Books')) || overwrite)) {
-      let cover = await loadedBook.getCover();
+      let cover = await loadedBook!.getCover();
       if (cover?.type === 'image/svg+xml') {
         try {
           console.log('Converting SVG cover to PNG...');
