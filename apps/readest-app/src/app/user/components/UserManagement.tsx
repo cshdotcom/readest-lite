@@ -567,23 +567,29 @@ function UserEditDialog({ user, onClose, onSaved }: {
               <p className='text-xs opacity-50 mt-1'>0 = {_('Unlimited')}</p>
             </div>
           </div>
-          {/* v8.19.0: 角色变更 — 仅 super_admin 可见，且不能改 super_admin */}
-          {canChangeRole && (
-            <div>
-              <label className='text-sm font-medium mb-1 block'>{_('Role')}</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className='select select-bordered w-full'
-              >
-                <option value='user'>{_('User')}</option>
-                <option value='admin'>{_('Admin')}</option>
-              </select>
+          {/* v8.19.0: 角色变更 — super_admin 可改；普通 admin 只能创建 user 角色账号，但显示只读 select 让其知道 */}
+          <div>
+            <label className='text-sm font-medium mb-1 block'>{_('Role')}</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className='select select-bordered w-full'
+              disabled={!canChangeRole}
+            >
+              <option value='user'>{_('User')}</option>
+              <option value='admin' disabled={!canChangeRole}>{_('Admin')}</option>
+            </select>
+            {!canChangeRole && (
+              <p className='text-xs opacity-50 mt-1'>
+                {_('Only super admin can change roles. New users are created with the User role.')}
+              </p>
+            )}
+            {canChangeRole && (
               <p className='text-xs opacity-50 mt-1'>
                 {_('Super admin role can only be set via SUPER_ADMIN_EMAIL env var.')}
               </p>
-            </div>
-          )}
+            )}
+          </div>
           {error && <div className='text-sm text-red-500'>{error}</div>}
         </div>
 

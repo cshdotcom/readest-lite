@@ -7,6 +7,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
 import { downloadNovel, fetchNovelToc, isNovelImportCancelled } from '@/services/novel/novelImport';
 import type { NovelToc } from '@/services/novel/chapterList';
+import { getAccessToken } from '@/utils/access';
+import { getAPIBaseUrl } from '@/services/environment';
 
 interface ImportNovelDialogProps {
   isOpen: boolean;
@@ -38,6 +40,10 @@ const ImportNovelDialog: React.FC<ImportNovelDialogProps> = ({ isOpen, onClose, 
   );
   const [bookTitle, setBookTitle] = useState('');
   const [titleEdited, setTitleEdited] = useState(false);
+  // v8.22: 带登录的网页小说导入 — cookie / headers
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [cookie, setCookie] = useState('');
+  const [customHeaders, setCustomHeaders] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
   const chapters = toc?.chapters ?? [];
@@ -55,6 +61,9 @@ const ImportNovelDialog: React.FC<ImportNovelDialogProps> = ({ isOpen, onClose, 
     setSelectedChapterIndexes(new Set());
     setBookTitle('');
     setTitleEdited(false);
+    setShowAdvanced(false);
+    setCookie('');
+    setCustomHeaders('');
   }, [isOpen]);
 
   const close = () => {
@@ -108,12 +117,49 @@ const ImportNovelDialog: React.FC<ImportNovelDialogProps> = ({ isOpen, onClose, 
     setBusy(true);
     setError(null);
     try {
-      const parsed = await fetchNovelToc(target);
-      const selected = new Set(parsed.chapters.map((_, index) => index));
-      setToc(parsed);
+      // v8.22: 带登录的网页小说导入 — 若用户填了 cookie / headers，构造一个走 /api/novel/proxy 的 fetchPage
+      let parsedToc: NovelToc;
+      if (cookie.trim() || customHeaders.trim()) {
+        const token = await getAccessToken();
+        let headersObj: Record<string, string> = {};
+        if (customHeaders.trim()) {
+          try {
+            const parsed = JSON.parse(customHeaders);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              for (const [k, v] of Object.entries(parsed)) {
+                if (typeof v === 'string') headersObj[k] = v;
+              }
+            }
+          } catch {
+            setError(_('Custom headers (JSON) — invalid JSON'));
+            setBusy(false);
+            return;
+          }
+        }
+        // 走 lite novel proxy
+        const fetchPage = async (pageUrl: string, signal?: AbortSignal) => {
+          const resp = await fetch(`${getAPIBaseUrl()}/novel/proxy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ url: pageUrl, cookie: cookie.trim() || undefined, headers: headersObj }),
+            signal,
+          });
+          if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.error || 'Proxy fetch failed');
+          }
+          const data = await resp.json();
+          return { html: data.html, finalUrl: data.url };
+        };
+        parsedToc = await fetchNovelToc(target, { fetchPage });
+      } else {
+        parsedToc = await fetchNovelToc(target);
+      }
+      const selected = new Set(parsedToc.chapters.map((_, index) => index));
+      setToc(parsedToc);
       setSourceUrl(target);
       setSelectedChapterIndexes(selected);
-      setBookTitle(suggestedBookTitle(parsed, selected));
+      setBookTitle(suggestedBookTitle(parsedToc, selected));
       setTitleEdited(false);
       setPhase('preview');
     } catch (e) {
@@ -208,6 +254,44 @@ const ImportNovelDialog: React.FC<ImportNovelDialogProps> = ({ isOpen, onClose, 
                 if (e.key === 'Enter') void fetchToc();
               }}
             />
+
+            {/* v8.22: 带登录的网页小说导入 — 高级选项 */}
+            <div className='text-xs'>
+              <button
+                type='button'
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className='btn btn-ghost btn-xs link link-hover text-base-content/70'
+              >
+                {showAdvanced ? _('Hide advanced options') : _('Show advanced options (for login-required sites)')}
+              </button>
+            </div>
+            {showAdvanced && (
+              <div className='space-y-2 border-t border-base-200 pt-2'>
+                <div>
+                  <label className='text-xs font-medium block mb-1'>{_('Cookie')} — {_('Sign-in required for this site')}</label>
+                  <textarea
+                    rows={2}
+                    className='textarea textarea-bordered w-full text-xs'
+                    placeholder='session_id=abc123; user_token=xyz...'
+                    value={cookie}
+                    onChange={(e) => setCookie(e.target.value)}
+                    disabled={busy}
+                  />
+                </div>
+                <div>
+                  <label className='text-xs font-medium block mb-1'>{_('Custom headers (JSON)')}</label>
+                  <textarea
+                    rows={2}
+                    className='textarea textarea-bordered w-full text-xs font-mono'
+                    placeholder='{"X-API-Key": "...", "Referer": "..."}'
+                    value={customHeaders}
+                    onChange={(e) => setCustomHeaders(e.target.value)}
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+            )}
+
             {error && <p className='text-error text-sm leading-relaxed'>{error}</p>}
             <div className='flex justify-end gap-2 pt-1'>
               <button

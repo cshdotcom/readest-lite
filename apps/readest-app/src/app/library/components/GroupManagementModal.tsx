@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { getAccessToken } from '@/utils/access';
 import { getAPIBaseUrl } from '@/services/environment';
@@ -14,6 +15,9 @@ import {
   IoArrowUpOutline,
   IoArrowDownOutline,
 } from 'react-icons/io5';
+
+// 用于判断 createPortal 是否可用（client-side 渲染时）
+const isBrowser = () => typeof document !== 'undefined' && !!document.body;
 
 interface BookGroupItem {
   id: string;
@@ -171,8 +175,9 @@ export default function GroupManagementModal({ onClose, onChanged }: GroupManage
     ? groups.filter((g) => g.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : groups;
 
-  return (
-    <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/60'>
+  if (!isBrowser()) return null;
+  return createPortal(
+    <div className='fixed inset-0 z-[200] flex items-center justify-center bg-black/60'>
       <div className='bg-base-100 rounded-lg shadow-2xl w-full max-w-xl mx-4 max-h-[85vh] flex flex-col'>
         <div className='flex items-center justify-between p-4 border-b border-base-200'>
           <h2 className='text-lg font-bold'>{_('Group Management')}</h2>
@@ -306,6 +311,7 @@ export default function GroupManagementModal({ onClose, onChanged }: GroupManage
           {filteredGroups.length} {_('groups')}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

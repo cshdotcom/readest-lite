@@ -22,6 +22,7 @@ import {
   KOSyncSettings,
   LibraryGroupByType,
   LibrarySortByType,
+  NotionSettings,
   ReadSettings,
   ReadwiseSettings,
   SystemSettings,
@@ -80,6 +81,14 @@ export const DEFAULT_READWISE_SETTINGS = {
   accessToken: '',
   lastSyncedAt: 0,
 } as ReadwiseSettings;
+
+/** v8.22: Notion 默认设置（来自上游 #5949，简化版） */
+export const DEFAULT_NOTION_SETTINGS = {
+  accessToken: '',
+  databaseId: '',
+  autoSync: false,
+  lastSyncedAt: 0,
+} as NotionSettings;
 
 export const DEFAULT_HARDCOVER_SETTINGS = {
   enabled: false,
@@ -160,6 +169,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
 
   kosync: DEFAULT_KOSYNC_SETTINGS,
   readwise: DEFAULT_READWISE_SETTINGS,
+  notion: DEFAULT_NOTION_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
   bookorbit: {
     enabled: false,

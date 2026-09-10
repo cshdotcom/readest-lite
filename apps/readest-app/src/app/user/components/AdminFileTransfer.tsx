@@ -51,9 +51,18 @@ export default function AdminFileTransfer() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
+  // 可搜索的"目标用户"输入框显示值（用 datalist 关联到用户列表）
+  const [targetUserInput, setTargetUserInput] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [targetUserId, setTargetUserId] = useState<string>('');
   const [operating, setOperating] = useState(false);
+
+  // 派生：当前 selectedUser 显示名（用于可搜索 input 的回显）
+  const selectedUserDisplay = (() => {
+    if (!selectedUser) return '';
+    const u = users.find((x) => x.id === selectedUser);
+    return u ? (u.displayName || u.email) : '';
+  })();
 
   // 通过 unknown cast 读取 userRole（运行时是 Lite AuthUser，类型是 supabase User）
   const currentUserRole = (currentUser as unknown as { userRole?: string } | null)?.userRole;
@@ -142,6 +151,7 @@ export default function AdminFileTransfer() {
         });
         setSelectedFiles(new Set());
         setTargetUserId('');
+        setTargetUserInput('');
         loadFiles();
       } else {
         const err = await resp.json();
@@ -180,6 +190,7 @@ export default function AdminFileTransfer() {
         });
         setSelectedFiles(new Set());
         setTargetUserId('');
+        setTargetUserInput('');
         loadFiles();
       } else {
         const err = await resp.json();
@@ -251,20 +262,36 @@ export default function AdminFileTransfer() {
         </button>
       </div>
 
-      {/* 用户选择 + 搜索 */}
+      {/* 用户选择 + 文件搜索（用户选择支持搜索） */}
       <div className='flex gap-2 flex-wrap mb-3'>
-        <select
-          value={selectedUser}
-          onChange={(e) => { setSelectedUser(e.target.value); setSelectedFiles(new Set()); }}
-          className='select select-bordered select-sm w-48'
-        >
-          <option value=''>{_('All Users')}</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.displayName || u.email}
-            </option>
-          ))}
-        </select>
+        <div className='relative'>
+          <IoSearchOutline className='w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none' />
+          <input
+            type='text'
+            list='admin-file-transfer-user-list'
+            value={selectedUserDisplay}
+            onChange={(e) => {
+              const val = e.target.value;
+              const matched = users.find((u) => (u.displayName || u.email) === val);
+              if (matched) {
+                setSelectedUser(matched.id);
+                setSelectedFiles(new Set());
+              } else if (!val) {
+                setSelectedUser('');
+                setSelectedFiles(new Set());
+              }
+            }}
+            placeholder={_('All Users')}
+            className='input input-bordered input-sm pl-9 w-52'
+          />
+          <datalist id='admin-file-transfer-user-list'>
+            {users.map((u) => (
+              <option key={u.id} value={u.displayName || u.email}>
+                {u.email}
+              </option>
+            ))}
+          </datalist>
+        </div>
         <div className='relative flex-1 min-w-[200px]'>
           <IoSearchOutline className='w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50' />
           <input
@@ -306,16 +333,30 @@ export default function AdminFileTransfer() {
               </span>
             </div>
             <div className='flex gap-2 items-center flex-wrap'>
-              <select
-                value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
-                className='select select-bordered select-xs w-40'
-              >
-                <option value=''>{_('Target user')}</option>
+              <input
+                type='text'
+                list='admin-file-transfer-target-user-list'
+                value={targetUserInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setTargetUserInput(val);
+                  const matched = users.find((u) => u.id !== selectedUser && (u.displayName || u.email) === val);
+                  if (matched) {
+                    setTargetUserId(matched.id);
+                  } else if (!val) {
+                    setTargetUserId('');
+                  }
+                }}
+                placeholder={_('Target user')}
+                className='input input-bordered input-xs w-44'
+              />
+              <datalist id='admin-file-transfer-target-user-list'>
                 {users.filter((u) => u.id !== selectedUser).map((u) => (
-                  <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
+                  <option key={u.id} value={u.displayName || u.email}>
+                    {u.email}
+                  </option>
                 ))}
-              </select>
+              </datalist>
               <button
                 onClick={handleMove}
                 disabled={operating || selectedFiles.size === 0 || !targetUserId}

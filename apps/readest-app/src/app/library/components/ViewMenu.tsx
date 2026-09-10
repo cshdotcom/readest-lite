@@ -364,8 +364,10 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
         buttonClass='min-h-8 py-1!'
         Icon={MdCreateNewFolder}
         onClick={() => {
+          // 不要关闭 dropdown！关闭会让 ViewMenu 被 unmount，导致 modal state 丢失。
+          // Modal 用 createPortal 渲染到 document.body，z-index=200 > dropdown 的 z-50，
+          // 全屏覆盖，dropdown 看不见。Modal 关闭后 dropdown 重新可见。
           setShowGroupManagement(true);
-          setIsDropdownOpen?.(false);
         }}
       />
 

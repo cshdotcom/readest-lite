@@ -1,10 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import { FaHeadphonesAlt } from 'react-icons/fa';
 
-export default function PlayerPage() {
+function PlayerContent() {
   const _ = useTranslation();
   const searchParams = useSearchParams();
   const bookHash = searchParams?.get('id') ?? '';
@@ -28,5 +29,19 @@ export default function PlayerPage() {
         {_('Go Back')}
       </button>
     </div>
+  );
+}
+
+export default function PlayerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className='flex min-h-screen items-center justify-center bg-base-100 p-4'>
+          <span className='loading loading-spinner loading-lg' />
+        </div>
+      }
+    >
+      <PlayerContent />
+    </Suspense>
   );
 }

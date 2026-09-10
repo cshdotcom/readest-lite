@@ -3,6 +3,59 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.22.0] — 2026-09-10
+
+### Added — 上游 v0.12.7 / v0.12.8 适配移植 + 修复 + 翻译补全
+
+**上游移植（v0.12.7 + v0.12.8 中适合 web Lite 的功能）：**
+
+- **ReadEra 注释导入**（来自上游 #6032）：
+  - 新增 API `POST /api/readera-import`（multipart/form-data，接受 library.json 文件）
+  - 在 ImportAnnotationsDialog 新增「ReadEra」入口
+  - 流程：上传 ReadEra 备份 zip 内的 library.json → 按书名匹配当前用户库 → 把 citations/bookmarks/position 转为 BookNote 行
+
+- **Notion 笔记同步**（来自上游 #5949）：
+  - 新增 Prisma 设置字段 `NotionSettings`（accessToken / databaseId / autoSync / lastSyncedAt）
+  - 新增 API 路由：
+    - `POST/GET/PATCH /api/notion/[...path]` — 通用 Notion API 代理（解决 Notion API 无 CORS 头）
+    - `POST /api/notion/sync-all` — 列出所有书籍 + 同步所有 notes 到 Notion 数据库
+  - 新增 IntegrationsPanel 入口 + NotionForm 组件：配置 token / databaseId / 自动同步 / 测试连接 / 立即同步
+
+- **带登录的网页小说导入**（来自上游 #6119）：
+  - 新增 API `POST /api/novel/proxy`（服务器端代理抓取，绕过 CORS）
+  - 在 ImportNovelDialog 新增「高级选项」可折叠面板：Cookie 输入框 + 自定义请求头 JSON 输入
+  - 当用户填了 cookie/headers 时改走 `/api/novel/proxy` 代理；SSRF 防护：复用 `isBlockedHost`
+
+### 修复（v8.21.0 用户反馈的问题）
+
+- **分组管理点击没反应**：
+  - 根因：点击「分组管理」时先关闭 Dropdown，但 Dropdown 关闭会让 ViewMenu 卸载，导致 modal state 丢失
+  - 修复：点击时**不关闭** Dropdown，让 GroupManagementModal 用 `createPortal` 渲染到 `document.body`，z-index=200 > Dropdown z-50，全屏覆盖后 dropdown 视觉上看不见
+- **有声书点击闪退**：
+  - 根因：Next.js 16 要求 `useSearchParams` 必须包在 `<Suspense>` 内，否则 build 时会编译警告 + 运行时崩
+  - 修复：`/player` page 加 Suspense wrapper
+- **创建用户无所属用户组选项**：
+  - 之前 role select 只在 super_admin 才显示，普通 admin 看不到角色选择
+  - 修复：role select 永远显示；普通 admin 时 disabled；加提示文本
+- **AdminFileTransfer 用户列表可搜索**：
+  - 之前的 select 是普通下拉，不能搜索；改用 `<input list="...">` + `<datalist>`，可输入搜索匹配
+  - 「选择源用户」与「选择目标用户」都可搜索
+
+### 翻译补全
+
+- 新增 32 个简体中文键 + 48 个 en 键
+- 覆盖：有声书页面 / 创建用户角色 / 文件管理 UI / 分组管理 / ReadEra / Notion / 网页小说导入
+
+### 文档
+
+- ITERATION_PROMPT.md 更新到 v8.22.0
+- README badge 与版本表更新
+
+## [v8.21.1] — 2026-09-10
+
+### Fixed
+- `ViewMenu.tsx` 使用了 `react-icons/md` 中不存在的 `MdFolderManage` 图标，CI 构建失败。改为 `MdCreateNewFolder`。
+
 ## [v8.21.0] — 2026-09-10
 
 ### Added — 回收站批量 + 管理员跨用户文件管理 + 分组管理

@@ -41,6 +41,7 @@ import ABSForm from './integrations/ABSForm';
 import BookOrbitForm from './integrations/BookOrbitForm';
 import KOSyncForm from './integrations/KOSyncForm';
 import ReadwiseForm from './integrations/ReadwiseForm';
+import NotionForm from './integrations/NotionForm';
 import HardcoverForm from './integrations/HardcoverForm';
 import SendToReadestForm from './integrations/SendToReadestForm';
 import LocalSendForm from './integrations/LocalSendForm';
@@ -77,6 +78,7 @@ type SubPage =
   | 'icloud'
   | 'readest-cloud'
   | 'readwise'
+  | 'notion'
   | 'hardcover'
   | 'opds'
   | 'audiobookshelf'
@@ -434,6 +436,12 @@ const IntegrationsPanel: React.FC = () => {
         <ReadwiseForm onBack={() => setSubPage(null)} />
       </div>
     );
+  if (subPage === 'notion')
+    return (
+      <div className='my-4 w-full'>
+        <NotionForm onBack={() => setSubPage(null)} />
+      </div>
+    );
   if (subPage === 'hardcover')
     return (
       <div className='my-4 w-full'>
@@ -597,6 +605,12 @@ const IntegrationsPanel: React.FC = () => {
               title={_('Readwise')}
               status={readwiseStatus}
               onClick={() => setSubPage('readwise')}
+            />
+            <IntegrationRow
+              icon={RiBookReadLine}
+              title={_('Notion')}
+              status={_('Sync notes to Notion')}
+              onClick={() => setSubPage('notion')}
             />
             <IntegrationRow
               icon={RiBook3Line}

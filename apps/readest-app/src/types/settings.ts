@@ -102,6 +102,14 @@ export interface ReadwiseSettings {
   baseUrl?: string;
 }
 
+/** v8.22: Notion 同步设置（来自上游 #5949，简化版） */
+export interface NotionSettings {
+  accessToken: string;
+  databaseId: string;
+  autoSync?: boolean;
+  lastSyncedAt?: number;
+}
+
 /** v0.12.6: BookOrbit settings (KOReader cross-device sync service). */
 export interface BookOrbitSettings {
   enabled: boolean;
@@ -447,6 +455,8 @@ export interface SystemSettings {
 
   kosync: KOSyncSettings;
   readwise: ReadwiseSettings;
+  /** v8.22: Notion 同步（简化版） */
+  notion?: NotionSettings;
   hardcover: HardcoverSettings;
   /** v0.12.1: Readest Cloud settings (Lite stub — not available) */
   readestCloud?: { enabled?: boolean; disabledAt?: number };

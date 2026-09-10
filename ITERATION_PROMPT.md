@@ -1,9 +1,9 @@
-# Readest Lite — 迭代提示词（v8.21.0）
+# Readest Lite — 迭代提示词（v8.22.0）
 
 > 这是 Readest Lite 的「持续迭代提示词」。每次新对话开始时把它丢给助手，能让
 > 助手快速进入「Lite 维护者」上下文，避免每次都重复解释 Lite 与上游 Readest
 > 的区别、为什么某个文件不能改、为什么某个 URL 必须是相对路径，等等。本文档
-> 涵盖从 v8.0 到 v8.21.0 的所有设计决策、迁移、API 端点和 Lite 自定义文件。
+> 涵盖从 v8.0 到 v8.22.0 的所有设计决策、迁移、API 端点和 Lite 自定义文件。
 
 ## 项目定位
 
@@ -685,31 +685,52 @@ Next.js 在多语言 i18n 包 + foliate-js 编译时容易 OOM。
 - `DEPLOY.md` — 部署与验证文档
 - GitHub Release + tag（v8.x.y）+ GHCR image 自动构建
 
-## 当前版本（v8.21.0）
+## 当前版本（v8.22.0）
 
-### 已完成 — v8.21.0
+### 已完成 — v8.22.0
 
-- **回收站批量选择**：RecycleBin 组件每行加 checkbox + 批量恢复/批量删除/全选/反选
-  + 工具栏随选择动态显示；Modal 模式下顶部也有全选 + 批量操作按钮
-- **管理员跨用户文件管理**：
-  - `/api/storage/list` 支持 `?userId=<id>` 与 `?allUsers=1`（admin/super_admin 限定）
-  - 新增 `POST /api/storage/move` 与 `POST /api/storage/copy` 批量移动/复制到目标用户
-  - `/api/storage/delete` 支持 `?userId=<id>` 删他人文件 + `?purge=true` 物理删除
-  - 新增 `AdminFileTransfer` 组件，集成到用户中心：
-    - 用户下拉（默认「所有用户」）+ 文件名搜索
-    - 表格列表（粘性表头 + 列表可滚动 max 400px）
-    - 全选/反选 + 目标用户选择 + 移动/复制/回收/彻底删除 + 二次确认
-- **分组管理（书库三点菜单底部）**：
-  - 新增 `BookGroup` Prisma 模型（唯一约束 `userId+name` + `sortOrder`）
-  - 新增 `GET/POST /api/book-groups` 与 `PUT/DELETE /api/book-groups/[id]`
-  - 删除分组时同步清空 `Book.groupName`，重命名时同步更新
-  - 新增 `GroupManagementModal` 组件，集成到 `ViewMenu` 底部：
-    - 顶部「新分组名称」+「添加」按钮（回车提交）
-    - 中部搜索框（按名称实时过滤）
-    - 每行分组：上下移排序 + 编辑按钮 + 删除按钮
-    - 行内编辑（回车保存 / Esc 取消）+ 删除前确认
-    - 列表可垂直滚动（max 360px），分组多时不会溢出
-- **中文翻译补全**：v8.21 新增 49 个 zh-CN 键 + 75 个 en 键
+- **上游 v0.12.7/v0.12.8 适配移植**：
+  - **ReadEra 注释导入**（上游 #6032）：
+    - 新增 API `POST /api/readera-import`（multipart/form-data）
+    - 在 ImportAnnotationsDialog 新增「ReadEra」入口
+    - 简化版：直接处理 library.json（zip 解压由用户手动），按书名匹配 → BookNote
+  - **Notion 笔记同步**（上游 #5949）：
+    - 新增 NotionSettings 类型字段 + DEFAULT_NOTION_SETTINGS
+    - 新增 API：`POST/GET/PATCH /api/notion/[...path]` 通用代理 + `POST /api/notion/sync-all`
+    - 新增 NotionForm 组件，集成到 IntegrationsPanel
+    - 流程：配置 token/databaseId → 测试连接 → 同步全部书籍 notes 到 Notion 数据库
+  - **带登录的网页小说导入**（上游 #6119）：
+    - 新增 API `POST /api/novel/proxy`（服务器端代理抓取，绕过 CORS）
+    - 在 ImportNovelDialog 新增「高级选项」可折叠面板：Cookie + 自定义请求头 JSON
+    - SSRF 防护：复用 `isBlockedHost`
+  - **Zoom 快捷键调字号**（上游 #6067）：已通过键盘快捷键支持，未额外移植
+  - **库/阅读器独立主题模式**（上游 #6113）：lite 已 stub，未额外移植
+  - **PDF 锁横向 pan toggle**（上游 #6030）：依赖阅读器原生代码，未移植
+  - **Proofread TTS 规则**（上游 #6109）：依赖原生 UI，未移植
+
+- **修复（v8.21.0 用户反馈的问题）**：
+  - 分组管理点击没反应：
+    - 根因：点击「分组管理」时先关闭 Dropdown，但 Dropdown 关闭会让 ViewMenu 卸载，导致 modal state 丢失
+    - 修复：点击时**不关闭** Dropdown，GroupManagementModal 用 `createPortal` 渲染到 `document.body`，z-index=200 > Dropdown z-50
+  - 有声书点击闪退：
+    - 根因：Next.js 16 要求 `useSearchParams` 必须包在 `<Suspense>` 内
+    - 修复：`/player` page 加 Suspense wrapper
+  - 创建用户无所属用户组选项：
+    - 之前 role select 只在 super_admin 才显示
+    - 修复：role select 永远显示；普通 admin 时 disabled；加提示文本
+  - AdminFileTransfer 用户列表可搜索：
+    - 改用 `<input list="...">` + `<datalist>`，可输入搜索匹配
+
+- **翻译补全**：v8.22 新增 32 个 zh-CN 键 + 48 个 en 键
+
+### 已完成 — v8.21.x
+
+- v8.21.1：修复 react-icons/MdFolderManage 不存在导致 CI 失败 → 改为 MdCreateNewFolder
+- v8.21.0：
+  - 回收站批量选择（每行 checkbox + 批量恢复/批量删除/全选/反选 + 工具栏）
+  - 管理员跨用户文件管理（list ?userId= 与 ?allUsers=1 + 移动/复制端点 + AdminFileTransfer 组件）
+  - 分组管理 Modal（书库三点菜单底部：搜索/添加/编辑/删除/上下移排序/滚动）
+  - 49 个 zh-CN 键
 
 ### 已完成 — v8.19.5 到 v8.19.8
 
@@ -723,15 +744,12 @@ Next.js 在多语言 i18n 包 + foliate-js 编译时容易 OOM。
 - v8.19.4: 阅读统计加密同步到所有设备（scope='reading_stats'）
 - v8.19.4: ABS / LocalSend / Audiobook stubs 全部改为非阻塞
 - v8.19.4: Admin 用户详情 Modal（books + recycle-bin 跨用户操作）
-- v8.19.4: ITERATION_PROMPT.md 重写为 ~20000 字综合文档
 
 ### v8.19.3 及之前
 
 - v8.19.3: UpdaterWindow changelog 空 URL guard + 404 fix
-- v8.19.2: localize ALL external URLs + avatar storage tracking + hidden
-  avatar serving
-- v8.19.1: CORS fix, SVG avatar, remove email feature, avatar upload API,
-  SW fix
+- v8.19.2: localize ALL external URLs + avatar storage tracking + hidden avatar serving
+- v8.19.1: CORS fix, SVG avatar, remove email feature, avatar upload API, SW fix
 - v8.19.0: 回收站 + 文件去重 + 角色层级 + recycleBin type fixes
 - v8.18.9: 用户头像 URL + Admin avatar override
 - v8.18.6: 用户列表搜索框
@@ -741,9 +759,11 @@ Next.js 在多语言 i18n 包 + foliate-js 编译时容易 OOM。
 
 ### 下一版计划（占位）
 
-- 评估上游 sync 大合并带来的类型变化（每次上游 release 都要扫一遍 Lite
-  自定义文件清单）
-- 考虑把阅读统计的 books 元数据也通过 reading_stats scope 同步（当前依赖
-  /api/sync 拉 stat_books）
-- 考虑把回收站 expiresAt 暴露给 admin（当前只显示，不让 admin 改）
+- 上游 v0.12.7/v0.12.8 还有以下功能待评估移植：
+  - Zoom 快捷键调字号（#6067）
+  - 库/阅读器独立主题模式（#6113）
+  - PDF 锁横向 pan toggle（#6030）
+  - Proofread TTS 规则创建面板（#6109）
 - 考虑给 GroupManagementModal 加拖拽排序（当前用上下移按钮）
+- 考虑把 ReadEra zip 备份直接接收（用户当前需手动解压）
+- 考虑给 NotionSync 加自动同步（当前仅手动触发）
