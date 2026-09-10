@@ -120,7 +120,6 @@ export async function POST(req: NextRequest) {
     for (const reBook of books) {
       // 匹配当前用户的书
       const title = (reBook.title || '').trim().toLowerCase();
-      const author = (reBook.author || '').trim().toLowerCase();
       let matched = userBooks.find((b) => {
         if (title && b.title && b.title.toLowerCase() === title) return true;
         return false;
