@@ -13,6 +13,7 @@ import {
   IoMoveOutline,
   IoCopyOutline,
   IoTrashOutline,
+  IoChevronForwardOutline,
 } from 'react-icons/io5';
 
 interface FileItem {
@@ -51,6 +52,8 @@ export default function AdminFileTransfer() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
+  // v8.22.2: 折叠/展开 — 默认折叠（像回收站）
+  const [collapsed, setCollapsed] = useState(true);
   // 可搜索的"目标用户"输入框显示值（用 datalist 关联到用户列表）
   const [targetUserInput, setTargetUserInput] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -253,15 +256,41 @@ export default function AdminFileTransfer() {
   return (
     <div className='card bg-base-100 border-base-200 shadow-sm border rounded-lg p-4'>
       <div className='flex items-center justify-between mb-3 gap-2 flex-wrap'>
-        <h3 className='text-lg font-bold flex items-center gap-2'>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className='text-lg font-bold flex items-center gap-2 cursor-pointer hover:opacity-80'
+          title={collapsed ? _('Expand') : _('Collapse')}
+        >
           <IoMoveOutline className='w-5 h-5' />
           {_('Admin File Transfer')}
-        </h3>
-        <button onClick={loadFiles} className='btn btn-ghost btn-sm btn-square' title={_('Refresh')}>
-          <IoRefreshOutline className='w-4 h-4' />
+          {files.length > 0 && (
+            <span className='badge badge-sm badge-ghost'>{files.length}</span>
+          )}
+          <IoChevronForwardOutline
+            className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`}
+          />
         </button>
+        {!collapsed && (
+          <button onClick={loadFiles} className='btn btn-ghost btn-sm btn-square' title={_('Refresh')}>
+            <IoRefreshOutline className='w-4 h-4' />
+          </button>
+        )}
       </div>
 
+      {collapsed && (
+        <div className='text-center py-4 text-base-content/50 text-sm'>
+          <p>{_('Click to manage files across all users — move, copy, or delete.')}</p>
+          <button
+            onClick={() => setCollapsed(false)}
+            className='btn btn-ghost btn-sm mt-2'
+          >
+            {_('Expand')} →
+          </button>
+        </div>
+      )}
+
+      {!collapsed && (
+        <>
       {/* 用户选择 + 文件搜索（用户选择支持搜索） */}
       <div className='flex gap-2 flex-wrap mb-3'>
         <div className='relative'>
@@ -432,6 +461,8 @@ export default function AdminFileTransfer() {
               </tbody>
             </table>
           </div>
+        </>
+      )}
         </>
       )}
     </div>

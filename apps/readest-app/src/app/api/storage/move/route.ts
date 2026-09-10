@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
           errors.push({ fileKey: file.fileKey, error: 'fileKey does not start with source userId' });
           continue;
         }
+        // v8.22.2: 移动到自己 — 跳过（no-op）
+        if (file.userId === targetUserId) {
+          failed++;
+          errors.push({ fileKey: file.fileKey, error: 'Cannot move file to its owner (already there)' });
+          continue;
+        }
         parts[0] = targetUserId;
         const newFileKey = parts.join('/');
 

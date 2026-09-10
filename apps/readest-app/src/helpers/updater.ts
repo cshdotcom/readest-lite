@@ -140,6 +140,8 @@ export const checkForAppUpdates = async (
   isAutoCheck = true,
   updateChannel: 'stable' | 'nightly' = 'stable',
 ): Promise<boolean> => {
+  // v8.22.2: Web Lite 不支持更新检查 — 仅 Tauri 桌面/Android 平台才检查
+  if (!isTauriAppPlatform()) return false;
   const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
   const now = Date.now();
   if (isAutoCheck && lastCheck && now - parseInt(lastCheck, 10) < CHECK_UPDATE_INTERVAL_SEC * 1000)
@@ -204,11 +206,15 @@ export const getLastShownReleaseNotesVersion = () => {
 };
 
 export const checkAppReleaseNotes = async (isAutoCheck = true) => {
+  // v8.22.2: Web 端 Lite 不 fetch 远程 release-notes.json — 用本地 /public/releases/release-notes.json
+  // 但只在 Tauri 平台才触发（web Lite 通过 AboutWindow 自己处理版本显示）
+  if (!isTauriAppPlatform()) return false;
   const currentVersion = getAppVersion();
   const lastShownVersion = getLastShownReleaseNotesVersion();
   if ((lastShownVersion && semver.gt(currentVersion, lastShownVersion)) || !isAutoCheck) {
     try {
       const fetchFunc = isTauriAppPlatform() ? fetch : window.fetch;
+      if (!READEST_CHANGELOG_FILE) return false;
       const res = await fetchFunc(READEST_CHANGELOG_FILE);
       if (res.ok) {
         setUpdaterWindowVisible(true, currentVersion, lastShownVersion, false);

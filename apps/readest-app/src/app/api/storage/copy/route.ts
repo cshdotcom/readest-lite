@@ -52,6 +52,12 @@ export async function POST(req: NextRequest) {
           errors.push({ fileKey: file.fileKey, error: 'fileKey does not start with source userId' });
           continue;
         }
+        // v8.22.2: 复制到自己 — 跳过（避免 target file already exists 错误，让 admin 复制自己的文件不出错）
+        if (file.userId === targetUserId) {
+          failed++;
+          errors.push({ fileKey: file.fileKey, error: 'Cannot copy file to its owner (already exists)' });
+          continue;
+        }
         parts[0] = targetUserId;
         const newFileKey = parts.join('/');
 

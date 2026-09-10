@@ -2525,5 +2525,20 @@
   "Web novel imported": "网页小说已导入",
   "Web novel import failed": "网页小说导入失败",
   "Select chapters": "选择章节",
-  "Include images": "包含图片"
+  "Include images": "包含图片",
+  "Readest Lite supports audiobook playback via local MP3/M4A files or streaming from Audiobookshelf (ABS).": "Readest Lite 支持本地 MP3/M4A 文件播放，或从 Audiobookshelf（ABS）流式播放有声书。",
+  "How to play audiobooks in Lite": "在 Lite 中如何播放有声书",
+  "Method 1: Upload local audio files": "方式 1：上传本地音频文件",
+  "Upload .mp3 / .m4a / .m4b files to your library. The book will be detected as an audiobook and clicking it will start playback here.": "上传 .mp3 / .m4a / .m4b 文件到书库。系统会自动识别为有声书，点击即在此处开始播放。",
+  "Single-file audiobook (.m4b or one .mp3): upload it directly.": "单文件有声书（.m4b 或单个 .mp3）：直接上传。",
+  "Multi-file audiobook (.mp3 chapters): create a folder named like the book, upload all chapters.": "多文件有声书（多个 .mp3 章节）：创建一个与书同名的文件夹，上传所有章节。",
+  "Cover: optional cover.jpg in the same folder will be used as the cover.": "封面：可在同一文件夹放一个 cover.jpg 作为封面（可选）。",
+  "Method 2: Stream from Audiobookshelf (ABS)": "方式 2：从 Audiobookshelf（ABS）流式播放",
+  "Configure an Audiobookshelf server in Settings → Integrations → Audiobookshelf, then browse and stream audiobooks directly.": "在 设置 → 集成 → Audiobookshelf 里配置 ABS 服务器，然后就可以浏览并直接流式播放有声书。",
+  "Server URL: e.g. http://192.168.1.100:13378": "服务器 URL：例如 http://192.168.1.100:13378",
+  "Username + password: your ABS account": "用户名 + 密码：你的 ABS 账号",
+  "After login, audiobooks will appear in the library with a headphone icon.": "登录后，有声书会带耳机图标出现在书库里。",
+  "Method 3: Import an .epub with narration": "方式 3：导入带朗读的 .epub",
+  "Some EPUBs ship with embedded audio narration. Upload the .epub and Readest Lite will detect the embedded audio and offer playback.": "某些 EPUB 内嵌朗读音频。上传 .epub，Readest Lite 会自动识别内嵌音频并提供播放。",
+  "Click to manage files across all users — move, copy, or delete.": "点击管理所有用户的文件 — 移动、复制或删除。"
 }

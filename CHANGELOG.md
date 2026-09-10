@@ -3,6 +3,45 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.22.2] — 2026-09-10
+
+### Fixed — 严重 CORS 错误 + 用户体验改进
+
+**根因修复：reader 页面 CORS 错误（download.readest.com / storage.readest.com）**
+
+- 根因：客户端 fetch 上游 `https://download.readest.com/releases/release-notes.json` 与 `https://storage.readest.com/public/font/dist/...` → 浏览器 CORS 拒绝
+- 修复：
+  - `helpers/updater.ts` — `checkForAppUpdates` 和 `checkAppReleaseNotes` 在 web 平台（非 Tauri）直接返回 false，不再 fetch 远程
+  - `services/constants.ts` — `READEST_CHANGELOG_FILE` / `READEST_UPDATER_FILE` 改为本地相对路径 `/releases/...`，`READEST_PUBLIC_STORAGE_BASE_URL` 改为空字符串
+  - `styles/fonts.ts` — `hostedCJKFonts` 改为空数组，避免引用 storage.readest.com 上的 CJK 字体 → 加载会 404 但不会 CORS 报错
+  - 新增 `public/releases/latest.json` 与 `public/releases/release-notes.json`（Lite 自有的本地更新日志）
+
+**有声书点击改为应用内教程页**
+
+- 之前点击有声书显示「Lite 不支持有声书」冷冰冰提示
+- 改为详细的「3 种播放方式」教程：
+  1. 上传本地 MP3/M4A/M4B 文件（含多文件分章节指导）
+  2. 配置 Audiobookshelf 服务器流式播放
+  3. 导入带朗读的 EPUB
+- 加图标 + 详细步骤说明 + 配置示例
+
+**用户中心布局调整**
+
+- 阅读统计卡片（最核心功能）移到第一位（之前在用户管理下方）
+
+**管理员文件管理可折叠**
+
+- AdminFileTransfer 默认折叠，点击标题展开/收起，与回收站一致
+- 折叠时显示「点击管理所有用户的文件 — 移动、复制或删除」引导文本
+
+**移动/复制文件到自身的边界情况**
+
+- `/api/storage/move` 与 `/api/storage/copy` 增加检查：targetUserId === file.userId 时跳过，避免「Target file already exists」错误
+
+### 翻译
+
+- 新增 15 个简体中文键（有声书教程 + 折叠 UI）
+
 ## [v8.22.0] — 2026-09-10
 
 ### Added — 上游 v0.12.7 / v0.12.8 适配移植 + 修复 + 翻译补全

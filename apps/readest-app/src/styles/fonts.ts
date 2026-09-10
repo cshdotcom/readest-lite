@@ -39,12 +39,9 @@ const getAdditionalBasicFontLinks = () => `
 // CJK bundles Readest serves itself. The default CDN only answers CORS for
 // readest.com origins, so a self-hosted deployment on a custom domain gets each
 // of these blocked unless it points FONT_BASE_URL at a host it controls (#5550).
-const hostedCJKFonts = [
-  'Huiwen-MinchoGBK',
-  'KingHwa_OldSong',
-  'Source Han Serif CN',
-  'GuanKiapTsingKhai-T',
-];
+// v8.22.2: Lite 默认不打包 storage.readest.com 上的 CJK 字体文件，禁用 hostedCJKFonts
+// 避免 404 错误。用户可通过设置自己的 FONT_BASE_URL 镜像启用。
+const hostedCJKFonts: string[] = [];
 
 const DEFAULT_FONT_BASE_URL = '/fonts/dist';
 

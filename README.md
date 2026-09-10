@@ -38,7 +38,7 @@ Readest-Lite 完全开源，遵循 AGPL-3.0 协议，源码可免费获取、部
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.22.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.22.2-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -125,6 +125,29 @@ docker compose up -d
 | **v8.19.x** | **回收站 + 文件去重 + 角色层级 super_admin > admin > user + 审计日志与回滚 + 分组管理 v1（在 SelectModeActions 加「更多」下拉）+ 创建用户时角色选择 + SVG 头像支持 + 隐藏头像文件** |
 | **v8.21.0** | **回收站批量选择（每行 checkbox + 批量恢复/批量删除/全选）· 管理员跨用户文件管理（list 支持 ?userId= 与 ?allUsers=1 + 移动/复制端点 + AdminFileTransfer 组件）· 分组管理 Modal（在书库三点菜单底部：搜索/添加/编辑/删除/上下移排序/滚动）· 49 个简体中文键补全** |
 | **v8.22.0** | **上游 v0.12.7/v0.12.8 适配移植：ReadEra 注释导入（API + ImportAnnotationsDialog 入口）· Notion 笔记同步（代理路由 + IntegrationsPanel + NotionForm）· 带登录的网页小说导入（novel/proxy 端点 + 高级选项 cookie/headers）· 修复分组管理点击无响应（createPortal 渲染到 body）· 修复有声书点击闪退（useSearchParams Suspense 包裹）· 修复创建用户无角色选择（永远显示 disabled select）· AdminFileTransfer 用户列表可搜索（datalist）· 32 个新简体中文键** |
+| **v8.22.2** | **关键修复：reader 页面 CORS 错误（download.readest.com / storage.readest.com）— updater 检查在 web 平台直接 short-circuit，constants.ts URL 全部本地化，新增 /public/releases/release-notes.json · 有声书点击改为「3 种播放方式」教程页（本地 MP3/M4A · Audiobookshelf 流式 · EPUB 内嵌朗读）· 用户中心布局：阅读统计卡片移到第一位 · AdminFileTransfer 默认折叠（与回收站一致）· 移动/复制到自身时友好提示** |
+
+## 有声书播放（v8.22.2）
+
+Readest Lite 支持三种有声书播放方式（点击书库里有声书会弹出教程页）：
+
+### 方式 1：上传本地音频文件
+
+- **单文件有声书**（`.m4b` 或单个 `.mp3`）：直接上传到书库，系统自动识别为有声书
+- **多文件有声书**（多个 `.mp3` 章节）：创建一个与书同名的文件夹，上传所有章节
+- **封面**：可在同一文件夹放一个 `cover.jpg` 作为封面（可选）
+
+### 方式 2：从 Audiobookshelf（ABS）流式播放
+
+1. 在「设置 → 集成 → Audiobookshelf」配置你的 ABS 服务器：
+   - 服务器 URL（例如 `http://192.168.1.100:13378`）
+   - 用户名 + 密码
+2. 登录后，有声书会带耳机图标出现在书库里
+3. 点击即可流式播放（无需下载完整文件）
+
+### 方式 3：导入带朗读的 EPUB
+
+某些 EPUB 内嵌了朗读音频（media overlays）。上传后 Readest Lite 会自动识别并提供「朗读」按钮。
 
 ## 数据持久化
 

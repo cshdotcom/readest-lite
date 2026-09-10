@@ -1,0 +1,39 @@
+{
+  "releases": {
+    "8.22.1": {
+      "date": "2026-09-10",
+      "notes": [
+        "ReadEra Import: Import highlights, bookmarks and reading progress from ReadEra",
+        "Notion Sync: Sync notes and highlights to a Notion database (Integrations → Notion)",
+        "Web Novel Import with Login: Import novels from sites that require login (advanced options: Cookie + custom headers)",
+        "Fixes: Group management modal not opening (Dropdown unmount), Audiobook click crash (Suspense), Create-user role select missing, Admin file transfer user list searchable",
+        "Translations: 32 new zh-CN keys covering audiobook, role select, file management, group management, ReadEra, Notion, web novel import"
+      ]
+    },
+    "8.21.0": {
+      "date": "2026-09-10",
+      "notes": [
+        "Recycle Bin Batch: select multiple items and restore / delete / clear all at once",
+        "Admin Cross-User File Transfer: move / copy files between users; list all users with file counts",
+        "Group Management Modal: full CRUD with search, sort up/down, edit and delete, in the library three-dot menu",
+        "49 zh-CN keys added"
+      ]
+    },
+    "8.19.8": {
+      "date": "2026-09-07",
+      "notes": [
+        "Create User: role select now shown to all admins (super_admin only can change)",
+        "Avatar: SVG format accepted",
+        "Error messages: complete Chinese translations"
+      ]
+    },
+    "8.19.0": {
+      "date": "2026-09-04",
+      "notes": [
+        "Recycle Bin: deleted books kept 30 days (configurable via RECYCLE_BIN_EXPIRE_DAYS)",
+        "File Dedup + Reference Counting: identical files shared across users",
+        "Role Hierarchy: super_admin > admin > user"
+      ]
+    }
+  }
+}

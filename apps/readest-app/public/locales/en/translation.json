@@ -234,5 +234,22 @@
   "Web novel imported": "Web novel imported",
   "Web novel import failed": "Web novel import failed",
   "Select chapters": "Select chapters",
-  "Include images": "Include images"
+  "Include images": "Include images",
+  "Readest Lite supports audiobook playback via local MP3/M4A files or streaming from Audiobookshelf (ABS).": "Readest Lite supports audiobook playback via local MP3/M4A files or streaming from Audiobookshelf (ABS).",
+  "How to play audiobooks in Lite": "How to play audiobooks in Lite",
+  "Method 1: Upload local audio files": "Method 1: Upload local audio files",
+  "Upload .mp3 / .m4a / .m4b files to your library. The book will be detected as an audiobook and clicking it will start playback here.": "Upload .mp3 / .m4a / .m4b files to your library. The book will be detected as an audiobook and clicking it will start playback here.",
+  "Single-file audiobook (.m4b or one .mp3): upload it directly.": "Single-file audiobook (.m4b or one .mp3): upload it directly.",
+  "Multi-file audiobook (.mp3 chapters): create a folder named like the book, upload all chapters.": "Multi-file audiobook (.mp3 chapters): create a folder named like the book, upload all chapters.",
+  "Cover: optional cover.jpg in the same folder will be used as the cover.": "Cover: optional cover.jpg in the same folder will be used as the cover.",
+  "Method 2: Stream from Audiobookshelf (ABS)": "Method 2: Stream from Audiobookshelf (ABS)",
+  "Configure an Audiobookshelf server in Settings → Integrations → Audiobookshelf, then browse and stream audiobooks directly.": "Configure an Audiobookshelf server in Settings → Integrations → Audiobookshelf, then browse and stream audiobooks directly.",
+  "Server URL: e.g. http://192.168.1.100:13378": "Server URL: e.g. http://192.168.1.100:13378",
+  "Username + password: your ABS account": "Username + password: your ABS account",
+  "After login, audiobooks will appear in the library with a headphone icon.": "After login, audiobooks will appear in the library with a headphone icon.",
+  "Method 3: Import an .epub with narration": "Method 3: Import an .epub with narration",
+  "Some EPUBs ship with embedded audio narration. Upload the .epub and Readest Lite will detect the embedded audio and offer playback.": "Some EPUBs ship with embedded audio narration. Upload the .epub and Readest Lite will detect the embedded audio and offer playback.",
+  "Click to manage files across all users — move, copy, or delete.": "Click to manage files across all users — move, copy, or delete.",
+  "Expand": "Expand",
+  "Collapse": "Collapse"
 }
