@@ -1,9 +1,9 @@
-# Readest Lite — 迭代提示词（v8.19.4）
+# Readest Lite — 迭代提示词（v8.21.0）
 
 > 这是 Readest Lite 的「持续迭代提示词」。每次新对话开始时把它丢给助手，能让
 > 助手快速进入「Lite 维护者」上下文，避免每次都重复解释 Lite 与上游 Readest
 > 的区别、为什么某个文件不能改、为什么某个 URL 必须是相对路径，等等。本文档
-> 涵盖从 v8.0 到 v8.19.4 的所有设计决策、迁移、API 端点和 Lite 自定义文件。
+> 涵盖从 v8.0 到 v8.21.0 的所有设计决策、迁移、API 端点和 Lite 自定义文件。
 
 ## 项目定位
 
@@ -685,9 +685,40 @@ Next.js 在多语言 i18n 包 + foliate-js 编译时容易 OOM。
 - `DEPLOY.md` — 部署与验证文档
 - GitHub Release + tag（v8.x.y）+ GHCR image 自动构建
 
-## 当前版本（v8.19.4）
+## 当前版本（v8.21.0）
 
-### 已完成
+### 已完成 — v8.21.0
+
+- **回收站批量选择**：RecycleBin 组件每行加 checkbox + 批量恢复/批量删除/全选/反选
+  + 工具栏随选择动态显示；Modal 模式下顶部也有全选 + 批量操作按钮
+- **管理员跨用户文件管理**：
+  - `/api/storage/list` 支持 `?userId=<id>` 与 `?allUsers=1`（admin/super_admin 限定）
+  - 新增 `POST /api/storage/move` 与 `POST /api/storage/copy` 批量移动/复制到目标用户
+  - `/api/storage/delete` 支持 `?userId=<id>` 删他人文件 + `?purge=true` 物理删除
+  - 新增 `AdminFileTransfer` 组件，集成到用户中心：
+    - 用户下拉（默认「所有用户」）+ 文件名搜索
+    - 表格列表（粘性表头 + 列表可滚动 max 400px）
+    - 全选/反选 + 目标用户选择 + 移动/复制/回收/彻底删除 + 二次确认
+- **分组管理（书库三点菜单底部）**：
+  - 新增 `BookGroup` Prisma 模型（唯一约束 `userId+name` + `sortOrder`）
+  - 新增 `GET/POST /api/book-groups` 与 `PUT/DELETE /api/book-groups/[id]`
+  - 删除分组时同步清空 `Book.groupName`，重命名时同步更新
+  - 新增 `GroupManagementModal` 组件，集成到 `ViewMenu` 底部：
+    - 顶部「新分组名称」+「添加」按钮（回车提交）
+    - 中部搜索框（按名称实时过滤）
+    - 每行分组：上下移排序 + 编辑按钮 + 删除按钮
+    - 行内编辑（回车保存 / Esc 取消）+ 删除前确认
+    - 列表可垂直滚动（max 360px），分组多时不会溢出
+- **中文翻译补全**：v8.21 新增 49 个 zh-CN 键 + 75 个 en 键
+
+### 已完成 — v8.19.5 到 v8.19.8
+
+- v8.19.5: Share 0.0.0.0 URL 修复 + Audiobook player 页面 + RecycleBin 折叠
+- v8.19.6: 审计日志 + 回滚 + 分组管理 v1（在 SelectModeActions 加「更多」下拉）+ 所有书籍上传按钮
+- v8.19.7: 隐藏头像文件（avatar/ 前缀）不出现在文件管理器
+- v8.19.8: 创建用户时角色选择 + SVG 头像支持 + 错误信息补全
+
+### v8.19.4 已完成（之前）
 
 - v8.19.4: 阅读统计加密同步到所有设备（scope='reading_stats'）
 - v8.19.4: ABS / LocalSend / Audiobook stubs 全部改为非阻塞
@@ -715,3 +746,4 @@ Next.js 在多语言 i18n 包 + foliate-js 编译时容易 OOM。
 - 考虑把阅读统计的 books 元数据也通过 reading_stats scope 同步（当前依赖
   /api/sync 拉 stat_books）
 - 考虑把回收站 expiresAt 暴露给 admin（当前只显示，不让 admin 改）
+- 考虑给 GroupManagementModal 加拖拽排序（当前用上下移按钮）

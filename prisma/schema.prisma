@@ -51,6 +51,8 @@ model User {
   // v8.19.0: 回收站条目（删除书籍时移入回收站，30 天后自动清理）
   recycleBinItems    RecycleBinItem[]
   auditLogs         AuditLog[]
+  // v8.21: 用户自定义书籍分组
+  bookGroups         BookGroup[]
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -471,3 +473,24 @@ model UserSetting {
 // 还原时把 Book.deletedAt 清回 null，并恢复 File 行（如有）。
 // 永久删除则物理删除文件 + 删除 Book / BookConfig / BookNote 行。
 // ───────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────
+// book_groups (PK: id) — v8.21 用户自定义书籍分组
+// 用户可在书库三点菜单的「分组管理」对话框里增删改查自己的分组列表。
+// 一个用户可有多个分组；唯一约束 userId+name；sortOrder 越小越靠前。
+// Book.groupName 字段引用此处的 name（不引用 id，因为 book 同步走 JSON，
+// 而 group id 是 server-only 的 UUID，跨设备同步会失配）。
+// ───────────────────────────────────────────────────────────────────────────
+model BookGroup {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String   // 分组名称
+  sortOrder   Int      @default(0) // 排序权重，越小越靠前
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, sortOrder])
+}

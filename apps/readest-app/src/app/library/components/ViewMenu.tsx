@@ -15,7 +15,9 @@ import { navigateToLibrary } from '@/utils/nav';
 import NumberInput from '@/components/settings/NumberInput';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
+import { MdFolderManage } from 'react-icons/md';
 import { ensureLibraryGroupByType } from '../utils/libraryUtils';
+import GroupManagementModal from './GroupManagementModal';
 
 interface ViewMenuProps {
   setIsDropdownOpen?: (isOpen: boolean) => void;
@@ -23,6 +25,7 @@ interface ViewMenuProps {
 
 const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
   const _ = useTranslation();
+  const [showGroupManagement, setShowGroupManagement] = React.useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { envConfig } = useEnv();
@@ -353,6 +356,20 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
           )}
         </ul>
       </MenuItem>
+
+      {/* v8.21: 分组管理 — Lite 自定义功能 */}
+      <hr aria-hidden='true' className='border-base-200 my-1' />
+      <MenuItem
+        label={_('Group Management')}
+        buttonClass='min-h-8 py-1!'
+        Icon={MdFolderManage}
+        onClick={() => {
+          setShowGroupManagement(true);
+          setIsDropdownOpen?.(false);
+        }}
+      />
+
+      {showGroupManagement && <GroupManagementModal onClose={() => setShowGroupManagement(false)} />}
     </Menu>
   );
 };

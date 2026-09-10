@@ -47,6 +47,8 @@ export default function RecycleBin() {
   const [busy, setBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // v8.21: 批量选择
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredItems = searchQuery.trim()
     ? items.filter((i) =>
@@ -166,6 +168,33 @@ export default function RecycleBin() {
     }
   };
 
+  // v8.21: 批量选择
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const selectAllVisible = () => setSelectedIds(new Set(filteredItems.map((i) => i.id)));
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const handleBatchRestore = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    await handleRestore(ids);
+    setSelectedIds(new Set());
+  };
+
+  const handleBatchClear = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(_('Permanently delete {{count}} item(s)? This cannot be undone.', { count: ids.length }))) return;
+    await handleClear(ids);
+    setSelectedIds(new Set());
+  };
+
   if (loading) {
     return (
       <div className='card bg-base-100 border-base-200 shadow-sm border rounded-lg p-4'>
@@ -228,7 +257,7 @@ export default function RecycleBin() {
       ) : (
         <>
           {items.length > 3 && !collapsed && (
-            <div className='relative'>
+            <div className='relative mb-2'>
               <input
                 type='text'
                 value={searchQuery}
@@ -236,6 +265,35 @@ export default function RecycleBin() {
                 placeholder={_('Search recycle bin...')}
                 className='input input-bordered input-sm w-full'
               />
+            </div>
+          )}
+          {!collapsed && selectedIds.size > 0 && (
+            <div className='flex items-center gap-2 bg-base-200/70 rounded p-2 mb-2 flex-wrap text-xs'>
+              <span className='font-medium'>
+                {selectedIds.size} {_('selected')}
+              </span>
+              <button
+                onClick={() => void handleBatchRestore()}
+                disabled={busy}
+                className='btn btn-ghost btn-xs gap-1'
+              >
+                <IoArrowUndoOutline className='w-3.5 h-3.5' />
+                {_('Restore Selected')}
+              </button>
+              <button
+                onClick={() => void handleBatchClear()}
+                disabled={busy}
+                className='btn btn-ghost btn-xs text-error gap-1'
+              >
+                <IoTrashOutline className='w-3.5 h-3.5' />
+                {_('Delete Selected')}
+              </button>
+              <button
+                onClick={deselectAll}
+                className='btn btn-ghost btn-xs link link-hover'
+              >
+                {_('Deselect')}
+              </button>
             </div>
           )}
           {!collapsed && (
@@ -247,6 +305,12 @@ export default function RecycleBin() {
                   key={it.id}
                   className='flex items-start gap-2 p-2 rounded-lg bg-base-200/50 hover:bg-base-200 transition'
                 >
+                  <input
+                    type='checkbox'
+                    checked={selectedIds.has(it.id)}
+                    onChange={() => toggleSelect(it.id)}
+                    className='checkbox checkbox-xs mt-1'
+                  />
                   <div className='flex-1 min-w-0'>
                     <div className='font-medium text-sm truncate'>
                       {it.bookTitle || it.bookHash.slice(0, 12)}
@@ -305,9 +369,33 @@ export default function RecycleBin() {
               <h2 className='text-lg font-bold'>
                 {_('Recycle Bin')} ({items.length})
               </h2>
-              <button onClick={() => setShowAllModal(false)} className='btn btn-ghost btn-sm btn-square' title={_('Close')}>
-                <IoRefresh className='w-5 h-5 rotate-45' />
-              </button>
+              <div className='flex items-center gap-2'>
+                <button
+                  onClick={selectAllVisible}
+                  className='btn btn-ghost btn-xs link link-hover'
+                >
+                  {_('Select All')}
+                </button>
+                <button
+                  onClick={() => void handleBatchRestore()}
+                  disabled={busy || selectedIds.size === 0}
+                  className='btn btn-ghost btn-xs gap-1'
+                >
+                  <IoArrowUndoOutline className='w-3.5 h-3.5' />
+                  {_('Restore')} {selectedIds.size > 0 && `(${selectedIds.size})`}
+                </button>
+                <button
+                  onClick={() => void handleBatchClear()}
+                  disabled={busy || selectedIds.size === 0}
+                  className='btn btn-ghost btn-xs text-error gap-1'
+                >
+                  <IoTrashOutline className='w-3.5 h-3.5' />
+                  {_('Delete')} {selectedIds.size > 0 && `(${selectedIds.size})`}
+                </button>
+                <button onClick={() => setShowAllModal(false)} className='btn btn-ghost btn-sm btn-square' title={_('Close')}>
+                  <IoRefresh className='w-5 h-5 rotate-45' />
+                </button>
+              </div>
             </div>
             <div className='flex-1 overflow-y-auto p-3 space-y-2'>
               {(searchQuery.trim() ? filteredItems : items).map((it) => {
@@ -317,6 +405,12 @@ export default function RecycleBin() {
                     key={it.id}
                     className='flex items-start gap-2 p-2 rounded-lg bg-base-200/50'
                   >
+                    <input
+                      type='checkbox'
+                      checked={selectedIds.has(it.id)}
+                      onChange={() => toggleSelect(it.id)}
+                      className='checkbox checkbox-xs mt-1'
+                    />
                     <div className='flex-1 min-w-0'>
                       <div className='font-medium text-sm truncate'>
                         {it.bookTitle || it.bookHash.slice(0, 12)}

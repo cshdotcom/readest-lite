@@ -38,7 +38,7 @@ Readest-Lite 完全开源，遵循 AGPL-3.0 协议，源码可免费获取、部
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.19.3-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.21.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 🌐 **官网**：https://cshdotcom.github.io/readestl/
 📚 **部署教程**：https://cshdotcom.github.io/readestl/deploy.html
@@ -121,6 +121,9 @@ docker compose up -d
 | **v8.12.2** | **防御性文件名生成（即使 `getStorageType`/`book.format`/`book.title` 异常也永不返回空串）· 上传/下载失败响应体加 `hint`+`received` 字段方便诊断 · 放宽 download fallback `parts.length` 检查** |
 | **v8.13** | **上游 Readest v0.11.18 非覆盖式合入：Auto Scroll 阅读模式 · 中键自动滚动 · 翻页动画 · PDF 暗色模式页眉页脚 · 两指滚动 vs 捏合 · View Transitions API gating · TTS 大改版（无缝 Web Audio + 关书继续播放 + mini player + 词典朗读按钮）· 主题分段控件 · 校对规则开关 · OPDS 子目录爬取 + 自托管认证 · Calibre 自定义列 · 按阅读进度排序** |
 | **v8.13.1** | **翻页动画补全（幻灯片/卷页 JS-only port）· 修复「关于」页面版本号显示（package.json 0.11.4 → 8.13.1）· bookService 并发导入崩溃修复（createDir 幂等）** |
+| **v8.18.x** | **上游 v0.12.1 → v0.12.6 批量合入 + v8.18.x 一系列 Lite 自定义：feed:// 分享 · 加密设置同步 · 用户头像 URL · 阅读统计加密同步 · ABS/LocalSend/Audiobook stubs 非阻塞 · Admin 用户详情 Modal** |
+| **v8.19.x** | **回收站 + 文件去重 + 角色层级 super_admin > admin > user + 审计日志与回滚 + 分组管理 v1（在 SelectModeActions 加「更多」下拉）+ 创建用户时角色选择 + SVG 头像支持 + 隐藏头像文件** |
+| **v8.21.0** | **回收站批量选择（每行 checkbox + 批量恢复/批量删除/全选）· 管理员跨用户文件管理（list 支持 ?userId= 与 ?allUsers=1 + 移动/复制端点 + AdminFileTransfer 组件）· 分组管理 Modal（在书库三点菜单底部：搜索/添加/编辑/删除/上下移排序/滚动）· 49 个简体中文键补全** |
 
 ## 数据持久化
 

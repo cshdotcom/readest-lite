@@ -27,6 +27,7 @@ import UserManagement from './components/UserManagement';
 import DownloadTasks from './components/DownloadTasks';
 import ReadingStatsCard from './components/ReadingStatsCard';
 import RecycleBin from './components/RecycleBin';
+import AdminFileTransfer from './components/AdminFileTransfer';
 
 // Readest Lite — 用户中心。
 // Pro 体系已删除：移除 PlansComparison / Checkout / Stripe / IAP / useAvailablePlans。
@@ -194,7 +195,11 @@ const ProfilePage = () => {
                   {/* v8.19.0: 管理员可见用户管理（admin 或 super_admin） */}
                   {(user as unknown as { userRole?: string })?.userRole === 'admin'
                     || (user as unknown as { userRole?: string })?.userRole === 'super_admin' ? (
-                    <UserManagement />
+                    <>
+                      <UserManagement />
+                      {/* v8.21: 管理员跨用户文件管理（移动/复制/删除/批量操作/所有用户视图） */}
+                      <AdminFileTransfer />
+                    </>
                   ) : null}
                   {/* v8.10: 阅读统计卡片（横向滚动 + 点击弹出详情 Modal） */}
                   <ReadingStatsCard />

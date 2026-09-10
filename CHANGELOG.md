@@ -3,6 +3,59 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.21.0] — 2026-09-10
+
+### Added — 回收站批量 + 管理员跨用户文件管理 + 分组管理
+
+**回收站批量选择：**
+- `RecycleBin.tsx` 每行加 checkbox（`selectedIds` state）
+- 列表内每项 + Modal 内每项都有 checkbox
+- 展开后工具栏显示：选中数量 / 恢复选中 / 删除选中 / 取消选择
+- Modal 顶部加：全选 + 批量恢复 + 批量删除（带选中数）
+- 批量删除前 `confirm()` 二次确认
+
+**管理员跨用户文件管理：**
+- `/api/storage/list` 支持 `?userId=<id>`（看指定用户）与 `?allUsers=1`（看所有用户）
+  - 跨用户场景响应附 `user_id` / `user_email` / `user_display_name` 字段
+  - 非 admin 调用跨用户参数返回 403
+- 新增 `POST /api/storage/move` — 批量移动文件到目标用户（物理 move + File 行 userId/fileKey 变更 + 审计日志）
+- 新增 `POST /api/storage/copy` — 批量复制文件到目标用户（物理 copy + 新 File 行 + 审计日志）
+- `/api/storage/delete` 支持 `?userId=<id>`（admin 删他人文件）+ `?purge=true`（物理删除跳过回收站）
+- 新增 `AdminFileTransfer` 组件，集成到用户中心（仅 admin/super_admin 可见）：
+  - 顶部用户下拉（默认「所有用户」）+ 文件名搜索框 + 刷新按钮
+  - 表格列：勾选框 / 文件名 / 用户（跨用户视图时显示）/ 大小 / 创建日期
+  - 表头粘性 + 列表可垂直滚动（max 400px）
+  - 工具栏：全选/反选 + 目标用户选择 + 移动/复制/回收/彻底删除
+  - 所有批量操作带二次确认
+
+**分组管理（书库三点菜单底部）：**
+- 新增 Prisma 模型 `BookGroup`（id/userId/name/sortOrder/createdAt/updatedAt）
+  - 唯一约束 `userId+name`，索引 `userId+sortOrder`
+  - `User` 模型新增 `bookGroups BookGroup[]` 关系
+- 新增 API：
+  - `GET /api/book-groups` — 列出当前用户的所有分组（按 sortOrder 升序）
+  - `POST /api/book-groups` — 创建分组（名称必填，最长 100 字符，防重名）
+  - `PUT /api/book-groups/[id]` — 修改分组名 / 排序（同步更新 Book.groupName）
+  - `DELETE /api/book-groups/[id]` — 删除分组（同步清空 Book.groupName）
+- 新增 `GroupManagementModal` 组件，集成到 `ViewMenu` 底部：
+  - 顶部「新分组名称」输入框 + 「添加」按钮（回车提交）
+  - 中部搜索框（按名称实时过滤）
+  - 每行分组：上下移排序按钮 + 编辑按钮 + 删除按钮
+  - 编辑模式直接行内编辑分组名（回车保存 / Esc 取消）
+  - 删除前 confirm 提示，提示该分组下的书籍将变为未分组
+  - 列表可垂直滚动（max 360px），分组多时不会溢出
+  - 底部统计显示当前过滤后分组数
+
+**中文翻译补全：**
+- 新增 49 个简体中文键 + 75 个 en 键
+- 覆盖：分组管理 / 回收站批量 / 跨用户文件管理 / 权限错误
+
+### Fixed
+- 管理员查看用户文件时显示「仅管理员」错误：`/api/storage/list` 已支持 `?userId=` 与 `?allUsers=1`
+- 无法跨用户移动/复制文件：新增 `/api/storage/move` 与 `/api/storage/copy` 端点 + UI
+- 回收站无法批量恢复/删除：RecycleBin 已加 checkbox + 批量操作工具栏
+- 分组管理无搜索/编辑/删除/排序：新建 GroupManagementModal 完整实现
+
 ## [v8.19.4] — 2026-09-06
 
 ### Added — 阅读统计加密同步 + 有声书 stub 非阻塞 + Admin 用户详情
