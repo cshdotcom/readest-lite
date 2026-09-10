@@ -1,15 +1,103 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
-import { FaHeadphonesAlt, FaBookOpen, FaServer, FaCloudDownloadAlt, FaPlayCircle } from 'react-icons/fa';
+import { getAccessToken } from '@/utils/access';
+import { getAPIBaseUrl } from '@/services/environment';
+import {
+  FaHeadphonesAlt,
+  FaBookOpen,
+  FaServer,
+  FaCloudDownloadAlt,
+  FaPlayCircle,
+} from 'react-icons/fa';
+import AudiobookPlayer from './AudiobookPlayer';
+
+interface AudioChapter {
+  index: number;
+  title: string;
+  fileKey: string;
+  fileSize: number;
+  fileName: string;
+}
+
+interface BookMetadata {
+  bookHash: string;
+  title: string;
+  author: string;
+  coverImageUrl: string | null;
+  chapters: AudioChapter[];
+  message?: string;
+}
 
 function PlayerContent() {
   const _ = useTranslation();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const bookHash = searchParams?.get('id') ?? '';
 
+  const [loading, setLoading] = useState(true);
+  const [metadata, setMetadata] = useState<BookMetadata | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bookHash) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          setError(_('Not authenticated'));
+          setLoading(false);
+          return;
+        }
+        const resp = await fetch(`${getAPIBaseUrl()}/audiobook/metadata/${bookHash}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) {
+          setError(_('Failed to load audiobook metadata'));
+          setLoading(false);
+          return;
+        }
+        const data = (await resp.json()) as BookMetadata | { error: string };
+        if (cancelled) return;
+        if ('error' in data) {
+          setError(data.error);
+          setMetadata(null);
+        } else {
+          setMetadata(data);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : _('Failed to load'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookHash, _]);
+
+  // 如果有 metadata 且 chapters 不为空 → 显示播放器
+  if (metadata && metadata.chapters.length > 0) {
+    return (
+      <AudiobookPlayer
+        bookHash={bookHash}
+        bookTitle={metadata.title}
+        bookAuthor={metadata.author}
+        coverImageUrl={metadata.coverImageUrl}
+        chapters={metadata.chapters}
+        onClose={() => router.back()}
+      />
+    );
+  }
+
+  // 否则显示教程页
   return (
     <div className='flex min-h-screen flex-col items-center justify-center bg-base-100 p-6 max-w-2xl mx-auto'>
       <FaHeadphonesAlt className='mb-6 text-6xl text-base-content/30' />
@@ -17,8 +105,20 @@ function PlayerContent() {
         {_('Audiobook Playback')}
       </h1>
       <p className='text-center text-base text-base-content/70 mb-6'>
-        {_('Readest Lite supports audiobook playback via local MP3/M4A files or streaming from Audiobookshelf (ABS).')}
+        {_('Readest Lite has a built-in audiobook player. Upload audio files to get started.')}
       </p>
+
+      {loading && (
+        <div className='mb-4'>
+          <span className='loading loading-spinner loading-lg' />
+        </div>
+      )}
+
+      {error && (
+        <div className='alert alert-error mb-4'>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className='card bg-base-200 border-base-300 border rounded-lg p-5 w-full'>
         <h2 className='text-lg font-semibold mb-3 flex items-center gap-2'>
@@ -76,7 +176,7 @@ function PlayerContent() {
       )}
 
       <button
-        onClick={() => window.history.back()}
+        onClick={() => router.back()}
         className='btn btn-primary mt-6'
       >
         {_('Go Back')}

@@ -18,7 +18,12 @@ export type BookFormat =
   | 'TXT'
   | 'MD'
   // Streaming audiobook from an Audiobookshelf server; filePath is abs://<serverId>/<itemId>
-  | 'ABS';
+  | 'ABS'
+  // v8.22.3: 内置有声书格式 — 上传 .mp3/.m4a/.m4b 文件后用这些格式
+  // book.format === 'MP3' | 'M4A' | 'M4B' 时点击有声书按钮走内置播放器
+  | 'MP3'
+  | 'M4A'
+  | 'M4B';
 export type BookNoteType = 'bookmark' | 'annotation' | 'excerpt' | 'notebook';
 export type ReadingStatus = 'unread' | 'reading' | 'finished' | 'abandoned';
 export type HighlightStyle = 'highlight' | 'underline' | 'squiggly';

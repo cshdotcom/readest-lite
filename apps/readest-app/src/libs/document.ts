@@ -154,6 +154,10 @@ export const EXTS: Record<BookFormat, string> = {
   // this extension is never used to write or look up a file. It exists only
   // to satisfy the Record<BookFormat, string> exhaustiveness check.
   ABS: 'abs',
+  // v8.22.3: 内置有声书格式
+  MP3: 'mp3',
+  M4A: 'm4a',
+  M4B: 'm4b',
 };
 
 export const MIMETYPES: Record<BookFormat, string[]> = {
@@ -169,6 +173,10 @@ export const MIMETYPES: Record<BookFormat, string[]> = {
   MD: ['text/markdown', 'text/x-markdown'],
   // Never matched against a real download; see the EXTS.ABS comment above.
   ABS: ['application/vnd.audiobookshelf'],
+  // v8.22.3: 内置有声书 MIME
+  MP3: ['audio/mpeg', 'audio/mp3'],
+  M4A: ['audio/mp4', 'audio/m4a', 'audio/x-m4a'],
+  M4B: ['audio/mp4', 'audio/m4b', 'audio/x-m4b'],
 };
 
 export interface DocumentLoaderOptions {

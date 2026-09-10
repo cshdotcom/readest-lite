@@ -7,7 +7,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { hasFileSyncMirror, useMakeBookAvailable } from '@/hooks/useMakeBookAvailable';
 import { eventDispatcher } from '@/utils/event';
 import { navigateToReader, showReaderWindow } from '@/utils/nav';
-import { isAudiobook } from '@/utils/audiobook';
+import { isAudiobook, isLocalAudiobook } from '@/utils/audiobook';
 
 interface UseOpenBookOptions {
   setLoading: Dispatch<SetStateAction<boolean>>;
@@ -37,7 +37,8 @@ export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptio
       // it opens in the full-screen player instead of the reader. Short-circuit
       // before any of the file-availability logic below, which assumes a real
       // file backs `book.filePath`.
-      if (isAudiobook(book)) {
+      // v8.22.3: local audio audiobooks (.mp3/.m4a/.m4b) also route to the player.
+      if (isAudiobook(book) || isLocalAudiobook(book)) {
         router.push(`/player?id=${book.hash}`);
         return;
       }

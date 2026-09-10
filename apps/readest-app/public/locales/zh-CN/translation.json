@@ -2540,5 +2540,19 @@
   "After login, audiobooks will appear in the library with a headphone icon.": "登录后，有声书会带耳机图标出现在书库里。",
   "Method 3: Import an .epub with narration": "方式 3：导入带朗读的 .epub",
   "Some EPUBs ship with embedded audio narration. Upload the .epub and Readest Lite will detect the embedded audio and offer playback.": "某些 EPUB 内嵌朗读音频。上传 .epub，Readest Lite 会自动识别内嵌音频并提供播放。",
-  "Click to manage files across all users — move, copy, or delete.": "点击管理所有用户的文件 — 移动、复制或删除。"
+  "Click to manage files across all users — move, copy, or delete.": "点击管理所有用户的文件 — 移动、复制或删除。",
+  "Readest Lite has a built-in audiobook player. Upload audio files to get started.": "Readest Lite 自带内置有声书播放器。上传音频文件即可开始。",
+  "Failed to load audiobook metadata": "加载有声书元数据失败",
+  "No audio files found": "未找到音频文件",
+  "This book has no audio files. See the tutorial on how to add audiobooks.": "这本书没有音频文件。请查看如何添加有声书的教程。",
+  "Now Playing": "正在播放",
+  "Previous chapter": "上一章",
+  "Next chapter": "下一章",
+  "Seek": "跳转",
+  "Volume": "音量",
+  "Mute": "静音",
+  "Unmute": "取消静音",
+  "Playback speed": "播放速度",
+  "Failed to play. Check your authentication.": "播放失败。请检查你的登录状态。",
+  "Failed to load audio. The file may be missing or unsupported.": "加载音频失败。文件可能丢失或格式不支持。"
 }

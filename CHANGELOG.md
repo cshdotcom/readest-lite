@@ -3,6 +3,48 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.22.3] — 2026-09-10
+
+### Added — 内置 HTML5 有声书播放器（无需外部服务）
+
+Readest Lite 现在自带内置有声书播放器，不再依赖 Audiobookshelf。直接上传 .mp3/.m4a/.m4b 即可播放。
+
+**新增 API：**
+- `GET /api/audiobook/metadata/[bookHash]` — 返回该书的音频章节列表（自动按 fileKey 排序，提取章节标题）
+- `GET /api/audiobook/stream/[bookHash]?fileKey=...&token=...` — 流式返回音频文件，支持 HTTP Range（拖动进度条），token 通过 URL 传递（HTML5 `<audio>` 无法设置 Authorization header），24 小时 TTL
+
+**前端组件：**
+- 新增 `AudiobookPlayer.tsx`：
+  - 进度条拖动跳转
+  - 播放/暂停/上一章/下一章
+  - 音量调节 + 静音按钮
+  - 播放速度（0.75× / 1× / 1.25× / 1.5× / 1.75× / 2×）
+  - 章节列表（点击切换）
+  - 自动保存进度到 localStorage（每 5 秒），下次打开继续播放
+  - 自动连续播放下一章
+  - 显示封面、章节标题
+- `/player` 页面改为：先调用 metadata API，如果该书有音频文件 → 渲染 AudiobookPlayer；否则显示 3 种播放方式教程
+
+**bookService 改造：**
+- 新增音频文件短路：文件扩展名是 .mp3/.m4a/.m4b 时跳过 foliate-js 解析，直接构造最小化 BookDoc
+- 新增 `makeAudioBookDoc` 辅助函数（用文件名作为元数据）
+- BookFormat 类型扩展：`'MP3' | 'M4A' | 'M4B'`
+- `EXTS` 和 `MIMETYPES` 字典也扩展
+
+**导航更新：**
+- `useOpenBook.ts`：本地音频书（MP3/M4A/M4B）也走 `/player` 路由
+- 新增 `isLocalAudiobook` 和 `isAnyAudiobook` 辅助函数
+
+**README 重构：**
+- NodeByte 社区链接放到 README 顶部最显眼位置（for-the-badge 风格）
+- 新增「🔊 有声书播放」详细章节，包括 3 种方式 + 播放器功能列表 + 鉴权说明
+
+### 修改
+- ITERATION_PROMPT.md 更新到 v8.22.3
+- CHANGELOG.md 加 v8.22.3 条目
+- README badge 与版本表更新
+- package.json: 8.22.2 → 8.22.3
+
 ## [v8.22.2] — 2026-09-10
 
 ### Fixed — 严重 CORS 错误 + 用户体验改进
