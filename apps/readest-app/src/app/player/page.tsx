@@ -1,11 +1,10 @@
 'use client';
 
 import { Suspense, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 function PlayerRedirect() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     // v8.23: Audiobook feature removed — redirect back to library
