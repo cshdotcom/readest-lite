@@ -532,9 +532,18 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const handleAddFeedSubmit = async (url: string) => {
     const parsed = await fetchAndParseFeed(url);
     const book = createFeedBook(url, parsed);
+    // v8.22.5: 防重复 — 如果书库已有相同 hash 的书，提示用户并跳过
+    const existingLibrary = useLibraryStore.getState().library;
+    const existing = existingLibrary.find((b) => b.hash === book.hash);
+    if (existing) {
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Already subscribed to "{{title}}"', { title: book.title }),
+        timeout: 3000,
+      });
+      return;
+    }
     if (appService) {
-      // v8.18.5: 使用 ensureFeedBookCover 而非 generateFeedCoverSvg，
-      // 这样会自动抓取站点 favicon 并嵌入封面。
       try {
         book.coverImageUrl = await ensureFeedBookCover(appService, book);
       } catch (e) {

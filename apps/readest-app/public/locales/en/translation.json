@@ -279,5 +279,6 @@
   "Move {{count}} file(s) to {{users}} user?": "Move {{count}} file(s) to {{users}} user?",
   "Copy {{count}} file(s) to {{users}} user(s)?": "Copy {{count}} file(s) to {{users}} user(s)?",
   "Copied {{count}} file(s) to {{users}} user(s)": "Copied {{count}} file(s) to {{users}} user(s)",
-  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles."
+  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.",
+  "Already subscribed to \"{{title}}\"": "Already subscribed to \"{{title}}\""
 }

@@ -1,6 +1,6 @@
 {
   "name": "@readest/readest-app",
-  "version": "8.22.4",
+  "version": "8.22.5",
   "private": true,
   "type": "module",
   "scripts": {

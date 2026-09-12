@@ -2562,5 +2562,6 @@
   "Move {{count}} file(s) to {{users}} user?": "将 {{count}} 个文件移动到 {{users}} 位用户？",
   "Copy {{count}} file(s) to {{users}} user(s)?": "将 {{count}} 个文件复制到 {{users}} 位用户？",
   "Copied {{count}} file(s) to {{users}} user(s)": "已复制 {{count}} 个文件到 {{users}} 位用户",
-  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS 订阅书籍暂不支持在阅读器中打开。请在书库视图浏览订阅文章。"
+  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS 订阅书籍暂不支持在阅读器中打开。请在书库视图浏览订阅文章。",
+  "Already subscribed to \"{{title}}\"": "已订阅「{{title}}」"
 }
