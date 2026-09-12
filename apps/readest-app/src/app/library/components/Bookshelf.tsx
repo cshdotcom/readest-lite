@@ -56,8 +56,7 @@ import { eventDispatcher } from '@/utils/event';
 import { getLocalBookFilename } from '@/utils/book';
 import { MIMETYPES, EXTS } from '@/libs/document';
 import { makeSafeFilename } from '@/utils/misc';
-import { isTauriAppPlatform, getAPIBaseUrl } from '@/services/environment';
-import { getAccessToken } from '@/utils/access';
+import { isTauriAppPlatform } from '@/services/environment';
 import { isLocalSendEnabled } from '@/services/localsend/devicePrefs';
 import { splitLibraryOpenIds } from '@/utils/audiobook';
 
@@ -242,9 +241,6 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [showStatusAlert, setShowStatusAlert] = useState(false);
   const [showGroupingModal, setShowGroupingModal] = useState(false);
-  // v8.22.5: BookGroup DB entries — fetched when groupBy=Group so user-created
-  // groups appear in the shelf even without books assigned.
-  const [dbGroups, setDbGroups] = useState<{ id: string; name: string; sortOrder: number }[]>([]);
   const [importBookUrl] = useState(searchParams?.get('url') || '');
 
   const abortDeletionRef = useRef(false);
@@ -323,72 +319,16 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
   const currentBookshelfItems = useMemo(() => {
     if (groupBy === LibraryGroupByType.Group) {
-      // Use existing generateBookshelfItems for group mode
       const groupName = manualGroupName || '';
       if (groupId && !manualGroupName) {
         return [];
       }
-      const items = generateBookshelfItems(filteredShelfBooks, groupName);
-      // v8.22.5: Merge in BookGroup DB entries as empty groups so user-created
-      // groups appear even when no books are assigned to them yet.
-      // dbGroups is fetched separately and injected here.
-      if (dbGroups.length > 0 && !groupName) {
-        // Top-level only — when navigating into a sub-group, don't inject.
-        const existingGroupNames = new Set(
-          items
-            .filter((item): item is BooksGroup => 'books' in item)
-            .map((g) => g.name),
-        );
-        for (const dbg of dbGroups) {
-          if (!existingGroupNames.has(dbg.name)) {
-            items.push({
-              id: dbg.id,
-              name: dbg.name,
-              displayName: dbg.name,
-              books: [],
-              updatedAt: Date.now(),
-            } as BooksGroup);
-            existingGroupNames.add(dbg.name);
-          }
-        }
-      }
-      return items;
+      return generateBookshelfItems(filteredShelfBooks, groupName);
     } else {
       if (groupId) return filteredShelfBooks;
       return createBookGroups(filteredShelfBooks, groupBy);
     }
-  }, [filteredShelfBooks, groupBy, groupId, manualGroupName, dbGroups]);
-
-  // v8.22.5: Fetch BookGroup DB entries when in Group view mode
-  useEffect(() => {
-    if (groupBy !== LibraryGroupByType.Group) {
-      setDbGroups([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const token = await getAccessToken();
-        if (!token) return;
-        const resp = await fetch(`${getAPIBaseUrl()}/book-groups`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (!cancelled) {
-            setDbGroups((data.groups || []).map((g: { id: string; name: string; sortOrder: number }) => ({
-              id: g.id,
-              name: g.name,
-              sortOrder: g.sortOrder,
-            })));
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch book groups:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [groupBy]);
+  }, [filteredShelfBooks, groupBy, groupId, manualGroupName]);
 
   useEffect(() => {
     if (groupId && currentShelfBooks.length === 0) {
