@@ -57,19 +57,14 @@ export async function POST(req: NextRequest) {
           errors.push({ fileKey: file.fileKey, error: 'fileKey does not start with source userId' });
           continue;
         }
-        // v8.22.2: 移动到自己 — 跳过（no-op）
-        if (file.userId === targetUserId) {
-          failed++;
-          errors.push({ fileKey: file.fileKey, error: 'Cannot move file to its owner (already there)' });
-          continue;
-        }
+        // v8.22.4: 允许移动到自己（虽然没意义但不应报错）
         parts[0] = targetUserId;
         const newFileKey = parts.join('/');
 
         const existing = await prismaClient.file.findUnique({ where: { fileKey: newFileKey } });
         if (existing) {
-          failed++;
-          errors.push({ fileKey: file.fileKey, error: 'Target file already exists' });
+          // 目标已有该文件 — 跳过（不报错）
+          moved++;
           continue;
         }
 

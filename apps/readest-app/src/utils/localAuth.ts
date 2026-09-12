@@ -306,6 +306,10 @@ export const ensureAdminUser = async (): Promise<void> => {
   if (!email || !password) {
     throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD must be set');
   }
+  // v8.22.4: SUPER_ADMIN_EMAIL 环境变量 — 若设置且等于 ADMIN_EMAIL，则该账号角色为 super_admin
+  // 否则为 admin
+  const superAdminEmail = (process.env['SUPER_ADMIN_EMAIL'] || '').toLowerCase().trim();
+  const targetRole = superAdminEmail && email === superAdminEmail ? 'super_admin' : 'admin';
   const userId = uuidV5(email);
   const existing = await prismaClient.user.findUnique({ where: { id: userId } });
   if (existing) {
@@ -314,15 +318,16 @@ export const ensureAdminUser = async (): Promise<void> => {
       const encryptedPass = await argon2.hash(password);
       await prismaClient.user.update({
         where: { id: userId },
-        data: { encryptedPass, email, role: 'admin' },
+        data: { encryptedPass, email, role: targetRole },
       });
-      console.log(`[init] admin password updated for ${email}`);
-    } else if (existing.role !== 'admin') {
-      // 确保 role 是 admin
+      console.log(`[init] admin password updated for ${email} (role=${targetRole})`);
+    } else if (existing.role !== targetRole) {
+      // 确保 role 正确（super_admin 或 admin）
       await prismaClient.user.update({
         where: { id: userId },
-        data: { role: 'admin' },
+        data: { role: targetRole },
       });
+      console.log(`[init] admin role updated to ${targetRole} for ${email}`);
     }
     return;
   }
@@ -332,8 +337,8 @@ export const ensureAdminUser = async (): Promise<void> => {
       id: userId,
       email,
       encryptedPass,
-      role: 'admin',
+      role: targetRole,
     },
   });
-  console.log(`[init] admin user created: ${email} (${userId})`);
+  console.log(`[init] admin user created: ${email} (${userId}, role=${targetRole})`);
 };

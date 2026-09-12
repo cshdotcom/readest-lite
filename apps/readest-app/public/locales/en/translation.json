@@ -270,5 +270,14 @@
   "Unmute": "Unmute",
   "Playback speed": "Playback speed",
   "Failed to play. Check your authentication.": "Failed to play. Check your authentication.",
-  "Failed to load audio. The file may be missing or unsupported.": "Failed to load audio. The file may be missing or unsupported."
+  "Failed to load audio. The file may be missing or unsupported.": "Failed to load audio. The file may be missing or unsupported.",
+  "Select target user(s)": "Select target user(s)",
+  "Target user(s)": "Target user(s)",
+  "user(s) selected": "user(s) selected",
+  "Search users...": "Search users...",
+  "Move supports only one target user. Use Copy for multi-user.": "Move supports only one target user. Use Copy for multi-user.",
+  "Move {{count}} file(s) to {{users}} user?": "Move {{count}} file(s) to {{users}} user?",
+  "Copy {{count}} file(s) to {{users}} user(s)?": "Copy {{count}} file(s) to {{users}} user(s)?",
+  "Copied {{count}} file(s) to {{users}} user(s)": "Copied {{count}} file(s) to {{users}} user(s)",
+  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles."
 }

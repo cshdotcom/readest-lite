@@ -2554,5 +2554,13 @@
   "Unmute": "取消静音",
   "Playback speed": "播放速度",
   "Failed to play. Check your authentication.": "播放失败。请检查你的登录状态。",
-  "Failed to load audio. The file may be missing or unsupported.": "加载音频失败。文件可能丢失或格式不支持。"
+  "Failed to load audio. The file may be missing or unsupported.": "加载音频失败。文件可能丢失或格式不支持。",
+  "Select target user(s)": "选择目标用户",
+  "Target user(s)": "目标用户",
+  "user(s) selected": "位用户已选",
+  "Move supports only one target user. Use Copy for multi-user.": "移动只支持单个目标用户。多用户请用复制。",
+  "Move {{count}} file(s) to {{users}} user?": "将 {{count}} 个文件移动到 {{users}} 位用户？",
+  "Copy {{count}} file(s) to {{users}} user(s)?": "将 {{count}} 个文件复制到 {{users}} 位用户？",
+  "Copied {{count}} file(s) to {{users}} user(s)": "已复制 {{count}} 个文件到 {{users}} 位用户",
+  "RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.": "RSS 订阅书籍暂不支持在阅读器中打开。请在书库视图浏览订阅文章。"
 }

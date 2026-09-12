@@ -57,8 +57,14 @@ export default function AdminFileTransfer() {
   // 可搜索的"目标用户"输入框显示值（用 datalist 关联到用户列表）
   const [targetUserInput, setTargetUserInput] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [targetUserId, setTargetUserId] = useState<string>('');
+  // v8.22.4: 多目标用户选择（批量复制）
+  const [showTargetDropdown, setShowTargetDropdown] = useState(false);
+  const [targetUserSearch, setTargetUserSearch] = useState('');
+  const [targetUserIds, setTargetUserIds] = useState<Set<string>>(new Set());
   const [operating, setOperating] = useState(false);
+
+  // v8.22.4: 单目标用户 ID（向后兼容）— 取选中的第一个，若无则空
+  const targetUserId = targetUserIds.size > 0 ? Array.from(targetUserIds)[0] : '';
 
   // 派生：当前 selectedUser 显示名（用于可搜索 input 的回显）
   const selectedUserDisplay = (() => {
@@ -132,19 +138,23 @@ export default function AdminFileTransfer() {
   const handleDeselectAll = () => setSelectedFiles(new Set());
 
   const handleMove = async () => {
-    if (selectedFiles.size === 0 || !targetUserId) {
+    if (selectedFiles.size === 0 || targetUserIds.size === 0) {
       eventDispatcher.dispatch('toast', { message: _('Select files and target user first'), type: 'info' });
       return;
     }
-    const targetUser = users.find((u) => u.id === targetUserId);
-    if (!confirm(_('Move {{count}} file(s) to {{user}}?', { count: selectedFiles.size, user: targetUser?.email || targetUser?.displayName }))) return;
+    if (targetUserIds.size > 1) {
+      eventDispatcher.dispatch('toast', { message: _('Move supports only one target user. Use Copy for multi-user.'), type: 'info' });
+      return;
+    }
+    const targetId = Array.from(targetUserIds)[0]!;
+    if (!confirm(_('Move {{count}} file(s) to {{users}} user?', { count: selectedFiles.size, users: 1 }))) return;
     setOperating(true);
     try {
       const token = await getAccessToken();
       const resp = await fetch(`${getAPIBaseUrl()}/storage/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileKeys: Array.from(selectedFiles), targetUserId }),
+        body: JSON.stringify({ fileKeys: Array.from(selectedFiles), targetUserId: targetId }),
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -153,8 +163,8 @@ export default function AdminFileTransfer() {
           type: 'success',
         });
         setSelectedFiles(new Set());
-        setTargetUserId('');
-        setTargetUserInput('');
+        setTargetUserIds(new Set());
+        setShowTargetDropdown(false);
         loadFiles();
       } else {
         const err = await resp.json();
@@ -171,29 +181,32 @@ export default function AdminFileTransfer() {
   };
 
   const handleCopy = async () => {
-    if (selectedFiles.size === 0 || !targetUserId) {
+    if (selectedFiles.size === 0 || targetUserIds.size === 0) {
       eventDispatcher.dispatch('toast', { message: _('Select files and target user first'), type: 'info' });
       return;
     }
-    const targetUser = users.find((u) => u.id === targetUserId);
-    if (!confirm(_('Copy {{count}} file(s) to {{user}}?', { count: selectedFiles.size, user: targetUser?.email || targetUser?.displayName }))) return;
+    const targetCount = targetUserIds.size;
+    if (!confirm(_('Copy {{count}} file(s) to {{users}} user(s)?', { count: selectedFiles.size, users: targetCount }))) return;
     setOperating(true);
     try {
       const token = await getAccessToken();
       const resp = await fetch(`${getAPIBaseUrl()}/storage/copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileKeys: Array.from(selectedFiles), targetUserId }),
+        body: JSON.stringify({
+          fileKeys: Array.from(selectedFiles),
+          targetUserIds: Array.from(targetUserIds),
+        }),
       });
       if (resp.ok) {
         const data = await resp.json();
         eventDispatcher.dispatch('toast', {
-          message: _('Copied {{count}} file(s)', { count: data.copied }),
+          message: _('Copied {{count}} file(s) to {{users}} user(s)', { count: data.copied, users: data.targetUsersCount }),
           type: 'success',
         });
         setSelectedFiles(new Set());
-        setTargetUserId('');
-        setTargetUserInput('');
+        setTargetUserIds(new Set());
+        setShowTargetDropdown(false);
         loadFiles();
       } else {
         const err = await resp.json();
@@ -362,33 +375,98 @@ export default function AdminFileTransfer() {
               </span>
             </div>
             <div className='flex gap-2 items-center flex-wrap'>
-              <input
-                type='text'
-                list='admin-file-transfer-target-user-list'
-                value={targetUserInput}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setTargetUserInput(val);
-                  const matched = users.find((u) => u.id !== selectedUser && (u.displayName || u.email) === val);
-                  if (matched) {
-                    setTargetUserId(matched.id);
-                  } else if (!val) {
-                    setTargetUserId('');
-                  }
-                }}
-                placeholder={_('Target user')}
-                className='input input-bordered input-xs w-44'
-              />
-              <datalist id='admin-file-transfer-target-user-list'>
-                {users.filter((u) => u.id !== selectedUser).map((u) => (
-                  <option key={u.id} value={u.displayName || u.email}>
-                    {u.email}
-                  </option>
-                ))}
-              </datalist>
+              {/* v8.22.4: 目标用户下拉（可搜索 + 可多选 + 可滚动 + 不溢出） */}
+              <div className='relative'>
+                <button
+                  onClick={() => setShowTargetDropdown(!showTargetDropdown)}
+                  className='btn btn-outline btn-xs gap-1 w-44 justify-between'
+                  title={_('Select target user(s)')}
+                >
+                  <span className='truncate'>
+                    {targetUserIds.size === 0
+                      ? _('Target user(s)')
+                      : `${targetUserIds.size} ${_('user(s) selected')}`}
+                  </span>
+                  <IoChevronForwardOutline className={`w-3 h-3 transition-transform ${showTargetDropdown ? 'rotate-90' : ''}`} />
+                </button>
+                {showTargetDropdown && (
+                  <div className='absolute top-full left-0 mt-1 w-72 bg-base-100 border border-base-300 rounded shadow-lg z-50'>
+                    <div className='p-2 border-b border-base-200'>
+                      <input
+                        type='text'
+                        value={targetUserSearch}
+                        onChange={(e) => setTargetUserSearch(e.target.value)}
+                        placeholder={_('Search users...')}
+                        className='input input-bordered input-xs w-full'
+                        autoFocus
+                      />
+                    </div>
+                    <div className='max-h-60 overflow-y-auto'>
+                      {users
+                        .filter((u) => u.id !== selectedUser)
+                        .filter((u) => {
+                          if (!targetUserSearch.trim()) return true;
+                          const q = targetUserSearch.toLowerCase();
+                          return (
+                            u.email.toLowerCase().includes(q) ||
+                            (u.displayName || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((u) => (
+                          <label
+                            key={u.id}
+                            className='flex items-center gap-2 p-2 hover:bg-base-200 cursor-pointer text-xs'
+                          >
+                            <input
+                              type='checkbox'
+                              checked={targetUserIds.has(u.id)}
+                              onChange={() => {
+                                setTargetUserIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(u.id)) next.delete(u.id);
+                                  else next.add(u.id);
+                                  return next;
+                                });
+                              }}
+                              className='checkbox checkbox-xs'
+                            />
+                            <div className='flex-1 min-w-0'>
+                              <div className='truncate font-medium'>
+                                {u.displayName || u.email}
+                              </div>
+                              <div className='text-xs opacity-50 truncate'>{u.email}</div>
+                            </div>
+                          </label>
+                        ))}
+                    </div>
+                    <div className='p-2 border-t border-base-200 flex justify-between text-xs'>
+                      <button
+                        onClick={() => {
+                          setTargetUserIds(new Set(users.filter((u) => u.id !== selectedUser).map((u) => u.id)));
+                        }}
+                        className='btn btn-ghost btn-xs link link-hover'
+                      >
+                        {_('Select All')}
+                      </button>
+                      <button
+                        onClick={() => setTargetUserIds(new Set())}
+                        className='btn btn-ghost btn-xs link link-hover'
+                      >
+                        {_('Clear')}
+                      </button>
+                      <button
+                        onClick={() => setShowTargetDropdown(false)}
+                        className='btn btn-ghost btn-xs'
+                      >
+                        {_('Done')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={handleMove}
-                disabled={operating || selectedFiles.size === 0 || !targetUserId}
+                disabled={operating || selectedFiles.size === 0 || targetUserIds.size === 0}
                 className='btn btn-primary btn-xs gap-1'
               >
                 <IoMoveOutline className='w-3 h-3' />
@@ -396,7 +474,7 @@ export default function AdminFileTransfer() {
               </button>
               <button
                 onClick={handleCopy}
-                disabled={operating || selectedFiles.size === 0 || !targetUserId}
+                disabled={operating || selectedFiles.size === 0 || targetUserIds.size === 0}
                 className='btn btn-outline btn-xs gap-1'
               >
                 <IoCopyOutline className='w-3 h-3' />

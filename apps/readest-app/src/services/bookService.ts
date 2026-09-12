@@ -1009,6 +1009,15 @@ async function openBookFileContent(
 }
 
 export async function loadBookContent(fs: FileSystem, book: Book): Promise<BookContent> {
+  // v8.22.4: feed:// books have no file — they're constructed dynamically by
+  // makeFeedBook from the feed manifest + cached article HTML.
+  const source = await resolveBookContentSource(fs, book);
+  if (source.kind === 'feed') {
+    // Build the BookDoc in-memory and return it as a BookContent without a file.
+    // Reader needs to handle 'file: null' for feed books (TODO upstream — for
+    // now we throw a clear error pointing users to the tutorial).
+    throw new Error('RSS feed books are not yet supported in the reader. Please use the library view to browse feed articles.');
+  }
   const { file } = await openBookFileContent(fs, book);
   return { book, file };
 }
