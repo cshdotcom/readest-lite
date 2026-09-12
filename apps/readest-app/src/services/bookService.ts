@@ -49,8 +49,6 @@ import {
   type BookFileContentSource,
 } from './bookContent';
 
-};
-
 export function buildBookLookupIndex(books: Book[], osPlatform?: OsPlatform): BookLookupIndex {
   const byHash = new Map<string, Book>();
   const byMetaKey = new Map<string, Book[]>();
@@ -462,8 +460,6 @@ export async function importBook(
   } = options;
   const isPseStream = typeof file === 'string' && isPseStreamFileName(file);
 
-  const fileBaseName = typeof file === 'string' ? getFilename(file) : file.name;
-  const fileExt = fileBaseName.split('.').pop()?.toLowerCase() || '';
   let loadedBook: BookDoc | undefined;
   let fileobj: File | undefined;
   // TXT conversion replaces `fileobj` with a plain in-memory EPUB File. Track
