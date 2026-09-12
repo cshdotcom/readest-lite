@@ -55,6 +55,7 @@ docker run -d \
   -e ADMIN_EMAIL=admin@example.com \
   -e ADMIN_PASSWORD=changeme \
   -e ADMIN_USERNAME=Admin \
+  -e SUPER_ADMIN_EMAIL=admin@example.com \
   --restart unless-stopped \
   ghcr.io/cshdotcom/readest-lite:latest
 
@@ -82,6 +83,7 @@ docker compose up -d
 | `ADMIN_EMAIL` | ✅ | — | 管理员邮箱，首次启动自动创建账号 |
 | `ADMIN_PASSWORD` | ✅ | — | 管理员密码，建议 16+ 位随机字符 |
 | `ADMIN_USERNAME` | 可选 | — | v8.1：管理员显示名 |
+| `SUPER_ADMIN_EMAIL` | 可选 | — | 超级管理员邮箱，**设为与 ADMIN_EMAIL 相同的值**即可获得 super_admin 角色（可创建/降级 admin），重启容器后自动生效 |
 | `ADMIN_AVATAR_URL` | 可选 | — | v8.18.9：管理员头像 URL（`http(s)://` 或 `data:image/*`，拒绝 SVG）。优先级高于 DB 里手动设置的头像 |
 | `PORT` | 可选 | 8225 | 容器内监听端口 |
 | `JWT_SECRET` | 可选 | 派生值 | JWT 签名密钥，不设时由 ADMIN_EMAIL+ADMIN_PASSWORD 派生 |

@@ -37,7 +37,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const allUsers = reqQuery.allUsers === '1' || reqQuery.allUsers === 'true';
 
     // v8.21: 跨用户权限校验
-    const isAdmin = user.userRole === 'admin' || user.userRole === 'super_admin';
+    // v8.23: 增加 SUPER_ADMIN_EMAIL env fallback — 即使用户 DB role 没更新，
+    // env 里配置的超级管理员邮箱也能通过校验
+    const isAdmin =
+      user.userRole === 'admin' ||
+      user.userRole === 'super_admin' ||
+      (process.env['SUPER_ADMIN_EMAIL'] &&
+        user.email.toLowerCase() === process.env['SUPER_ADMIN_EMAIL'].toLowerCase().trim());
     let targetUserIds: string[] = [user.id];
     let crossUser = false;
     if (allUsers || (queryUserId && queryUserId !== user.id)) {
