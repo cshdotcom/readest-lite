@@ -54,17 +54,12 @@ export default function AdminFileTransfer() {
   const [selectedUser, setSelectedUser] = useState<string>('');
   // v8.22.2: 折叠/展开 — 默认折叠（像回收站）
   const [collapsed, setCollapsed] = useState(true);
-  // 可搜索的"目标用户"输入框显示值（用 datalist 关联到用户列表）
-  const [targetUserInput, setTargetUserInput] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   // v8.22.4: 多目标用户选择（批量复制）
   const [showTargetDropdown, setShowTargetDropdown] = useState(false);
   const [targetUserSearch, setTargetUserSearch] = useState('');
   const [targetUserIds, setTargetUserIds] = useState<Set<string>>(new Set());
   const [operating, setOperating] = useState(false);
-
-  // v8.22.4: 单目标用户 ID（向后兼容）— 取选中的第一个，若无则空
-  const targetUserId = targetUserIds.size > 0 ? Array.from(targetUserIds)[0] : '';
 
   // 派生：当前 selectedUser 显示名（用于可搜索 input 的回显）
   const selectedUserDisplay = (() => {
