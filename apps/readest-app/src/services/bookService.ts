@@ -49,29 +49,6 @@ import {
   type BookFileContentSource,
 } from './bookContent';
 
-// v8.22.3: 内置有声书快速识别 — 上传 .mp3/.m4a/.m4b 文件直接走有声书流程，跳过 BookDoc 解析
-const AUDIO_BOOK_EXTS = ['mp3', 'm4a', 'm4b', 'ogg', 'wav', 'aac', 'flac'];
-const AUDIO_EXT_TO_FORMAT: Record<string, 'MP3' | 'M4A' | 'M4B'> = {
-  mp3: 'MP3',
-  m4a: 'M4A',
-  m4b: 'M4B',
-};
-
-// 构造一个最小化的 BookDoc 用于音频文件 — 不需要解析内容，只用文件名作为元数据
-const makeAudioBookDoc = (filename: string): BookDoc => {
-  const baseName = filename.replace(/\.[^.]+$/, '');
-  return {
-    metadata: {
-      title: baseName,
-      author: '',
-      language: '',
-    },
-    rendition: { layout: 'reflowable' },
-    dir: 'ltr',
-    sections: [],
-    splitTOCHref: (href: string) => [href],
-    getCover: async () => null,
-  };
 };
 
 export function buildBookLookupIndex(books: Book[], osPlatform?: OsPlatform): BookLookupIndex {
@@ -485,11 +462,8 @@ export async function importBook(
   } = options;
   const isPseStream = typeof file === 'string' && isPseStreamFileName(file);
 
-  // v8.22.3: 有声书快速识别 — 文件名是 .mp3/.m4a/.m4b 时直接走有声书流程
   const fileBaseName = typeof file === 'string' ? getFilename(file) : file.name;
   const fileExt = fileBaseName.split('.').pop()?.toLowerCase() || '';
-  const isAudioBookFile = AUDIO_BOOK_EXTS.includes(fileExt);
-
   let loadedBook: BookDoc | undefined;
   let fileobj: File | undefined;
   // TXT conversion replaces `fileobj` with a plain in-memory EPUB File. Track
@@ -504,10 +478,6 @@ export async function importBook(
     rollbackSnapshot = { ...book };
   };
 
-  // v8.22.3: 有声书文件短路 — 构造最小化 BookDoc，跳过 foliate-js 解析
-  if (isAudioBookFile) {
-    loadedBook = makeAudioBookDoc(fileBaseName);
-  }
   try {
     let format: BookFormat;
     let filename: string;
@@ -519,11 +489,6 @@ export async function importBook(
       throw new Error('Transient import is only supported for file paths');
     }
 
-    // v8.22.3: 有声书文件短路 — 已在前面用 makeAudioBookDoc 构造好了 loadedBook
-    if (isAudioBookFile) {
-      format = AUDIO_EXT_TO_FORMAT[fileExt] || 'MP3';
-      filename = fileBaseName;
-    } else {
     try {
       if (isPseStream) {
         const data = parsePseStreamFileName(file as string);
@@ -619,9 +584,7 @@ export async function importBook(
     } catch (error) {
       throw new Error(`Failed to open the book file: ${(error as Error).message || error}`);
     }
-    }  // end of else branch (non-audio-book)
-
-    // v8.22.3: 有声书文件短路已设置 loadedBook；非音频文件 try-catch 内会 throw if !loadedBook
+    // v8.22.3 guard；非音频文件 try-catch 内会 throw if !loadedBook
     // 此处统一加一个 guard，确保后续访问安全（用 non-null assertion 而非别名，因为后面有同名 const book: Book）
     if (!loadedBook) {
       throw new Error('Failed to load book document');
@@ -632,12 +595,6 @@ export async function importBook(
     let hash: string;
     if (isPseStream) {
       hash = md5(file as string);
-    } else if (isAudioBookFile) {
-      // 有声书：用文件名 + 大小做哈希（音质可能轻微差异但同名视为同一本）
-      const fileObj = typeof file === 'string' ? null : file;
-      hash = fileObj
-        ? await partialMD5(fileObj)
-        : md5(`${fileBaseName}:${fileExt}`);
     } else {
       hash = nativeHash ?? (await partialMD5(fileobj!));
     }

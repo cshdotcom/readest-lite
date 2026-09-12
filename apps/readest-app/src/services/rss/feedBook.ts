@@ -2,7 +2,7 @@ import { md5 } from '@/utils/md5';
 import { buildFeedBookUrl, parseFeedBookUrl } from './feedBookUrl';
 import { generateCoverSvg } from '@/services/send/conversion/coverGenerator';
 import { getCoverFilename } from '@/utils/book';
-import { fetchFeedFavicon } from './favicon';
+// v8.23: favicon auto-detection removed
 import type { ParsedFeed } from '@/types/rss';
 import type { Book } from '@/types/book';
 import type { AppService } from '@/types/system';
@@ -109,17 +109,8 @@ export async function ensureFeedBookCover(
     const feedUrl = book.metadata?.feedUrl ?? (book.url ? parseFeedBookUrl(book.url).feedUrl : '');
     const coverFilename = getCoverFilename(book);
     if (!(await appService.exists(coverFilename, 'Books'))) {
-      // v8.18.3: try to fetch site favicon. Best-effort — null means we
-      // fall back to the default RSS orange icon.
-      let favicon: { bytes: ArrayBuffer; mime: string } | null = null;
-      if (feedUrl) {
-        try {
-          favicon = await fetchFeedFavicon(feedUrl);
-        } catch (e) {
-          console.warn('favicon fetch failed for', feedUrl, e);
-        }
-      }
-      const pngBytes = await rasterizeCoverSvg(generateFeedCoverSvg(feedUrl, book.title, favicon));
+      // v8.23: favicon removed
+      const pngBytes = await rasterizeCoverSvg(generateFeedCoverSvg(feedUrl, book.title, null));
       await appService.createDir(book.hash, 'Books', true);
       await appService.writeFile(coverFilename, 'Books', pngBytes);
     }

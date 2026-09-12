@@ -66,9 +66,13 @@ async function main() {
       needUpdate = true;
     }
 
-    // 确保 role 是 admin
-    if (existing.role !== 'admin') {
-      updateData.role = 'admin';
+    // v8.23: 计算 targetRole — 如果 SUPER_ADMIN_EMAIL == ADMIN_EMAIL，则 super_admin，否则 admin
+    const superEmail = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+    const targetRole = (superEmail && superEmail === email) ? 'super_admin' : 'admin';
+
+    // 确保 role 正确（不要降级已有的 super_admin）
+    if (existing.role !== targetRole) {
+      updateData.role = targetRole;
       needUpdate = true;
     }
 
@@ -87,16 +91,19 @@ async function main() {
     }
   } else {
     const encryptedPass = await argon2.hash(password);
+    // v8.23: 用 targetRole 而非硬编码 admin
+    const superEmail2 = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+    const targetRole2 = (superEmail2 && superEmail2 === email) ? 'super_admin' : 'admin';
     await prisma.user.create({
       data: {
         id: userId,
         email,
         encryptedPass,
-        role: 'admin',
-        displayName, // v8.1.0：null 时 DB 写 NULL
+        role: targetRole2,
+        displayName,
       },
     });
-    console.log(`[init] admin user created: ${email} (${userId})`);
+    console.log(`[init] admin user created: ${email} (${userId}, role=${targetRole2})`);
   }
 
   // v8.19.0: 处理 SUPER_ADMIN_EMAIL — 把指定邮箱对应的用户提升为 super_admin

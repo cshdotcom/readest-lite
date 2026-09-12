@@ -3,7 +3,30 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [v8.22.3] — 2026-09-10
+## [v8.23.0] — 2026-09-12
+
+### Removed
+
+- **有声书内置播放器**：移除 AudiobookPlayer 组件、/api/audiobook/* 端点、bookService 音频短路、BookFormat MP3/M4A/M4B 类型。加到 TODO 待办列表，计划重新开发更稳定的版本
+- **RSS 自动 favicon 识别**：移除 favicon.ts 和 feedBook.ts 中的 favicon 抓取逻辑。RSS 书籍封面现在使用默认 RSS 橙色图标
+
+### Fixed
+
+- **超级管理员 ENV 识别**（彻底修复）：
+  - 根因：`init-admin.mjs` 脚本（容器启动时运行）硬编码 `role = 'admin'`，在 Phase 1 会把已有的 super_admin 降级回 admin
+  - 修复：计算 `targetRole = (SUPER_ADMIN_EMAIL == ADMIN_EMAIL) ? 'super_admin' : 'admin'`，不再降级
+  - `localAuth.ts` 的 `ensureAdminUser` 也同步修复（v8.22.4 已修但 init-admin.mjs 才是实际运行的脚本）
+- **分组管理与书库 GroupBy 融合**：
+  - Bookshelf.tsx 在 groupBy=Group 时从 /api/book-groups 拉取 BookGroup DB 条目
+  - 将 DB 中的空分组注入书架列表，用户在 GroupManagementModal 创建的分组现在会出现在书库中
+
+### Added
+
+- RSS 防重复：`handleAddFeedSubmit` 增加防重复检查
+- README 新增 TODO 待办列表
+- README NodeByte 社区置顶（for-the-badge 风格）
+
+## [v8.22.5] — 2026-09-12
 
 ### Added — 内置 HTML5 有声书播放器（无需外部服务）
 

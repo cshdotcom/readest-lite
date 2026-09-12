@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Readest Lite — 自托管电子书阅读器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; background: #1a1a2e; color: #e0e0e0; line-height: 1.8; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .hero { text-align: center; padding: 60px 20px 40px; }
+        .hero h1 { font-size: 3em; color: #6c5ce7; margin-bottom: 10px; }
+        .hero p { font-size: 1.3em; color: #a0a0b0; max-width: 600px; margin: 0 auto 30px; }
+        .badges { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 40px; }
+        .badge { display: inline-block; padding: 10px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; font-size: 1.1em; transition: transform 0.2s; }
+        .badge:hover { transform: scale(1.05); }
+        .badge-nodebyte { background: #e17055; color: #fff; }
+        .badge-deploy { background: #00b894; color: #fff; }
+        .badge-github { background: #2d3436; color: #fff; border: 1px solid #636e72; }
+        .section { padding: 40px 20px; border-top: 1px solid #2d3436; }
+        .section h2 { color: #6c5ce7; font-size: 1.8em; margin-bottom: 20px; }
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .feature { background: #16213e; border-radius: 10px; padding: 25px; border: 1px solid #2d3436; }
+        .feature h3 { color: #00b894; margin-bottom: 10px; }
+        .feature p { color: #a0a0b0; font-size: 0.95em; }
+        .todo { background: #16213e; border-radius: 10px; padding: 25px; border: 1px solid #e17055; margin-top: 20px; }
+        .todo h3 { color: #e17055; margin-bottom: 15px; }
+        .todo ul { list-style: none; padding-left: 0; }
+        .todo li { padding: 8px 0; border-bottom: 1px solid #2d3436; }
+        .todo li:last-child { border-bottom: none; }
+        .quickstart { background: #16213e; border-radius: 10px; padding: 25px; border: 1px solid #2d3436; }
+        .quickstart code { display: block; background: #0d1117; color: #7ee787; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 0.9em; margin: 10px 0; }
+        .nodebyte-banner { background: linear-gradient(135deg, #e17055, #fDCB6E); border-radius: 15px; padding: 30px; text-align: center; margin: 30px 0; }
+        .nodebyte-banner h2 { color: #fff; font-size: 1.8em; margin-bottom: 10px; }
+        .nodebyte-banner p { color: #fff; font-size: 1.1em; margin-bottom: 15px; }
+        .nodebyte-banner a { display: inline-block; background: #fff; color: #e17055; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.2em; }
+        .nodebyte-banner a:hover { background: #f0f0f0; }
+        footer { text-align: center; padding: 30px 20px; color: #636e72; border-top: 1px solid #2d3436; }
+        footer a { color: #6c5ce7; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>Readest Lite</h1>
+            <p>单容器自托管电子书阅读器 — SQLite + 本地文件存储 + JWT 认证，无需 Supabase / R2 / Stripe</p>
+            <div class="badges">
+                <a class="badge badge-nodebyte" href="https://nodebyte.cn">💬 NodeByte 社区</a>
+                <a class="badge badge-deploy" href="https://cshdotcom.github.io/readestl/deploy.html">📚 部署教程</a>
+                <a class="badge badge-github" href="https://github.com/cshdotcom/readest-lite">🐙 GitHub</a>
+            </div>
+        </div>
+
+        <div class="nodebyte-banner">
+            <h2>💬 NodeByte 社区</h2>
+            <p>所有问题、建议、讨论请优先前往 NodeByte 社区</p>
+            <a href="https://nodebyte.cn">前往 nodebyte.cn</a>
+        </div>
+
+        <div class="section">
+            <h2>快速开始</h2>
+            <div class="quickstart">
+                <code>docker run -d \
+  --name readest-lite \
+  -p 8225:8225 \
+  -v readest-data:/data \
+  -e ADMIN_EMAIL=admin@example.com \
+  -e ADMIN_PASSWORD=your-password \
+  ghcr.io/cshdotcom/readest-lite:latest</code>
+                <p>然后访问 <code>http://localhost:8225</code></p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>核心功能</h2>
+            <div class="features">
+                <div class="feature">
+                    <h3>📖 电子书阅读</h3>
+                    <p>支持 EPUB / PDF / MOBI / AZW3 / CBZ / FB2 / TXT / Markdown 格式，基于 foliate-js 渲染引擎</p>
+                </div>
+                <div class="feature">
+                    <h3>🔐 多用户 + 角色层级</h3>
+                    <p>super_admin > admin > user 三级角色，JWT 认证，每用户 AES-GCM 加密 vault</p>
+                </div>
+                <div class="feature">
+                    <h3>💾 存储配额</h3>
+                    <p>管理员可设置每用户的存储/翻译配额，文件去重 + 引用计数</p>
+                </div>
+                <div class="feature">
+                    <h3>🗑️ 回收站</h3>
+                    <p>删除书籍移入回收站，30 天自动清理（可配置），批量恢复/删除</p>
+                </div>
+                <div class="feature">
+                    <h3>📁 分组管理</h3>
+                    <p>书库三点菜单 → 分组管理：搜索/添加/编辑/删除/排序，与书库 GroupBy 融合</p>
+                </div>
+                <div class="feature">
+                    <h3>🔄 跨用户文件管理</h3>
+                    <p>管理员可浏览所有用户文件，批量移动/复制到其他用户</p>
+                </div>
+                <div class="feature">
+                    <h3>📤 书籍分享</h3>
+                    <p>生成分享链接（1 天/3 天/7 天/永久/自定义日历），接收方独立副本</p>
+                </div>
+                <div class="feature">
+                    <h3>📥 远程下载</h3>
+                    <p>从 URL 下载书籍，支持批量下载、Cookie/Headers、自动重命名</p>
+                </div>
+                <div class="feature">
+                    <h3>📊 阅读统计</h3>
+                    <p>月度/周度/今日阅读统计，书籍阅读进度排行</p>
+                </div>
+                <div class="feature">
+                    <h3>📝 笔记同步</h3>
+                    <p>Notion 笔记同步（代理路由）、ReadEra 注释导入、带登录的网页小说导入</p>
+                </div>
+                <div class="feature">
+                    <h3>🌐 RSS 订阅</h3>
+                    <p>订阅 RSS 源，文章自动转为书籍，支持 OPDS 目录</p>
+                </div>
+                <div class="feature">
+                    <h3>🎨 头像 + 主题</h3>
+                    <p>用户头像上传/删除，深色/浅色/自动主题</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 TODO 待办</h2>
+            <div class="todo">
+                <h3>规划中的功能</h3>
+                <ul>
+                    <li>🔊 <strong>有声书播放</strong>：自研内置 HTML5 播放器（v8.22.3 曾实现但因稳定性问题暂时移除，计划重新开发）</li>
+                    <li>🌐 <strong>RSS 站点 favicon 自动识别</strong>：v8.23 移除，计划用更稳定的方式重新实现</li>
+                    <li>📱 <strong>移动端适配</strong>：PWA + 离线缓存优化</li>
+                    <li>🔍 <strong>全文搜索</strong>：跨书籍内容搜索</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔗 相关链接</h2>
+            <div class="features">
+                <div class="feature">
+                    <h3>💬 NodeByte 社区</h3>
+                    <p><a href="https://nodebyte.cn" style="color:#e17055;font-weight:bold;">https://nodebyte.cn</a><br>问题反馈、功能建议、使用讨论</p>
+                </div>
+                <div class="feature">
+                    <h3>📚 部署教程</h3>
+                    <p><a href="https://cshdotcom.github.io/readestl/deploy.html" style="color:#00b894;">部署文档</a><br>Docker / Docker Compose / 反向代理</p>
+                </div>
+                <div class="feature">
+                    <h3>🐙 源码仓库</h3>
+                    <p><a href="https://github.com/cshdotcom/readest-lite" style="color:#6c5ce7;">GitHub</a><br>AGPL-3.0 开源协议</p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Readest Lite — 基于 <a href="https://github.com/readest/readest">Readest</a> 二次开发，遵循 AGPL-3.0 协议</p>
+            <p>v8.23.0 | <a href="https://nodebyte.cn">NodeByte 社区</a></p>
+        </footer>
+    </div>
+</body>
+</html>

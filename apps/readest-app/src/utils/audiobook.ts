@@ -8,20 +8,6 @@ export const ABS_FILE_SCHEME = 'abs://';
 /** True when `book` is a streaming audiobook from an Audiobookshelf server (no local file). */
 export const isAudiobook = (book: Pick<Book, 'format'>): boolean => book.format === 'ABS';
 
-/**
- * v8.22.3: True when `book` is a local audio audiobook (uploaded .mp3/.m4a/.m4b).
- * Click on these books opens the built-in HTML5 audio player.
- */
-export const isLocalAudiobook = (book: Pick<Book, 'format'>): boolean =>
-  book.format === 'MP3' || book.format === 'M4A' || book.format === 'M4B';
-
-/**
- * v8.22.3: True when `book` is any audiobook — streaming ABS or local audio file.
- * Used by Bookshelf / useOpenBook to decide whether to route to /player.
- */
-export const isAnyAudiobook = (book: Pick<Book, 'format'>): boolean =>
-  isAudiobook(book) || isLocalAudiobook(book);
-
 /** Builds the synthetic filePath for an ABS book: `abs://<serverId>/<itemId>`. */
 export const makeAbsFilePath = (serverId: string, itemId: string): string =>
   `${ABS_FILE_SCHEME}${serverId}/${itemId}`;

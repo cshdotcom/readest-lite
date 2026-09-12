@@ -42,7 +42,7 @@ Readest-Lite 完全开源，遵循 AGPL-3.0 协议，源码可免费获取、部
 
 [![CI](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/ci.yml)
 [![Docker](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cshdotcom/readest-lite/actions/workflows/docker-image.yml)
-[![Version](https://img.shields.io/badge/version-v8.22.5-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
+[![Version](https://img.shields.io/badge/version-v8.23.0-6c5ce7)](https://github.com/cshdotcom/readest-lite/releases)
 
 ## 快速开始
 
@@ -126,52 +126,14 @@ docker compose up -d
 | **v8.21.0** | **回收站批量选择（每行 checkbox + 批量恢复/批量删除/全选）· 管理员跨用户文件管理（list 支持 ?userId= 与 ?allUsers=1 + 移动/复制端点 + AdminFileTransfer 组件）· 分组管理 Modal（在书库三点菜单底部：搜索/添加/编辑/删除/上下移排序/滚动）· 49 个简体中文键补全** |
 | **v8.22.0** | **上游 v0.12.7/v0.12.8 适配移植：ReadEra 注释导入（API + ImportAnnotationsDialog 入口）· Notion 笔记同步（代理路由 + IntegrationsPanel + NotionForm）· 带登录的网页小说导入（novel/proxy 端点 + 高级选项 cookie/headers）· 修复分组管理点击无响应（createPortal 渲染到 body）· 修复有声书点击闪退（useSearchParams Suspense 包裹）· 修复创建用户无角色选择（永远显示 disabled select）· AdminFileTransfer 用户列表可搜索（datalist）· 32 个新简体中文键** |
 | **v8.22.2** | **关键修复：reader 页面 CORS 错误（download.readest.com / storage.readest.com）— updater 检查在 web 平台直接 short-circuit，constants.ts URL 全部本地化，新增 /public/releases/release-notes.json · 有声书点击改为「3 种播放方式」教程页（本地 MP3/M4A · Audiobookshelf 流式 · EPUB 内嵌朗读）· 用户中心布局：阅读统计卡片移到第一位 · AdminFileTransfer 默认折叠（与回收站一致）· 移动/复制到自身时友好提示** |
-| **v8.22.3** | **内置 HTML5 有声书播放器（无需外部服务）：上传 .mp3/.m4a/.m4b 自动识别为有声书 · /api/audiobook/metadata + /api/audiobook/stream 端点 · AudiobookPlayer 组件（进度条/音量/速度/章节切换/进度保存）· bookService 自动短路音频文件，跳过 foliate-js 解析 · BookFormat 类型扩展 MP3/M4A/M4B · README NodeByte 社区置顶** |
+| **v8.22.3** | **内置 HTML5 有声书播放器（无需外部服务）· ~~已在 v8.23 移除~~** |
+| **v8.23.0** | **删除有声书内置播放器（加到 TODO 待办）· 删除 RSS 自动 favicon 识别 · 修复超级管理员 ENV 识别（init-admin.mjs 不再降级 super_admin）· 分组管理与书库 GroupBy 融合 · README 更新** |
 
-## 🔊 有声书播放（v8.22.3 — 内置播放器）
+## 📋 TODO 待办（规划中）
 
-Readest Lite 自带内置 HTML5 有声书播放器，无需依赖外部服务，支持：
-- 🎵 本地 MP3/M4A/M4B 文件（单文件或多文件分章节）
-- 📡 Audiobookshelf（ABS）服务器流式播放
-- 📖 带朗读 EPUB（media overlays）
-
-### 方式 1：上传本地音频文件（推荐）
-
-**单文件有声书**（`.m4b` 或单个 `.mp3`）：
-1. 在书库点击「导入书籍」按钮
-2. 直接选择 `.m4b` / `.mp3` 文件上传
-3. 系统自动识别为有声书，点击该书即开始播放
-
-**多文件有声书**（多个 `.mp3` 章节）：
-1. 把所有章节 `.mp3` 文件按播放顺序命名（例如 `01-序章.mp3`、`02-第一章.mp3`、...）
-2. 把它们一起上传（拖入或批量选择）
-3. 同一本有声书的多个文件会被识别为该书的多个章节
-4. 封面：可在同一文件夹放一个 `cover.jpg` 作为封面（可选）
-
-### 方式 2：从 Audiobookshelf（ABS）流式播放
-
-1. 在「设置 → 集成 → Audiobookshelf」配置你的 ABS 服务器：
-   - 服务器 URL（例如 `http://192.168.1.100:13378`）
-   - 用户名 + 密码
-2. 登录后，有声书会带耳机图标出现在书库里
-3. 点击即可流式播放（无需下载完整文件）
-
-### 方式 3：导入带朗读的 EPUB
-
-某些 EPUB 内嵌了朗读音频（media overlays）。上传后 Readest Lite 会自动识别并提供「朗读」按钮。
-
-### 播放器功能
-
-- ▶️ 播放/暂停/上一章/下一章
-- 🔍 拖动进度条跳转
-- 🎚️ 音量调节 + 静音
-- ⚡ 播放速度（0.75× / 1× / 1.25× / 1.5× / 1.75× / 2×）
-- 💾 自动保存播放进度（每 5 秒），下次打开继续播放
-- 🔁 自动连续播放下一章
-
-### 鉴权
-
-播放器使用 `<audio src="/api/audiobook/stream/{hash}?fileKey=...&token=...">` 直接拉流，token 通过 URL 传递（HTML5 `<audio>` 不支持设置 Authorization header），24 小时 TTL。
+- [ ] **有声书播放**：自研内置 HTML5 播放器（v8.22.3 曾实现但因稳定性问题暂时移除，计划重新开发）
+- [ ] **RSS 站点 favicon 自动识别**：v8.23 移除，计划用更稳定的方式重新实现
+- [ ] 官方网站 `cshdotcom.github.io/readestl` 内容更新
 
 ## 数据持久化
 
