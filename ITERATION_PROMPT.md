@@ -132,14 +132,12 @@ apps/readest-app/src/components/localsend/LocalSendManager.tsx # 渲染 null
 apps/readest-app/src/components/settings/integrations/{ABSForm,LocalSendForm,cloudSync}.tsx
 apps/readest-app/src/app/reader/components/audiobook/AudiobookPairingDialog.tsx # 渲染 null
 
-# 用户管理（v8.19.0 + v8.19.4）
-apps/readest-app/src/app/user/components/UserManagement.tsx # 含 AllUsersModal + UserDetailModal
+# 用户管理（v8.19.0；v8.23.3 移除 UserDetailModal）
+apps/readest-app/src/app/user/components/UserManagement.tsx # 含 AllUsersModal（v8.23.3 移除 UserDetailModal）
 
 # Pages Router API（Lite 专用，App Router `/api/admin/*` 由路由组而非文件构成）
 apps/readest-app/src/pages/api/storage/delete.ts    # v8.18.4 自动 revoke shares
 apps/readest-app/src/pages/api/settings/{index,save}.ts # v8.18.4 加密设置同步
-apps/readest-app/src/pages/api/admin/users/[id]/books.ts       # v8.19.4 admin 用户书籍列表
-apps/readest-app/src/pages/api/admin/users/[id]/recycle-bin.ts # v8.19.4 admin 用户回收站
 apps/readest-app/src/pages/api/recycle-bin/{index,restore,clear}.ts # v8.19.0 回收站
 apps/readest-app/src/pages/api/avatar/[id].ts       # v8.19.2 隐藏头像 URL
 
@@ -475,35 +473,31 @@ stale config from restored backup、上游 PR 误改 import 路径、用户手�
 pairedAudiobook config 都可能让 stub 被实际调用。返回空 / null 让上层
 `.catch(() => null)` 兜底。
 
-### 19. Admin 用户详情 Modal（v8.19.4）
+### 19. Admin 用户详情 Modal（v8.19.4 引入，v8.23.3 移除）
 
-**问题**：admin 在 AllUsersModal 里看到用户列表，但点开某个用户只能 Edit /
-Delete，看不到该用户实际存了什么书、回收站里有什么。无法回答「这个用户
-为什么占了 5GB 存储？」。
+**历史**：v8.19.4 引入了 `UserDetailModal`，让 admin 在 AllUsersModal 里
+点击用户行的 chevron 按钮查看其书籍列表 + 回收站条目。
 
-**方案**：`UserManagement.tsx` 新增 `UserDetailModal`：
-- 触发：admin 在 AllUsersModal 里点击某个用户行的 chevron 按钮
-- 内容：
-  1. 用户信息卡（头像、邮箱、角色徽章、创建时间、最后登录、配额）
-  2. 书籍列表（搜索 + 排序 by title / upload date / file size，可升降序）
-  3. 回收站条目（多选 + 「Restore Selected」/ 「Permanently Delete
-     Selected」按钮）
+**v8.23.3 移除**：用户反馈不需要此功能。已删除：
+- `UserManagement.tsx` 中的 `UserDetailModal` 函数（~340 行）+ `detailUser`
+  state + `onShowDetail` 回调 + chevron 按钮 + `AdminBookItem` /
+  `AdminRecycleItem` / `SortKey` / `formatBytes` / `formatDate` 辅助类型
+- `AllUsersModal` 的 `onShowDetail` prop
+- `IoChevronDownOutline` import
+- `pages/api/admin/users/[id]/books.ts`（API 路由）
+- `pages/api/admin/users/[id]/recycle-bin.ts`（API 路由）
+- `pages/api/admin/users/[id]/` 空目录
 
-**API**：
-- `GET /api/admin/users/[id]/books` — admin-only（isAdmin role），返回
-  target 用户的 Book rows + File size（按 bookHash 关联，仅 owner File
-  的 fileSize 算入，reference File 的 fileSize = 0）
-- `GET /api/admin/users/[id]/recycle-bin` — admin-only，列出 target 用户
-  的 RecycleBinItem 行（先自动清理过期的）
-- `POST /api/admin/users/[id]/recycle-bin?action=restore` / `?action=delete`
-  `{ ids: string[] }` — admin 跨用户操作回收站
+**保留**（仍然存在，管理员仍可使用）：
+- `UserManagement.tsx` 的列表 / 编辑 / 删除用户功能
+- `AdminFileTransfer.tsx`（管理员跨用户文件操作）
+- `AllUsersModal`（"查看全部用户"折叠 Modal）
+- `RoleBadge`（super_admin 金色 / admin 蓝色徽章）
+- `UserEditDialog`（创建/编辑用户对话框）
 
-**安全**：
-- 服务端用 `validateUserAndToken` + `isAdmin` 双重校验
-- 前端不传 canManageUser（防伪造），用 canManageUserClient 决定 UI 是否显示
-  chevron 按钮（不能管理的用户连点开详情的入口都没有）
-- recycle-bin 的 delete 路径走 #14 的去重逻辑，不会因为 admin 删了一本书
-  就把另一个用户引用的同物理文件删掉
+如未来要恢复查看用户书籍功能，需要重新加：
+1. `pages/api/admin/users/[id]/books.ts` + `recycle-bin.ts` API 路由
+2. `UserManagement.tsx` 中的 `UserDetailModal` 函数 + chevron 按钮
 
 ## CORS / URL 修复清单
 
