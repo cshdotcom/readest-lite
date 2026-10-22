@@ -3,6 +3,63 @@
 All notable changes to Readest Lite are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v8.23.4] — 2026-10-22
+
+### Fixed — 超过 10MB 的书籍上传被截断（issue #8）
+
+**问题**：用户部署（Caddy 反代或本机直连）后，超过 10M 的图书不能完整同步到服务器——
+服务器落盘的文件只有约 10MB，下载回来无法打开。反复修改反代配置无效。
+
+**根因**（已在本地复现并验证）：**Next.js 16 对被 middleware 匹配的、带请求体的请求
+做 "cloneable body" 包装**（`next/dist/server/body-streams.js`）。包装缓冲上限由
+`experimental.proxyClientMaxBodySize` 控制，**默认 10MB**。请求体超过 10MB 时：
+
+1. 包装流被静默 `push(null)` 提前关闭（仅保留前 10MB，控制台只有一条
+   `Request body exceeded 10MB ... Only the first 10MB will be available` 警告）
+2. middleware 执行完后，`finalize()` 用**截断后的缓冲流替换原始 `req`**
+3. API handler `req.pipe(writeStream)` 只能收到前 10,485,696 字节
+
+`/api/storage/_put`（书籍签名 PUT 直传端点）恰好在 middleware matcher 的
+匹配范围内，因此所有 >10MB 的书籍上传（Web / Tauri / Android 壳 App /
+浏览器扩展，所有客户端）都被截断。`/api/send/inbox/file`（收件箱文件）与
+`/api/readera-import`（ReadEra .bak 导入，上限 200MB）同样受影响。
+
+**修复 1 — middleware matcher 排除大文件二进制端点**（`src/middleware.ts`）：
+
+- `/api/storage/_put`、`/api/send/inbox/file`、`/api/readera-import` 从
+  matcher 排除，原始请求流直达 API handler，彻底绕过 10MB clone 缓冲
+  （同时避免了 clone 双流对大文件的 2 倍内存驻留）
+- 安全性不受影响：`_put` 的鉴权由 query 中的 HMAC 签名（key/expires/sig）
+  提供；三个端点的 CORS 均由各自 handler 内的 `corsAllMethods` 提供；
+  其余 `/api/*`（全部是小 JSON 元数据请求）继续走 middleware
+
+**修复 2 — 恢复 v8.8.0 的 webUpload 自动分块**（`src/utils/transfer.ts`）：
+
+v8.8.0 实现的 `webUpload` >5MB 自动分块逻辑在某次重构中丢失（服务端
+`_put.ts` 的分块协议 index/total/merge 一直在，但客户端不再分块）。本次恢复：
+
+- 文件 ≤ 5MB：单次 PUT（原路径，零行为变化）
+- 文件 > 5MB：切成 5MB 块串行 PUT `&index=N&total=M`，最后发
+  `&merge=1&total=M` 触发服务端流式合并
+- 进度回调跨块累计，UI 显示连续进度条
+- URL 用 `window.location.href` 作 base 解析，兼容相对 URL（本地直连）
+  与绝对 URL（`PUBLIC_BASE_URL` 反代场景）
+
+分块的意义：修复 Cloudflare 反代下大文件上传 524 超时的回归（v8.8 原始
+动机——慢带宽下每块 ~30 秒内可传完，远低于 CF 100s origin timeout），
+并使每块 body（5MB）远小于任何代理层的请求体限制，作为第二道防线。
+
+**测试**（dev server + 真实 API 全链路，md5 校验）：
+
+- 整传 3MB / 12MB / 15MB / 30MB：修复前 12MB+ 全部截断为 10,485,696 字节，
+  修复后全部完整（大小 + md5 一致）
+- 分块 12MB（3 块 + merge）：合并完整，parts 目录正确清理
+- 收件箱 15MB POST：完整落盘（修复前会被截断）
+- 下载 12MB GET `_get`：完整
+- 登录 / 常规 API 无回归
+- `tsc --noEmit` 0 错误；biome lint/format 通过
+- 已有单测失败项（localStorage 环境问题）经 stash 对比确认为预存在，与本修复无关
+
 ## [v8.23.0] — 2026-09-12
 
 ### Removed

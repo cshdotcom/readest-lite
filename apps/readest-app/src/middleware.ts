@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const allowedOrigins = [
-  
   'https://tauri.localhost',
   'http://tauri.localhost',
   'http://localhost:3000',
@@ -74,5 +73,26 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.json).*)'],
+  // ⚠️ Next.js 16 会对被 middleware/proxy 匹配到的、带请求体的请求做
+  // "cloneable body" 包装（server/body-streams.js），缓冲上限由
+  // experimental.proxyClientMaxBodySize 控制，默认 10MB。超限时请求流会被
+  // 静默提前 close，API handler 只能读到前 ~10MB（issue #8：超过 10M 的
+  // 书籍 PUT /api/storage/_put 被截断，且 3 倍内存驻留 clone 流）。
+  //
+  // 大文件二进制端点从 matcher 排除，让原始请求流直达 API handler：
+  //   - /api/storage/_put   书籍/副本签名 PUT 直传。鉴权由 query 里的
+  //                         HMAC 签名（key/expires/sig）提供；CORS 由
+  //                         handler 内的 corsAllMethods 提供，无需 middleware。
+  //   - /api/send/inbox/file 收件箱文件直传（上限 40MB，浏览器扩展 POST）。
+  //                         handler 内同样自带 corsAllMethods；扩展的
+  //                         host_permissions 使其不受 CORS 限制。
+  //   - /api/readera-import ReadEra .bak 导入（上限 200MB formData）。
+  //                         仅同源 Web UI / Tauri 调用，无 CORS 需求。
+  //
+  // 其余 /api/* 均为小 JSON 元数据请求（<10MB），继续走 middleware。
+  // 若未来新增大 body 端点，务必把路径加进这个排除列表，或改用
+  // /api/storage/_put 的签名 URL 直传协议。
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.json|api/storage/_put|api/send/inbox/file|api/readera-import).*)',
+  ],
 };
